@@ -1,6 +1,6 @@
 # toll-sdk
 
-Python client for [Toll](https://t0ll.xyz/agents)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Standard library only, Python >= 3.9, typed.
+Python client for [Toll](https://t0ll.xyz/agents/plugins)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Standard library only, Python >= 3.9, typed.
 
 Information only, not financial advice.
 
@@ -67,6 +67,6 @@ if r.paid_url:
     print(toll.pay(r.paid_url))
 ```
 
-Your key never touches this SDK. Without a `sign`, `pay` raises before any request. The JavaScript SDK's README has a worked `sign` built on `@priors/x402`. Docs: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
+Your key never touches this SDK. Without a `sign`, `pay` raises before any request. The JavaScript SDK's README has a worked `sign` built on `@priors/x402`. Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 MIT.

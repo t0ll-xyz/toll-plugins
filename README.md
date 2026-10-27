@@ -1,6 +1,6 @@
 # toll-plugins
 
-SDKs and agent plugins for [Toll](https://t0ll.xyz/agents): coin checks read from the chain
+SDKs and agent plugins for [Toll](https://t0ll.xyz/agents/plugins): coin checks read from the chain
 (Robinhood Chain, Solana, BSC) over Toll's remote MCP server. Who is behind a coin, the dev's record,
 and whether there is a real product behind it.
 
@@ -18,7 +18,7 @@ Example: [`examples/guarded-agent`](examples/guarded-agent), an agent that will 
 
 The npm packages are ESM only. Free: 10 new coins a day per caller (coins already read stay free); past that, each
 answer carries the paid x402 URL for that coin (0.05 USDG on Robinhood Chain), or hold 1M $TOLL.
-Docs: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
+Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 ## Develop
 

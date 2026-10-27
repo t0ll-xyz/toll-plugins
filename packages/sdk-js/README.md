@@ -1,6 +1,6 @@
 # @tollxyz/sdk
 
-Client for [Toll](https://t0ll.xyz/agents)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Zero runtime dependencies (global `fetch`), ESM only (no CommonJS build), Node >= 20.19, with types.
+Client for [Toll](https://t0ll.xyz/agents/plugins)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Zero runtime dependencies (global `fetch`), ESM only (no CommonJS build), Node >= 20.19, with types.
 
 Information only, not financial advice.
 
@@ -84,6 +84,6 @@ const r = await toll.checkCoin(address);
 if (r.paidUrl) console.log(await toll.pay(r.paidUrl));
 ```
 
-Without a `sign`, `pay()` throws before any request. Docs: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
+Without a `sign`, `pay()` throws before any request. Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 MIT.
