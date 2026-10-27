@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { Toll } from "@t0ll/sdk";
+import { Toll } from "@tollxyz/sdk";
 import { tollPlugin, createTollPlugin, extractAddress, extractWallet, formatResult } from "../src/index.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");

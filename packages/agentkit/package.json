@@ -1,5 +1,5 @@
 {
-  "name": "@t0ll/agentkit",
+  "name": "@tollxyz/agentkit",
   "version": "0.1.0",
   "description": "Coinbase AgentKit action provider: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "test": "tsc -p tsconfig.test.json && node --test \".test-build/tests/*.test.js\"",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": { "@t0ll/sdk": "^0.1.0" },
+  "dependencies": { "@tollxyz/sdk": "^0.1.0" },
   "peerDependencies": { "@coinbase/agentkit": ">=0.10.0", "zod": "^3.23.8" },
   "devDependencies": {
     "@coinbase/agentkit": "^0.10.4",

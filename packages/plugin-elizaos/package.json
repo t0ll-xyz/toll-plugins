@@ -1,5 +1,5 @@
 {
-  "name": "@t0ll/plugin-elizaos",
+  "name": "@tollxyz/plugin-elizaos",
   "version": "0.1.0",
   "description": "elizaOS plugin: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "test": "tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": { "@t0ll/sdk": "^0.1.0" },
+  "dependencies": { "@tollxyz/sdk": "^0.1.0" },
   "peerDependencies": { "@elizaos/core": ">=1.6.0" },
   "devDependencies": {
     "@elizaos/core": "^1.7.2",
