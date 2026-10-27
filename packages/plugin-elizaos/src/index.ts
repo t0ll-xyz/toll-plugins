@@ -7,9 +7,11 @@ import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { extractAddress, extractWallet, formatResult } from "./format.js";
 
 export { extractAddress, extractWallet, formatResult } from "./format.js";
+export { Toll, TollError } from "@tollxyz/sdk";
+export type { TollResult } from "@tollxyz/sdk";
 
 export interface TollPluginOptions {
-  /** A ready Toll client (tests, custom fetch, payFetch). Default: new Toll(). */
+  /** A ready Toll client (for example with a custom fetch). Default: new Toll(). */
   client?: Toll;
 }
 

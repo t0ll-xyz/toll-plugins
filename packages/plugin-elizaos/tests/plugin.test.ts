@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { Toll } from "@tollxyz/sdk";
+import { Toll, TollError } from "@tollxyz/sdk";
 import { tollPlugin, createTollPlugin, extractAddress, extractWallet, formatResult } from "../src/index.js";
+import * as Reexported from "../src/index.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");
 const TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
@@ -130,4 +131,9 @@ test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async 
   const p = createTollPlugin();
   const res = await act(p, "TOLL_CHECK_COIN").handler({}, msg(TOKEN));
   assert.equal(res.success, true);
+});
+
+test("re-exports Toll and TollError from @tollxyz/sdk", () => {
+  assert.equal(Reexported.Toll, Toll);
+  assert.equal(Reexported.TollError, TollError);
 });

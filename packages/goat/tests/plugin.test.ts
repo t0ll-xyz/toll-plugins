@@ -2,8 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Toll } from "@tollxyz/sdk";
+import { Toll, TollError } from "@tollxyz/sdk";
 import { toll } from "../src/index.js";
+import * as Reexported from "../src/index.js";
 
 // npm test runs from the package directory.
 const fx = (n: string) => readFileSync(resolve(process.cwd(), "../sdk-js/tests/fixtures", `${n}.json`), "utf8");
@@ -70,4 +71,9 @@ test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async 
   const tools = await toll().getTools({} as any);
   const out = await tools.find((t) => t.name === "check_coin")!.execute({ address: TOKEN });
   assert.ok(String(out).length > 0);
+});
+
+test("re-exports Toll and TollError from @tollxyz/sdk", () => {
+  assert.equal(Reexported.Toll, Toll);
+  assert.equal(Reexported.TollError, TollError);
 });
