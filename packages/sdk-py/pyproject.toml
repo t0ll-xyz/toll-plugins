@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "toll-sdk"
+version = "0.1.0"
+description = "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Standard library only."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Toll" }]
+keywords = ["robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"]
+dependencies = []
+
+[project.urls]
+Homepage = "https://t0ll.xyz/agents"
+Repository = "https://github.com/t0ll-xyz/toll-plugins"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/toll"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
