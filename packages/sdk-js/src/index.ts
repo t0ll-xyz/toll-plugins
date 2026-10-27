@@ -17,15 +17,34 @@ export interface TollResult {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** What a paid URL asks for, read from its 402 answer. */
+export interface PaymentRequirements {
+  /** 2 when the 402 carried a PAYMENT-REQUIRED header (the SDK then sends PAYMENT-SIGNATURE), else 1 (X-PAYMENT). */
+  x402Version: 1 | 2;
+  /** The decoded 402 object: the base64 JSON of the PAYMENT-REQUIRED header (v2) or the JSON body (v1). */
+  paymentRequired: { x402Version: number; accepts: Array<Record<string, unknown>>; [key: string]: unknown };
+  /** paymentRequired.accepts: scheme, network, asset, amount (v2) or maxAmountRequired (v1), payTo, maxTimeoutSeconds, extra. */
+  accepts: Array<Record<string, unknown>>;
+}
+
+/**
+ * Signs ONE payment for a paid URL and returns the payment header value (base64 payload) for
+ * requirements.x402Version: v2 is sent as PAYMENT-SIGNATURE, v1 as X-PAYMENT.
+ * pay() calls it at most once per call and resends the same value while the answer is pending.
+ */
+export type SignPayment = (requirements: PaymentRequirements, url: string) => Promise<string> | string;
+
 export interface TollOptions {
   /** Default https://t0ll.xyz */
   baseUrl?: string;
   /** Plain fetch used for MCP calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** An x402-aware fetch (for example from x402-fetch) used by pay(). */
-  payFetch?: FetchLike;
-  /** Per-request timeout. Default 30000. */
+  /** Signs the payment pay() sends (see SignPayment). Without it pay() throws before any request. */
+  sign?: SignPayment;
+  /** Per-request timeout for MCP calls. Default 30000. */
   timeoutMs?: number;
+  /** Whole-call timeout for pay(), waits included. Default 300000. */
+  payTimeoutMs?: number;
   /** Replaces the wait between retries (tests). Default: setTimeout. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -78,6 +97,11 @@ function assertChain(chain: string | undefined, allowed: readonly string[]): voi
 const PAID_URL = /paid (?:LARP )?check of this coin \(x402\):\s*(https:\/\/t0ll\.xyz\/api\/x402\/[^\s)"'<>]+)/i;
 const AGAIN = /again in (?:about )?(\d+)\s*(?:s\b|sec)/i;
 
+/** Seconds to wait, never below 1 (a 0 or junk value must not become a tight loop). */
+function clampSeconds(n: number, fallback: number): number {
+  return Number.isFinite(n) ? Math.max(1, Math.ceil(n)) : fallback;
+}
+
 /** Pull the paid x402 URL out of the over-quota line of an answer (only https://t0ll.xyz/api/x402/...). */
 export function parsePaidUrl(text: string): string | null {
   const m = PAID_URL.exec(text);
@@ -87,7 +111,7 @@ export function parsePaidUrl(text: string): string | null {
 /** "ask again in 20 s" / "try again in about 30 seconds" -> seconds. */
 export function parsePending(text: string): { retryAfterS: number } | null {
   const m = AGAIN.exec(text);
-  return m ? { retryAfterS: Number(m[1]) } : null;
+  return m ? { retryAfterS: clampSeconds(Number(m[1]), 5) } : null;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -95,43 +119,48 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 export class Toll {
   private readonly baseUrl: string;
   private readonly fetchFn: FetchLike;
-  private readonly payFetch?: FetchLike;
+  private readonly signFn?: SignPayment;
   private readonly timeoutMs: number;
+  private readonly payTimeoutMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private nextId = 1;
 
   constructor(opts: TollOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? "https://t0ll.xyz").replace(/\/+$/, "");
     this.fetchFn = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
-    this.payFetch = opts.payFetch;
+    this.signFn = opts.sign;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.payTimeoutMs = opts.payTimeoutMs ?? 300_000;
     this.sleep = opts.sleep ?? defaultSleep;
   }
 
-  private async request(url: string, init: RequestInit, f: FetchLike): Promise<Response> {
+  /** One HTTP request. The timer covers reading the body and is cleared only after the body is read. */
+  private async request(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number = this.timeoutMs,
+    note = "",
+  ): Promise<{ res: Response; raw: string }> {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), this.timeoutMs);
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      return await f(url, { ...init, signal: ctl.signal });
+      const res = await this.fetchFn(url, { ...init, signal: ctl.signal });
+      const raw = await res.text();
+      return { res, raw };
     } catch (e) {
-      if (ctl.signal.aborted) throw new TollError(`Request to ${url} timed out after ${this.timeoutMs} ms.`);
-      throw new TollError(`Request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (ctl.signal.aborted) throw new TollError(`Request to ${url} timed out after ${timeoutMs} ms.${note}`);
+      throw new TollError(`Request to ${url} failed: ${e instanceof Error ? e.message : String(e)}.${note}`);
     } finally {
       clearTimeout(timer);
     }
   }
 
   private async rpc(method: string, params: unknown): Promise<any> {
-    const res = await this.request(
-      `${this.baseUrl}/mcp`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method, params }),
-      },
-      this.fetchFn,
-    );
-    const raw = await res.text();
+    const { res, raw } = await this.request(`${this.baseUrl}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method, params }),
+    });
     if (!res.ok) {
       throw new TollError(`Toll answered HTTP ${res.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`, { status: res.status });
     }
@@ -219,44 +248,121 @@ export class Toll {
   }
 
   /**
-   * GET a paid x402 URL (the paidUrl of an answer) with the payFetch you brought.
-   * On 402 {"pending": true} it resends after Retry-After (max 3 tries, max 120 s). Returns the JSON.
+   * Pays a paid x402 URL (the paidUrl of an answer) and returns its JSON.
+   *
+   * 1. GET without payment: 402 with the requirements (v2 PAYMENT-REQUIRED header, else the v1 body).
+   * 2. Calls sign(requirements, url) ONCE for the payment header value.
+   * 3. GET with it (v2: PAYMENT-SIGNATURE, v1: X-PAYMENT). On 402 {"pending": true} resends EXACTLY the same
+   *    header after Retry-After (at least 1 s), max 5 tries and 300 s of waiting. 200 JSON is the answer.
+   *    Any other 402 after paying is a TollError "payment not accepted". It never signs a second payment.
+   * The whole call is bounded by payTimeoutMs (default 300000).
    */
-  async pay(paidUrl: string): Promise<unknown> {
-    if (!/^https:\/\/t0ll\.xyz\/api\/x402\//.test(paidUrl)) {
+  async pay(paidUrl: string, opts: { sign?: SignPayment; timeoutMs?: number } = {}): Promise<unknown> {
+    if (typeof paidUrl !== "string" || !/^https:\/\/t0ll\.xyz\/api\/x402\//.test(paidUrl)) {
       throw new TollError("pay() only takes https://t0ll.xyz/api/x402/... URLs.");
     }
-    if (!this.payFetch) {
-      throw new TollError("pay() needs a payFetch: pass an x402-aware fetch (for example from x402-fetch) as new Toll({ payFetch }).");
+    const sign = opts.sign ?? this.signFn;
+    if (!sign) {
+      throw new TollError("pay() needs a sign function: new Toll({ sign }) or pay(url, { sign }). See the README (paying).");
     }
-    let waited = 0;
+    const totalMs = opts.timeoutMs ?? this.payTimeoutMs;
+    const deadline = Date.now() + totalMs;
+    const left = () => Math.max(1, deadline - Date.now());
+
+    // 1. Unpaid GET: read what to pay.
+    const first = await this.request(paidUrl, { method: "GET", headers: { accept: "application/json" } }, left());
+    if (first.res.ok) return parseJsonAnswer(first.raw, first.res.status);
+    if (first.res.status !== 402) throw httpError(first.res.status, first.raw);
+    const requirements = readRequirements(first.res, first.raw);
+
+    // 2. One signature for this call.
+    let header: string;
+    try {
+      header = await sign(requirements, paidUrl);
+    } catch (e) {
+      throw new TollError(`sign() failed, nothing was sent: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (typeof header !== "string" || !header.trim() || /[\r\n]/.test(header)) {
+      throw new TollError("sign() must return the payment header value as one non-empty line; nothing was sent.");
+    }
+    const headerName = requirements.x402Version === 2 ? "PAYMENT-SIGNATURE" : "X-PAYMENT";
+    const settleNote =
+      " The payment may have settled: do not retry this call with a new signature; resend the same payment header to get the answer.";
+
+    // 3. Paid GET, resending the same header while the answer is pending.
+    let waitedS = 0;
     for (let tries = 1; ; tries++) {
-      const res = await this.request(paidUrl, { method: "GET", headers: { accept: "application/json" } }, this.payFetch);
-      const raw = await res.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        /* not JSON */
-      }
+      if (Date.now() >= deadline) throw new TollError(`pay() timed out after ${totalMs} ms.${settleNote}`);
+      const { res, raw } = await this.request(
+        paidUrl,
+        { method: "GET", headers: { accept: "application/json", [headerName]: header } },
+        left(),
+        settleNote,
+      );
+      const json = tryJson(raw);
       if (res.status === 402 && json?.pending === true) {
-        const s = Number(res.headers.get("retry-after")) || 5;
-        if (tries >= 3 || waited + s > 120) {
-          throw new TollError("The paid answer is still being read; payment not settled yet. Try again later.", {
-            status: 402,
-            retryAfterS: s,
-          });
+        const s = clampSeconds(Number(res.headers.get("retry-after") ?? NaN), 5);
+        if (tries >= 5 || waitedS + s > 300 || Date.now() + s * 1000 > deadline) {
+          throw new TollError(
+            `The paid answer is still being read after ${tries} tries (nothing is charged while it is pending). Resend the same payment header later; do not sign a new one for this call.`,
+            { status: 402, retryAfterS: s },
+          );
         }
         await this.sleep(s * 1000);
-        waited += s;
+        waitedS += s;
         continue;
       }
-      if (res.status === 402) throw new TollError("Payment required: the payment was missing or not accepted.", { status: 402 });
-      if (!res.ok) throw new TollError(`Toll answered HTTP ${res.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`, { status: res.status });
-      if (json === null) throw new TollError("The paid answer was not JSON.", { status: res.status });
-      return json;
+      if (res.status === 402) {
+        const why = typeof json?.error === "string" ? ` (${json.error})` : "";
+        throw new TollError(`payment not accepted: Toll answered 402 to the signed payment${why}. pay() does not sign again.`, {
+          status: 402,
+        });
+      }
+      if (!res.ok) throw httpError(res.status, raw, settleNote);
+      return parseJsonAnswer(raw, res.status);
     }
   }
+}
+
+function tryJson(raw: string): any {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonAnswer(raw: string, status: number): unknown {
+  const json = tryJson(raw);
+  if (json === null) throw new TollError("The paid answer was not JSON.", { status });
+  return json;
+}
+
+function httpError(status: number, raw: string, note = ""): TollError {
+  return new TollError(`Toll answered HTTP ${status}${raw ? `: ${raw.slice(0, 200)}` : ""}.${note}`, { status });
+}
+
+function decodeBase64Json(value: string): any {
+  const bin = atob(value.trim());
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+}
+
+/** Reads a 402: v2 from the PAYMENT-REQUIRED header when it decodes, else v1 from the JSON body. */
+export function readRequirements(res: Response, raw: string): PaymentRequirements {
+  const h = res.headers.get("payment-required");
+  if (h) {
+    try {
+      const pr = decodeBase64Json(h);
+      if (pr && Array.isArray(pr.accepts) && pr.accepts.length) return { x402Version: 2, paymentRequired: pr, accepts: pr.accepts };
+    } catch {
+      /* fall back to the body */
+    }
+  }
+  const body = tryJson(raw);
+  if (body && Array.isArray(body.accepts) && body.accepts.length) {
+    return { x402Version: 1, paymentRequired: body, accepts: body.accepts };
+  }
+  throw new TollError("Toll answered 402 without x402 payment requirements; nothing was signed.", { status: 402 });
 }
 
 /** Accepts plain JSON or one SSE `data:` frame. */

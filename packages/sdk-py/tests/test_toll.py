@@ -1,12 +1,14 @@
+import email.message
 import io
 import json
 import os
+import socket
 import urllib.error
 from pathlib import Path
 
 import pytest
 
-from toll import Toll, TollError, is_valid_address, is_valid_wallet, parse_paid_url, parse_pending
+from toll import PaymentRequirements, Toll, TollError, is_valid_address, is_valid_wallet, parse_paid_url, parse_pending
 
 FX = Path(__file__).parent / "fixtures"
 TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3"
@@ -180,44 +182,172 @@ def test_sse_frame():
 
 
 PAID = f"https://t0ll.xyz/api/x402/check/{TOKEN}?chain=rh"
+# A real unpaid 402 from Toll (captured once, no payment header sent): v2 PAYMENT-REQUIRED header + v1 body.
+REAL_402 = json.loads(fx("x402_required"))
 
 
-def test_pay_needs_session_and_toll_url():
-    with pytest.raises(TollError, match="session"):
-        Toll().pay(PAID)
+def msg_headers(d):
+    m = email.message.Message()
+    for k, v in d.items():
+        m[k] = v
+    return m
+
+
+class HttpOpener:
+    """Answers like urllib: 2xx -> response object, 4xx/5xx -> HTTPError. Items: (status, headers, body) or a callable."""
+
+    def __init__(self, *answers):
+        self.answers = list(answers)
+        self.requests = []
+
+    def open(self, req, timeout=None):
+        self.requests.append((req, timeout))
+        a = self.answers.pop(0)
+        if callable(a):
+            a = a(req, timeout)
+        status, headers, body = a
+        hdrs = msg_headers(headers)
+        if status >= 400:
+            raise urllib.error.HTTPError(req.full_url, status, "x", hdrs, io.BytesIO(body.encode()))
+        r = FakeResponse(body)
+        r.status = status
+        r.headers = hdrs
+        return r
+
+    def header(self, i, name):
+        h = {k.lower(): v for k, v in self.requests[i][0].header_items()}
+        return h.get(name.lower())
+
+
+def required(headers=None):
+    return (402, REAL_402["headers"] if headers is None else headers, REAL_402["body"])
+
+
+def pending(retry_after=None):
+    return (402, {} if retry_after is None else {"Retry-After": retry_after}, '{"pending": true}')
+
+
+class Signer:
+    def __init__(self, value="c2lnbmVkLXBheW1lbnQ="):
+        self.value = value
+        self.seen = []
+
+    def __call__(self, req, url):
+        self.seen.append((req, url))
+        return self.value
+
+
+def test_pay_needs_sign_and_toll_url():
+    op = HttpOpener()
+    with pytest.raises(TollError, match="sign"):
+        Toll(opener=op).pay(PAID)
     with pytest.raises(TollError):
-        Toll().pay("https://evil.example/x", lambda u: (200, {}, "{}"))
+        Toll(opener=op, sign=Signer()).pay("https://evil.example/x")
+    assert op.requests == []
 
 
-def test_pay_pending_then_json():
+def test_pay_signs_once_across_several_pendings():
     s = Sleeper()
-    answers = [(402, {"Retry-After": "7"}, '{"pending": true}'), (200, {}, b'{"token": "x", "charged": true}')]
-    calls = []
+    sg = Signer()
+    op = HttpOpener(required(), pending("7"), pending("0"), pending(), (200, {}, '{"token": "x", "charged": true}'))
+    assert Toll(opener=op, sign=sg, sleep=s).pay(PAID) == {"token": "x", "charged": True}
 
-    def session(url):
-        calls.append(url)
-        return answers.pop(0)
+    assert len(sg.seen) == 1  # one signature for the whole call
+    req, url = sg.seen[0]
+    assert isinstance(req, PaymentRequirements) and req.x402_version == 2 and url == PAID
+    assert req.accepts[0]["network"] == "eip155:4663" and req.accepts[0]["amount"] == "50000"
+    assert req.accepts[0]["asset"] == "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"
 
-    assert Toll(sleep=s).pay(PAID, session) == {"token": "x", "charged": True}
-    assert s.slept == [7] and calls == [PAID, PAID]
+    assert len(op.requests) == 5
+    assert op.header(0, "payment-signature") is None and op.header(0, "x-payment") is None
+    for i in range(1, 5):
+        assert op.requests[i][0].full_url == PAID
+        assert op.header(i, "payment-signature") == "c2lnbmVkLXBheW1lbnQ="
+        assert op.header(i, "x-payment") is None
+    assert s.slept == [7, 1, 5]  # Retry-After 0 is clamped to 1 s, none means 5 s
 
 
-def test_pay_gives_up_and_reports_plain_402():
+def test_pay_follows_v1_with_x_payment():
+    sg = Signer("djEtcGF5bWVudA==")
+    op = HttpOpener(required({"content-type": "application/json"}), (200, {}, '{"ok": 1}'))
+    assert Toll(opener=op, sign=sg).pay(PAID) == {"ok": 1}
+    req = sg.seen[0][0]
+    assert req.x402_version == 1 and req.accepts[0]["maxAmountRequired"] == "50000"
+    assert op.header(1, "x-payment") == "djEtcGF5bWVudA==" and op.header(1, "payment-signature") is None
+
+
+def test_pay_stops_after_five_pending_tries():
     s = Sleeper()
-    with pytest.raises(TollError) as e:
-        Toll(sleep=s).pay(PAID, lambda u: (402, {"retry-after": "5"}, '{"pending": true}'))
-    assert e.value.status == 402 and s.slept == [5, 5]
-    with pytest.raises(TollError, match="Payment required"):
-        Toll().pay(PAID, lambda u: (402, {}, "{}"))
+    sg = Signer()
+    op = HttpOpener(required(), *[pending("5")] * 6)
+    with pytest.raises(TollError, match="same payment header") as e:
+        Toll(opener=op, sign=sg, sleep=s).pay(PAID)
+    assert e.value.status == 402
+    assert len(op.requests) == 6 and len(sg.seen) == 1 and s.slept == [5, 5, 5, 5]
 
 
-def test_pay_accepts_requests_style_response():
-    class R:
-        status_code = 200
-        headers = {}
-        text = '{"ok": 1}'
+def test_pay_stops_before_300s_waiting():
+    s = Sleeper()
+    sg = Signer()
+    op = HttpOpener(required(), pending("200"), pending("200"))
+    with pytest.raises(TollError):
+        Toll(opener=op, sign=sg, sleep=s).pay(PAID)
+    assert s.slept == [200] and len(sg.seen) == 1
 
-    assert Toll().pay(PAID, lambda u: R()) == {"ok": 1}
+
+def test_other_402_after_paying_is_not_accepted():
+    sg = Signer()
+    op = HttpOpener(required(), pending("3"), required())
+    with pytest.raises(TollError, match="payment not accepted") as e:
+        Toll(opener=op, sign=sg, sleep=Sleeper()).pay(PAID)
+    assert e.value.status == 402 and len(sg.seen) == 1 and len(op.requests) == 3
+
+
+def test_no_payment_sent_without_requirements_or_when_sign_fails():
+    sg = Signer()
+    with pytest.raises(TollError, match="without x402 payment requirements"):
+        Toll(opener=HttpOpener((402, {}, "{}")), sign=sg).pay(PAID)
+    assert sg.seen == []
+
+    def bad(req, url):
+        raise RuntimeError("no funds")
+
+    op = HttpOpener(required())
+    with pytest.raises(TollError, match="nothing was sent: no funds"):
+        Toll(opener=op, sign=bad).pay(PAID)
+    assert len(op.requests) == 1
+
+    op = HttpOpener(required())
+    with pytest.raises(TollError, match="one non-empty line"):
+        Toll(opener=op, sign=lambda r, u: "a\r\nb").pay(PAID)
+    assert len(op.requests) == 1
+
+
+def test_pay_timeout_warns_not_to_sign_again():
+    sg = Signer()
+
+    def hang(req, timeout):
+        raise TimeoutError()
+
+    op = HttpOpener(required(), hang)
+    with pytest.raises(TollError, match="may have settled") as e:
+        Toll(opener=op, sign=sg).pay(PAID, timeout=40)
+    assert "new signature" in str(e.value) and len(sg.seen) == 1
+    assert op.requests[0][1] <= 40  # each request gets what is left of pay()'s own timeout
+
+    op = HttpOpener(required(), lambda r, t: (_ for _ in ()).throw(urllib.error.URLError(socket.timeout())))
+    with pytest.raises(TollError, match="timed out.*may have settled"):
+        Toll(opener=op, sign=Signer()).pay(PAID)
+
+
+def test_pay_unpaid_200_needs_no_signature():
+    sg = Signer()
+    assert Toll(opener=HttpOpener((200, {}, '{"free": true}')), sign=sg).pay(PAID) == {"free": True}
+    assert sg.seen == []
+
+
+def test_retry_after_clamped():
+    assert parse_pending("try again in 0 s") == {"retry_after_s": 1}
 
 
 @pytest.mark.skipif(os.environ.get("TOLL_LIVE") != "1", reason="set TOLL_LIVE=1 for the live smoke test")

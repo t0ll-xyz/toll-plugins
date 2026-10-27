@@ -26,26 +26,64 @@ Every method returns `{ text, paidUrl, pending }`.
 
 ## API
 
-`new Toll({ baseUrl?, fetch?, payFetch?, timeoutMs? })`
+`new Toll({ baseUrl?, fetch?, sign?, timeoutMs?, payTimeoutMs? })`
 
 - `checkCoin(address, { chain?: "rh" | "sol" | "bsc" })`
 - `larpCheck(token, { chain?: "rh" | "sol", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives (max 3 tries, max 120 s)
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
 - `tools()` lists the server's tools, `call(name, args)` calls any of them
-- `pay(paidUrl)` GETs a paid URL with your `payFetch` and returns the JSON
+- `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)
 - `isValidAddress(x)`, `isValidWallet(x)` - the same checks the SDK runs before anything is sent
 - Errors (HTTP, JSON-RPC, timeouts, server-side input errors) are thrown as `TollError`.
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the answer carries `paidUrl`, the x402 endpoint for that coin (0.05 USDG on Robinhood Chain, charged only for a whole answer). Bring an x402-aware fetch to pay it:
+10 new coins a day per caller are free (coins already read stay free). Past that, the answer carries `paidUrl`, the x402 endpoint for that coin (0.05 USDG on Robinhood Chain, charged only for a whole answer).
+
+`pay(paidUrl)` runs the x402 flow itself and asks your `sign` function for one payment:
+
+1. GET the URL without payment. Toll answers 402 with what to pay: x402 v2 in the `PAYMENT-REQUIRED` header, v1 in the body.
+2. Call `sign(requirements, url)` **once**. It returns the payment header value.
+3. GET again with it (`PAYMENT-SIGNATURE` for v2, `X-PAYMENT` for v1, following what the 402 offered). While Toll is still reading the coin it answers 402 `{"pending": true}` (nothing charged): `pay()` resends **exactly the same header** after `Retry-After` (at least 1 s), up to 5 tries and 300 s. A 200 is the answer. Any other 402 after paying throws `TollError` "payment not accepted"; `pay()` never signs a second payment for one call.
+
+The whole call has its own timeout (`payTimeoutMs`, default 300000). If it times out or the connection drops after the payment was sent, the error says the payment may have settled: do not retry that call with a new signature; resend the same header.
+
+### The `sign` contract
 
 ```ts
-const toll = new Toll({ payFetch });   // e.g. from x402-fetch, wrapping your wallet
+type SignPayment = (requirements: PaymentRequirements, url: string) => Promise<string> | string;
+
+interface PaymentRequirements {
+  x402Version: 1 | 2;           // 2 when the 402 had a PAYMENT-REQUIRED header
+  paymentRequired: { x402Version: number; accepts: Array<Record<string, unknown>>; ... }; // the decoded 402
+  accepts: Array<Record<string, unknown>>; // scheme, network "eip155:4663", asset (USDG), amount, payTo, ...
+}
+```
+
+Return the header value for `x402Version` (the base64 payment payload). Check the amount and `payTo` in `accepts` before you sign. Your key never touches this SDK.
+
+### Example: `sign` with @priors/x402
+
+Built and run against `@priors/x402` 0.8.2 and `@x402/core` 2.28 (USDG on Robinhood Chain, with a price cap):
+
+```ts
+import { ethers } from "ethers";
+import { createUsdgClient, robinhood } from "@priors/x402";
+import { encodePaymentSignatureHeader } from "@x402/core/http";
+import { Toll, type SignPayment } from "@tollxyz/sdk";
+
+const signer = new ethers.Wallet(process.env.AGENT_KEY!, new ethers.JsonRpcProvider(robinhood.rpcUrl)); // holds USDG
+const x402 = createUsdgClient({ signer, maxPrice: "$0.05" });
+const sign: SignPayment = async (req) => {
+  if (req.x402Version !== 2) throw new Error("this signer speaks x402 v2");
+  return encodePaymentSignatureHeader(await x402.createPaymentPayload(req.paymentRequired as any));
+};
+
+const toll = new Toll({ sign });
 const r = await toll.checkCoin(address);
 if (r.paidUrl) console.log(await toll.pay(r.paidUrl));
 ```
 
-Without a `payFetch`, `pay()` throws a clear error. Docs: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
+Without a `sign`, `pay()` throws before any request. Docs: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 MIT.
