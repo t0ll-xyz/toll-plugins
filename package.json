@@ -1,0 +1,13 @@
+{
+  "name": "toll-plugins",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Toll (t0ll.xyz) SDKs and agent plugins",
+  "license": "MIT",
+  "author": "Toll",
+  "workspaces": ["packages/*", "examples/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  }
+}
