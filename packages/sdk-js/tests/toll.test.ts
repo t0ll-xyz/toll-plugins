@@ -149,33 +149,156 @@ test("accepts an SSE data frame", async () => {
 });
 
 const PAID = `https://t0ll.xyz/api/x402/check/${TOKEN}?chain=rh`;
+// A real unpaid 402 from Toll (captured once, no payment header sent): v2 PAYMENT-REQUIRED header + v1 body.
+const REAL_402 = JSON.parse(fx("x402_required")) as { status: number; headers: Record<string, string>; body: string };
+const required = (headers = REAL_402.headers) => new Response(REAL_402.body, { status: 402, headers });
+const v1Only = () => new Response(REAL_402.body, { status: 402, headers: { "content-type": "application/json" } });
+const pendingRes = (retryAfter?: string) =>
+  new Response('{"pending":true}', { status: 402, headers: retryAfter === undefined ? {} : { "retry-after": retryAfter } });
+const hdr = (c: Call, name: string) => new Headers(c.init.headers).get(name);
 
-test("pay needs payFetch and a Toll URL", async () => {
-  await assert.rejects(new Toll().pay(PAID), /payFetch/);
-  await assert.rejects(new Toll({ payFetch: mockFetch([]).f }).pay("https://evil.example/x"), TollError);
+function signer(value = "c2lnbmVkLXBheW1lbnQ=") {
+  const seen: Array<{ version: number; accepts: unknown[]; url: string }> = [];
+  const sign = async (req: { x402Version: 1 | 2; accepts: Array<Record<string, unknown>> }, url: string) => {
+    seen.push({ version: req.x402Version, accepts: req.accepts, url });
+    return value;
+  };
+  return { sign, seen };
+}
+
+test("pay needs sign and a Toll URL, before any request", async () => {
+  const m = mockFetch([]);
+  await assert.rejects(new Toll({ fetch: m.f }).pay(PAID), (e: unknown) => e instanceof TollError && /sign/.test(e.message));
+  await assert.rejects(new Toll({ fetch: m.f, sign: signer().sign }).pay("https://evil.example/x"), TollError);
+  assert.equal(m.calls.length, 0);
 });
 
-test("pay returns the JSON and handles 402 pending with Retry-After", async () => {
+test("pay reads the real v2 402, signs ONCE, resends the same header through several pendings", async () => {
   const s = noSleep();
-  const pf = mockFetch([
-    new Response('{"pending":true}', { status: 402, headers: { "retry-after": "7" } }),
+  const sg = signer();
+  const m = mockFetch([
+    required(),
+    pendingRes("7"),
+    pendingRes("0"), // clamped to 1 s
+    pendingRes(), // no Retry-After: 5 s
     new Response('{"token":"x","charged":true}', { status: 200 }),
   ]);
-  const out = await new Toll({ payFetch: pf.f, sleep: s.sleep }).pay(PAID);
+  const out = await new Toll({ fetch: m.f, sign: sg.sign, sleep: s.sleep }).pay(PAID);
   assert.deepEqual(out, { token: "x", charged: true });
-  assert.deepEqual(s.slept, [7000]);
-  assert.equal(pf.calls.length, 2);
+
+  assert.equal(sg.seen.length, 1); // one signature for the whole call
+  assert.equal(sg.seen[0].version, 2);
+  assert.equal(sg.seen[0].url, PAID);
+  const a = sg.seen[0].accepts[0] as Record<string, unknown>;
+  assert.equal(a.network, "eip155:4663");
+  assert.equal(a.amount, "50000");
+  assert.equal(a.asset, "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168");
+
+  assert.equal(m.calls.length, 5);
+  assert.equal(hdr(m.calls[0], "payment-signature"), null); // the first GET carries no payment
+  assert.equal(hdr(m.calls[0], "x-payment"), null);
+  for (const c of m.calls.slice(1)) {
+    assert.equal(c.url, PAID);
+    assert.equal(hdr(c, "payment-signature"), "c2lnbmVkLXBheW1lbnQ=");
+    assert.equal(hdr(c, "x-payment"), null);
+  }
+  assert.deepEqual(s.slept, [7000, 1000, 5000]);
 });
 
-test("pay gives up after 3 pending tries and reports a plain 402", async () => {
-  const s = noSleep();
-  const pend = () => new Response('{"pending":true}', { status: 402, headers: { "retry-after": "5" } });
-  const pf = mockFetch([pend(), pend(), pend()]);
-  await assert.rejects(new Toll({ payFetch: pf.f, sleep: s.sleep }).pay(PAID), (e: unknown) => e instanceof TollError && e.status === 402);
-  assert.equal(pf.calls.length, 3);
+test("pay follows a v1-only 402 with X-PAYMENT", async () => {
+  const sg = signer("djEtcGF5bWVudA==");
+  const m = mockFetch([v1Only(), new Response('{"ok":1}', { status: 200 })]);
+  assert.deepEqual(await new Toll({ fetch: m.f, sign: sg.sign }).pay(PAID), { ok: 1 });
+  assert.equal(sg.seen[0].version, 1);
+  assert.equal((sg.seen[0].accepts[0] as Record<string, unknown>).maxAmountRequired, "50000");
+  assert.equal(hdr(m.calls[1], "x-payment"), "djEtcGF5bWVudA==");
+  assert.equal(hdr(m.calls[1], "payment-signature"), null);
+});
 
-  const pf2 = mockFetch([new Response("{}", { status: 402 })]);
-  await assert.rejects(new Toll({ payFetch: pf2.f }).pay(PAID), /Payment required/);
+test("pay stops after 5 pending tries, never signs again", async () => {
+  const s = noSleep();
+  const sg = signer();
+  const m = mockFetch([required(), pendingRes("5"), pendingRes("5"), pendingRes("5"), pendingRes("5"), pendingRes("5"), pendingRes("5")]);
+  await assert.rejects(
+    new Toll({ fetch: m.f, sign: sg.sign, sleep: s.sleep }).pay(PAID),
+    (e: unknown) => e instanceof TollError && e.status === 402 && /same payment header/.test(e.message),
+  );
+  assert.equal(m.calls.length, 6); // 1 unpaid + 5 paid
+  assert.equal(sg.seen.length, 1);
+  assert.deepEqual(s.slept, [5000, 5000, 5000, 5000]);
+});
+
+test("pay stops before 300 s of waiting", async () => {
+  const s = noSleep();
+  const sg = signer();
+  const m = mockFetch([required(), pendingRes("200"), pendingRes("200")]);
+  await assert.rejects(new Toll({ fetch: m.f, sign: sg.sign, sleep: s.sleep }).pay(PAID), TollError);
+  assert.deepEqual(s.slept, [200000]);
+  assert.equal(sg.seen.length, 1);
+});
+
+test("any other 402 after paying is 'payment not accepted', no second signature", async () => {
+  const sg = signer();
+  const m = mockFetch([required(), pendingRes("3"), required()]);
+  await assert.rejects(
+    new Toll({ fetch: m.f, sign: sg.sign, sleep: noSleep().sleep }).pay(PAID),
+    (e: unknown) => e instanceof TollError && e.status === 402 && /payment not accepted/.test(e.message),
+  );
+  assert.equal(sg.seen.length, 1);
+  assert.equal(m.calls.length, 3);
+});
+
+test("a 402 without requirements, or a failing sign(), sends no payment", async () => {
+  const sg = signer();
+  const m = mockFetch([new Response("{}", { status: 402 })]);
+  await assert.rejects(new Toll({ fetch: m.f, sign: sg.sign }).pay(PAID), /without x402 payment requirements/);
+  assert.equal(sg.seen.length, 0);
+
+  const m2 = mockFetch([required()]);
+  const bad = async () => {
+    throw new Error("no funds");
+  };
+  await assert.rejects(new Toll({ fetch: m2.f, sign: bad }).pay(PAID), /sign\(\) failed, nothing was sent: no funds/);
+  assert.equal(m2.calls.length, 1);
+
+  const m3 = mockFetch([required()]);
+  await assert.rejects(new Toll({ fetch: m3.f, sign: async () => "a\r\nb" }).pay(PAID), /one non-empty line/);
+  assert.equal(m3.calls.length, 1);
+});
+
+test("pay has its own timeout and warns not to sign again", async () => {
+  const sg = signer();
+  const hang = (_u: string, init?: RequestInit) =>
+    new Promise<Response>((_res, rej) => init?.signal?.addEventListener("abort", () => rej(new Error("aborted"))));
+  const m = mockFetch([required(), () => hang("", m.calls[m.calls.length - 1].init)]);
+  await assert.rejects(
+    new Toll({ fetch: m.f, sign: sg.sign, timeoutMs: 5, payTimeoutMs: 40 }).pay(PAID),
+    (e: unknown) => e instanceof TollError && /timed out after/.test(e.message) && /may have settled/.test(e.message) && /new signature/.test(e.message),
+  );
+  assert.equal(sg.seen.length, 1);
+});
+
+test("pay passes an unpaid 200 straight through without signing", async () => {
+  const sg = signer();
+  const m = mockFetch([new Response('{"free":true}', { status: 200 })]);
+  assert.deepEqual(await new Toll({ fetch: m.f, sign: sg.sign }).pay(PAID), { free: true });
+  assert.equal(sg.seen.length, 0);
+});
+
+test("the request timer covers reading the body", async () => {
+  const f = async (_u: string, init?: RequestInit) => {
+    const body = new ReadableStream({
+      start(ctl) {
+        init?.signal?.addEventListener("abort", () => ctl.error(new Error("aborted")));
+      },
+    });
+    return new Response(body, { status: 200 });
+  };
+  await assert.rejects(new Toll({ fetch: f, timeoutMs: 20 }).chainPulse(), (e: unknown) => e instanceof TollError && /timed out/.test(e.message));
+});
+
+test("Retry-After style waits are at least 1 s", () => {
+  assert.deepEqual(parsePending("try again in 0 s"), { retryAfterS: 1 });
 });
 
 test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async () => {
