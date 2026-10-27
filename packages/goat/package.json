@@ -18,7 +18,10 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",
@@ -48,7 +51,7 @@
     "@tollxyz/sdk": "^0.1.0"
   },
   "peerDependencies": {
-    "@goat-sdk/core": ">=0.4.0",
+    "@goat-sdk/core": ">=0.5.0 <0.6",
     "zod": "^3.23.8"
   },
   "devDependencies": {

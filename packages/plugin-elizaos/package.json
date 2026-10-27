@@ -9,7 +9,8 @@
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "README.md"],
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=20.19" },
+  "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/plugin-elizaos" },
   "homepage": "https://t0ll.xyz/agents",
   "keywords": ["elizaos", "elizaos-plugin", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
@@ -19,7 +20,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": { "@tollxyz/sdk": "^0.1.0" },
-  "peerDependencies": { "@elizaos/core": ">=1.6.0" },
+  "peerDependencies": { "@elizaos/core": "^1.6.0" },
   "devDependencies": {
     "@elizaos/core": "^1.7.2",
     "@types/node": "^22.0.0",

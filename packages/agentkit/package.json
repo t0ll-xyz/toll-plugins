@@ -9,7 +9,8 @@
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "README.md"],
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=20.19" },
+  "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/agentkit" },
   "homepage": "https://t0ll.xyz/agents",
   "keywords": ["agentkit", "coinbase", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
@@ -19,7 +20,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": { "@tollxyz/sdk": "^0.1.0" },
-  "peerDependencies": { "@coinbase/agentkit": ">=0.10.0", "zod": "^3.23.8" },
+  "peerDependencies": { "@coinbase/agentkit": "^0.10.4", "zod": "^3.23.8" },
   "devDependencies": {
     "@coinbase/agentkit": "^0.10.4",
     "@types/node": "^22.0.0",
