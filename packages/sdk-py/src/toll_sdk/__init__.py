@@ -1,4 +1,4 @@
-"""toll-sdk: client for Toll's remote MCP server (https://t0ll.xyz/mcp).
+"""toll-sdk (import toll_sdk): client for Toll's remote MCP server (https://t0ll.xyz/mcp).
 
 Information only, not financial advice.
 """

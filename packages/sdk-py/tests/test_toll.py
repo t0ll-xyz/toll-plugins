@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from toll import PaymentRequirements, Toll, TollError, is_valid_address, is_valid_wallet, parse_paid_url, parse_pending
+from toll_sdk import PaymentRequirements, Toll, TollError, is_valid_address, is_valid_wallet, parse_paid_url, parse_pending
 
 FX = Path(__file__).parent / "fixtures"
 TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3"
