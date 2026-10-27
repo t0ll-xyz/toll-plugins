@@ -10,7 +10,7 @@ Tools: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, `l
 npm install @tollxyz/ai-sdk ai zod
 ```
 
-`ai` (>= 6) and `zod` (3.25+ or 4) are peer dependencies. Built and tested against `ai` 7.0.154 (Node >= 22), using `tool()` with `inputSchema`.
+`ai` (6 or 7) and `zod` (3.25+ or 4) are peer dependencies. ESM only, Node >= 22. Built and tested against `ai` 7.0.154 (Node >= 22), using `tool()` with `inputSchema`.
 
 ## Example
 

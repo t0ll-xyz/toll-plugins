@@ -10,7 +10,7 @@ Actions: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, 
 npm install @tollxyz/agentkit @coinbase/agentkit zod@3
 ```
 
-`@coinbase/agentkit` (>= 0.10) and `zod` 3 are peer dependencies. Built and tested against `@coinbase/agentkit` 0.10.4.
+`@coinbase/agentkit` (^0.10.4) and `zod` 3 are peer dependencies. ESM only, Node >= 20.19. Built and tested against `@coinbase/agentkit` 0.10.4.
 
 ## Example
 

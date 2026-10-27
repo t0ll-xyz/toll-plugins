@@ -10,6 +10,7 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "files": ["dist", "README.md"],
   "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public" },
   "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/ai-sdk" },
   "homepage": "https://t0ll.xyz/agents",
   "keywords": ["ai-sdk", "vercel", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
@@ -19,7 +20,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": { "@tollxyz/sdk": "^0.1.0" },
-  "peerDependencies": { "ai": ">=6.0.0", "zod": "^3.25.76 || ^4.1.8" },
+  "peerDependencies": { "ai": ">=6 <8", "zod": "^3.25.76 || ^4.1.8" },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "ai": "^7.0.154",

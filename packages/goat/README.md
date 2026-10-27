@@ -10,7 +10,7 @@ Tools: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`. `s
 npm install @tollxyz/goat-plugin @goat-sdk/core zod@3
 ```
 
-`@goat-sdk/core` (>= 0.4) and `zod` 3 are peer dependencies. Built and tested against `@goat-sdk/core` 0.5.0.
+`@goat-sdk/core` (0.5.x) and `zod` 3 are peer dependencies. ESM only, Node >= 20.19. Built and tested against `@goat-sdk/core` 0.5.0.
 
 ## Example
 

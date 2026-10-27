@@ -7,7 +7,7 @@
   "author": "Toll",
   "workspaces": ["packages/*", "examples/*"],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @tollxyz/sdk && npm run build --workspaces --if-present",
     "test": "npm test --workspaces --if-present"
   }
 }
