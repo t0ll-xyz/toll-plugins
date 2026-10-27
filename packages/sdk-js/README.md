@@ -22,14 +22,14 @@ const larp = await toll.larpCheck("0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", 
 console.log(larp.text);                        // product found / partly found / not found / not read
 ```
 
-Every method returns `{ text, paidUrl, pending }`.
+Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` or null) means part of the answer is still being read: ask again after that many seconds. `paidUrl` is set when the free coins are used up (see below).
 
 ## API
 
 `new Toll({ baseUrl?, fetch?, sign?, timeoutMs?, payTimeoutMs? })`
 
 - `checkCoin(address, { chain?: "rh" | "sol" | "bsc" })`
-- `larpCheck(token, { chain?: "rh" | "sol", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives (max 3 tries, max 120 s)
+- `larpCheck(token, { chain?: "rh" | "sol", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
 - `tools()` lists the server's tools, `call(name, args)` calls any of them
 - `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)

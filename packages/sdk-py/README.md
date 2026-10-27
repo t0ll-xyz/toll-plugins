@@ -22,14 +22,14 @@ larp = toll.larp_check("0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", wait=True)
 print(larp.text)                       # product found / partly found / not found / not read
 ```
 
-Every method returns `TollResult(text, paid_url, pending)`.
+Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_after_s": n}` or None) means part of the answer is still being read: ask again after that many seconds. `paid_url` is set when the free coins are used up (see below).
 
 ## API
 
 `Toll(base_url="https://t0ll.xyz", opener=None, timeout=30.0, sign=None, pay_timeout=300.0)`
 
 - `check_coin(address, chain=None)` - chain is `rh`, `sol` or `bsc`
-- `larp_check(token, chain=None, wait=False)` - `rh` or `sol`; `wait=True` asks again after the seconds the server gives (max 3 tries, max 120 s)
+- `larp_check(token, chain=None, wait=False)` - `rh` or `sol`; `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
 - `tools()` lists the server's tools, `call(name, args)` calls any of them
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
