@@ -110,6 +110,30 @@ test("larpCheck wait stops before passing 120 s", async () => {
   assert.ok(r.pending);
 });
 
+test("larpCheck wait treats the busy answer like pending, inside the same caps", async () => {
+  const s = noSleep();
+  const m = mockFetch([fx("larp_check_busy"), fx("larp_check_reading"), fx("larp_check")]);
+  const r = await new Toll({ fetch: m.f, sleep: s.sleep }).larpCheck(TOKEN, { wait: true });
+  assert.equal(m.calls.length, 3);
+  assert.deepEqual(s.slept, [20000, 30000]);
+  assert.match(r.text, /product found/);
+
+  const s2 = noSleep();
+  const m2 = mockFetch([fx("larp_check_busy"), fx("larp_check_busy"), fx("larp_check_busy"), fx("larp_check")]);
+  await assert.rejects(
+    new Toll({ fetch: m2.f, sleep: s2.sleep }).larpCheck(TOKEN, { wait: true }),
+    (e: unknown) => e instanceof TollError && e.retryAfterS === 20,
+  );
+  assert.equal(m2.calls.length, 3); // still max 3 tries
+  assert.deepEqual(s2.slept, [20000, 20000]);
+
+  // An error without retryAfterS is not retried.
+  const bad = JSON.stringify({ result: { content: [{ type: "text", text: "Not a token." }], isError: true } });
+  const m3 = mockFetch([bad, fx("larp_check")]);
+  await assert.rejects(new Toll({ fetch: m3.f, sleep: noSleep().sleep }).larpCheck(TOKEN, { wait: true }), /Not a token/);
+  assert.equal(m3.calls.length, 1);
+});
+
 test("isError answers, JSON-RPC errors and HTTP errors become TollError", async () => {
   const busy = new Toll({ fetch: mockFetch([fx("larp_check_busy")]).f });
   await assert.rejects(busy.larpCheck(TOKEN), (e: unknown) => e instanceof TollError && /Many new LARP checks/.test(e.message) && e.retryAfterS === 20);

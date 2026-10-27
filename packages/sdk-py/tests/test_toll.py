@@ -136,6 +136,25 @@ def test_larp_wait_stops_before_120s():
     assert len(op.requests) == 2 and s.slept == [100] and r.pending
 
 
+def test_larp_wait_treats_busy_like_pending():
+    s = Sleeper()
+    op = FakeOpener(fx("larp_check_busy"), fx("larp_check_reading"), fx("larp_check"))
+    r = Toll(opener=op, sleep=s).larp_check(TOKEN, wait=True)
+    assert len(op.requests) == 3 and s.slept == [20, 30] and "product found" in r.text
+
+    s2 = Sleeper()
+    op2 = FakeOpener(*[fx("larp_check_busy")] * 3, fx("larp_check"))
+    with pytest.raises(TollError) as e:
+        Toll(opener=op2, sleep=s2).larp_check(TOKEN, wait=True)
+    assert e.value.retry_after_s == 20 and len(op2.requests) == 3 and s2.slept == [20, 20]
+
+    bad = json.dumps({"result": {"content": [{"type": "text", "text": "Not a token."}], "isError": True}})
+    op3 = FakeOpener(bad, fx("larp_check"))
+    with pytest.raises(TollError, match="Not a token"):
+        Toll(opener=op3, sleep=Sleeper()).larp_check(TOKEN, wait=True)
+    assert len(op3.requests) == 1
+
+
 def test_errors_become_toll_error():
     with pytest.raises(TollError, match="Many new LARP checks") as e:
         Toll(opener=FakeOpener(fx("larp_check_busy"))).larp_check(TOKEN)

@@ -60,7 +60,7 @@ class TollError(Exception):
 class TollResult:
     text: str
     paid_url: Optional[str]
-    pending: Optional[Dict[str, int]]  # {"retry_after_s": n} when the server is still reading
+    pending: Optional[Dict[str, int]]  # {"retry_after_s": n}: part of the answer is still being read, ask again then
 
 
 @dataclass
@@ -220,24 +220,42 @@ class Toll:
         return self.call("check_coin", {"address": address, **({"chain": chain} if chain else {})})
 
     def larp_check(self, token: str, chain: Optional[str] = None, wait: bool = False) -> TollResult:
-        """LARP check. wait=True re-asks while the server is still reading (max 3 tries, max 120 s waiting)."""
+        """LARP check.
+
+        wait=True asks again while part of the answer is still being read, or while Toll answers that it is
+        busy with many new LARP checks (a TollError with retry_after_s): max 3 tries, max 120 s waiting.
+        """
         _check_address(token, "token")
         _check_chain(chain, ("rh", "sol"))
         args = {"token": token, **({"chain": chain} if chain else {})}
-        res = self.call("larp_check", args)
         if not wait:
-            return res
+            return self.call("larp_check", args)
         waited = 0
-        tries = 1
-        while tries < 3 and res.pending:
-            s = res.pending["retry_after_s"]
-            if waited + s > 120:
-                break
+        tries = 0
+        while True:
+            tries += 1
+            res: Optional[TollResult] = None
+            busy: Optional[TollError] = None
+            try:
+                res = self.call("larp_check", args)
+            except TollError as e:
+                if e.retry_after_s is None:
+                    raise
+                busy = e
+            if res is not None:
+                if not res.pending:
+                    return res
+                s = res.pending["retry_after_s"]
+            else:
+                assert busy is not None and busy.retry_after_s is not None
+                s = busy.retry_after_s
+            if tries >= 3 or waited + s > 120:
+                if busy is not None:
+                    raise busy
+                assert res is not None
+                return res
             self._sleep(s)
             waited += s
-            res = self.call("larp_check", args)
-            tries += 1
-        return res
 
     def dev_record(self, wallet: str, chain: Optional[str] = None) -> TollResult:
         _check_wallet(wallet)

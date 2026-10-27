@@ -11,7 +11,7 @@ export interface TollResult {
   text: string;
   /** The paid x402 URL for this coin when the free quota is used up, else null. */
   paidUrl: string | null;
-  /** Set when the server says it is still reading: ask again after retryAfterS seconds. */
+  /** Set when part of the answer is still being read: ask again after retryAfterS seconds. */
   pending: { retryAfterS: number } | null;
 }
 
@@ -202,22 +202,34 @@ export class Toll {
     return this.call("check_coin", { address, ...(opts.chain ? { chain: opts.chain } : {}) });
   }
 
-  /** LARP check. With wait: true, re-asks while the server is still reading (max 3 tries, max 120 s waiting). */
+  /**
+   * LARP check. With wait: true, asks again while part of the answer is still being read, or while Toll
+   * answers that it is busy with many new LARP checks (a TollError with retryAfterS): max 3 tries, max 120 s waiting.
+   */
   async larpCheck(token: string, opts: { chain?: LarpChain; wait?: boolean } = {}): Promise<TollResult> {
     assertAddress(token, "token");
     assertChain(opts.chain, ["rh", "sol"]);
     const args = { token, ...(opts.chain ? { chain: opts.chain } : {}) };
-    let res = await this.call("larp_check", args);
-    if (!opts.wait) return res;
+    if (!opts.wait) return this.call("larp_check", args);
     let waited = 0;
-    for (let tries = 1; tries < 3 && res.pending; tries++) {
-      const s = res.pending.retryAfterS;
-      if (waited + s > 120) break;
+    for (let tries = 1; ; tries++) {
+      let res: TollResult | null = null;
+      let busy: TollError | null = null;
+      try {
+        res = await this.call("larp_check", args);
+      } catch (e) {
+        if (e instanceof TollError && e.retryAfterS !== undefined) busy = e;
+        else throw e;
+      }
+      const s = res ? res.pending?.retryAfterS : busy!.retryAfterS!;
+      if (s === undefined) return res!;
+      if (tries >= 3 || waited + s > 120) {
+        if (busy) throw busy;
+        return res!;
+      }
       await this.sleep(s * 1000);
       waited += s;
-      res = await this.call("larp_check", args);
     }
-    return res;
   }
 
   async devRecord(wallet: string, opts: { chain?: Chain } = {}): Promise<TollResult> {

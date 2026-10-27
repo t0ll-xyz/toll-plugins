@@ -7,7 +7,7 @@ export function formatResult(r: TollResult): string {
     out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402, 0.05 USDG on Robinhood Chain) or hold 1M $TOLL.`;
   }
   if (r.pending) {
-    out += `\n\nToll is still reading this one: ask again in ${r.pending.retryAfterS} seconds.`;
+    out += `\n\nPart of the answer is still being read: ask again in ${r.pending.retryAfterS} seconds.`;
   }
   return out;
 }
