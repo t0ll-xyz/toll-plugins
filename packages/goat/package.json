@@ -1,0 +1,60 @@
+{
+  "name": "@tollxyz/goat-plugin",
+  "version": "0.1.0",
+  "description": "GOAT SDK plugin: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/goat"
+  },
+  "homepage": "https://t0ll.xyz/agents",
+  "keywords": [
+    "goat",
+    "goat-sdk",
+    "robinhood-chain",
+    "solana",
+    "bsc",
+    "x402",
+    "mcp",
+    "ai-agent",
+    "rug-check",
+    "larp",
+    "toll"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/tests/*.test.js\"",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@tollxyz/sdk": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@goat-sdk/core": ">=0.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@goat-sdk/core": "^0.5.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "zod": "^3.23.8"
+  }
+}
