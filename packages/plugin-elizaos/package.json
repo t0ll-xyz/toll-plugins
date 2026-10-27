@@ -1,0 +1,29 @@
+{
+  "name": "@t0ll/plugin-elizaos",
+  "version": "0.1.0",
+  "description": "elizaOS plugin: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/plugin-elizaos" },
+  "homepage": "https://t0ll.xyz/agents",
+  "keywords": ["elizaos", "elizaos-plugin", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": { "@t0ll/sdk": "^0.1.0" },
+  "peerDependencies": { "@elizaos/core": ">=1.6.0" },
+  "devDependencies": {
+    "@elizaos/core": "^1.7.2",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
