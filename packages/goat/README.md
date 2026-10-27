@@ -21,10 +21,10 @@ import { toll } from "@tollxyz/goat-plugin";
 const tools = await getTools({ wallet, plugins: [toll()] });
 ```
 
-Pass your own client for an x402-aware `payFetch`: `toll(new Toll({ payFetch }))` (`Toll` from `@tollxyz/sdk`).
+`Toll` and `TollError` are re-exported from `@tollxyz/sdk`.
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the plugin tells the agent it can pay per check there (0.05 USDG on Robinhood Chain) or hold 1M $TOLL. A LARP check that is still being read is awaited for you (up to 3 asks, 120 s).
+10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the plugin tells the agent it can pay per check there (0.05 USDG on Robinhood Chain) or hold 1M $TOLL. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
 
 Links: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.

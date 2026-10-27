@@ -43,6 +43,35 @@ test("address extraction", () => {
   assert.equal(extractWallet(`dev ${TOKEN}`)!.wallet, TOKEN);
 });
 
+test("a Solana mint counts only as a whole word", () => {
+  assert.deepEqual(extractAddress(`check ${SOL}.`), { address: SOL, chain: "sol" });
+  assert.deepEqual(extractAddress(`(${SOL})`), { address: SOL, chain: "sol" });
+  assert.deepEqual(extractAddress(`https://solscan.io/token/${SOL}`), { address: SOL, chain: "sol" });
+  assert.equal(extractAddress(`x_${SOL}`), null);
+  assert.equal(extractAddress(`${SOL}_y`), null);
+  assert.equal(extractAddress(`0${SOL}`), null);
+  assert.equal(extractAddress(`a${SOL}0`), null);
+});
+
+test("LARP on a BSC message: says what it covers, sends nothing", async () => {
+  const { toll, bodies } = client([]);
+  const p = createTollPlugin({ client: toll });
+  const got: any[] = [];
+  const res = await act(p, "TOLL_LARP_CHECK").handler({}, msg(`is there a product behind ${TOKEN} on bsc`), undefined, {}, async (c: any) => {
+    got.push(c);
+    return [];
+  });
+  assert.equal(res.success, true);
+  assert.equal(bodies.length, 0);
+  assert.match(got[0].text, /covers Robinhood Chain and Solana/);
+});
+
+test("the dev record example names a deployer wallet, not the token", () => {
+  const ex = act(tollPlugin, "TOLL_DEV_RECORD").examples[0][0].content.text as string;
+  assert.match(ex, /0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc/);
+  assert.ok(!ex.includes(TOKEN));
+});
+
 test("validate: needs an address", async () => {
   const a = act(tollPlugin, "TOLL_CHECK_COIN");
   assert.equal(await a.validate({}, msg(`check ${TOKEN}`)), true);

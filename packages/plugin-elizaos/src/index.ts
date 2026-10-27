@@ -54,7 +54,8 @@ function makeAction(
 }
 
 export function createTollActions(client: Toll): Action[] {
-  const CA = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
+  const CA = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3"; // the $TOLL token
+  const DEV = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc"; // the wallet that launched $TOLL (a deployer, not a token)
   return [
     makeAction(client, {
       name: "TOLL_CHECK_COIN",
@@ -74,8 +75,12 @@ export function createTollActions(client: Toll): Action[] {
       description:
         "Is there a real product behind this coin? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: found, partly found, not found or not read. Robinhood Chain and Solana. Information only, not advice.",
       canRun: (t) => extractAddress(t) !== null,
-      run: (c, t) => {
+      run: async (c, t) => {
         const a = extractAddress(t)!;
+        if (a.chain === "bsc") {
+          // Nothing is sent: the LARP check does not read BSC.
+          return { text: "The LARP check covers Robinhood Chain and Solana, not BSC. TOLL_CHECK_COIN reads BSC coins.", paidUrl: null, pending: null };
+        }
         const chain = a.chain === "sol" ? "sol" : a.chain === "rh" ? "rh" : undefined;
         return c.larpCheck(a.address, { wait: true, ...(chain ? { chain } : {}) });
       },
@@ -91,7 +96,7 @@ export function createTollActions(client: Toll): Action[] {
         const w = extractWallet(t)!;
         return c.devRecord(w.wallet, w.chain ? { chain: w.chain } : {});
       },
-      example: [`what has the dev ${CA} launched before?`, "Here is that wallet's launch record from Toll."],
+      example: [`what has the dev ${DEV} launched before?`, "Here is that wallet's launch record from Toll."],
     }),
   ];
 }
