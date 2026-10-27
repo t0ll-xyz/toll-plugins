@@ -16,7 +16,7 @@
   "keywords": ["elizaos", "elizaos-plugin", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsc -p tsconfig.readme.json && tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": { "@tollxyz/sdk": "^0.1.0" },

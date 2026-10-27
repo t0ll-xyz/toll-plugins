@@ -13,7 +13,8 @@ export function formatResult(r: TollResult): string {
 }
 
 const EVM = /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/;
-const BASE58 = /(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{32,44}(?![1-9A-HJ-NP-Za-km-z])/;
+// A Solana mint only as a whole word: start/end of text, whitespace or punctuation on both sides.
+const BASE58 = /(?<![^\s.,;:!?()[\]{}<>"'`*~|\/\-])[1-9A-HJ-NP-Za-km-z]{32,44}(?![^\s.,;:!?()[\]{}<>"'`*~|\/\-])/;
 
 /** First token address (0x + 40 hex, or Solana base58) in a message, with a chain when the text names one. */
 export function extractAddress(text: string): { address: string; chain?: "rh" | "sol" | "bsc" } | null {
