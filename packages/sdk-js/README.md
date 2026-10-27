@@ -1,4 +1,4 @@
-# @t0ll/sdk
+# @tollxyz/sdk
 
 Client for [Toll](https://t0ll.xyz/agents)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Zero runtime dependencies (global `fetch`, Node >= 18), ESM with types.
 
@@ -7,13 +7,13 @@ Information only, not financial advice.
 ## Install
 
 ```sh
-npm install @t0ll/sdk
+npm install @tollxyz/sdk
 ```
 
 ## Example
 
 ```ts
-import { Toll } from "@t0ll/sdk";
+import { Toll } from "@tollxyz/sdk";
 
 const toll = new Toll();
 const check = await toll.checkCoin("0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", { chain: "rh" });

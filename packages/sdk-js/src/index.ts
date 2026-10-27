@@ -1,5 +1,5 @@
 /**
- * @t0ll/sdk - client for Toll's remote MCP server (https://t0ll.xyz/mcp).
+ * @tollxyz/sdk - client for Toll's remote MCP server (https://t0ll.xyz/mcp).
  * Information only, not financial advice.
  */
 

@@ -1,5 +1,5 @@
 {
-  "name": "@t0ll/sdk",
+  "name": "@tollxyz/sdk",
   "version": "0.1.0",
   "description": "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Zero runtime dependencies.",
   "license": "MIT",

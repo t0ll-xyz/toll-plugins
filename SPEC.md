@@ -25,7 +25,7 @@ Robinhood Chain, eip155:4663, Priors facilitator; JSON answer; charged only for 
 
 ## Packages (monorepo C:\Users\soliman\toll-plugins, npm workspaces, MIT, author "Toll")
 
-1. `packages/sdk-js` -> npm `@t0ll/sdk`. Zero runtime deps (global fetch, Node >= 18). ESM + types (tsc).
+1. `packages/sdk-js` -> npm `@tollxyz/sdk`. Zero runtime deps (global fetch, Node >= 18). ESM + types (tsc).
    `new Toll({ baseUrl?, fetch?, payFetch?, timeoutMs? })`. Methods: `checkCoin`, `larpCheck`, `devRecord`, `launchRecord`,
    `walletPrivacy`, `freshLaunches`, `chainPulse`, `tools()`, `call(name, args)`. Each returns
    `{ text: string, paidUrl: string | null, pending: { retryAfterS: number } | null }`.
@@ -35,15 +35,15 @@ Robinhood Chain, eip155:4663, Priors facilitator; JSON answer; charged only for 
    returns the JSON. Input validation: 0x + 40 hex or base58 32-44 chars; never send anything else.
 2. `packages/sdk-py` -> PyPI `toll-sdk` (import `toll`). Stdlib only (urllib), Python >= 3.9, same API in snake_case,
    `pay(url, session)` takes any callable that does an x402 GET. pytest tests.
-3. `packages/plugin-elizaos` -> npm `@t0ll/plugin-elizaos`. Current elizaOS plugin shape (read docs.elizaos.ai/plugins/development
+3. `packages/plugin-elizaos` -> npm `@tollxyz/plugin-elizaos`. Current elizaOS plugin shape (read docs.elizaos.ai/plugins/development
    and an official plugin in github.com/elizaOS before writing): actions TOLL_CHECK_COIN, TOLL_LARP_CHECK, TOLL_DEV_RECORD
    (validate: message holds an address; handler: sdk call, callback with the text), a provider that adds nothing unless
-   an address is in the message. Uses `@t0ll/sdk`.
-4. `packages/agentkit` -> npm `@t0ll/agentkit`. Coinbase AgentKit `ActionProvider` subclass, `@CreateAction` per tool with
+   an address is in the message. Uses `@tollxyz/sdk`.
+4. `packages/agentkit` -> npm `@tollxyz/agentkit`. Coinbase AgentKit `ActionProvider` subclass, `@CreateAction` per tool with
    zod schemas, `supportsNetwork` true (reads are chain-agnostic). Read the current coinbase/agentkit source for the exact
    base class / decorator / export names before writing.
-5. `packages/ai-sdk` -> npm `@t0ll/ai-sdk`. Vercel AI SDK `tool()` objects (`tollTools(opts)` returns a record), zod inputs.
-6. `packages/goat` -> npm `@t0ll/goat-plugin`. GOAT SDK plugin (repo goat-sdk/goat, last push 2026-07: low priority, keep tiny).
+5. `packages/ai-sdk` -> npm `@tollxyz/ai-sdk`. Vercel AI SDK `tool()` objects (`tollTools(opts)` returns a record), zod inputs.
+6. `packages/goat` -> npm `@tollxyz/goat-plugin`. GOAT SDK plugin (repo goat-sdk/goat, last push 2026-07: low priority, keep tiny).
 7. `examples/guarded-agent`: a plain TS script "an agent that won't buy until Toll's check passes": takes a token, runs
    checkCoin + larpCheck, prints the decision rule outcome (e.g. refuses when the tally has "against" findings or the
    product is "not found"), and a stub `buy()` that never sends a transaction. README with how to run.
