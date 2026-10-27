@@ -7,13 +7,13 @@ Information only, not financial advice.
 ## Install
 
 ```sh
-pip install toll-sdk
+pip install toll-sdk        # import name: toll_sdk
 ```
 
 ## Example
 
 ```python
-from toll import Toll
+from toll_sdk import Toll
 
 toll = Toll()
 check = toll.check_coin("0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", chain="rh")
@@ -51,7 +51,7 @@ The whole call has its own timeout (`pay_timeout`, default 300 s). If it times o
 ### The `sign` contract
 
 ```python
-from toll import PaymentRequirements, Toll
+from toll_sdk import PaymentRequirements, Toll
 
 def sign(req: PaymentRequirements, url: str) -> str:
     # req.x402_version: 2 when the 402 had a PAYMENT-REQUIRED header, else 1
