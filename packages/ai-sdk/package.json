@@ -1,26 +1,59 @@
 {
   "name": "@tollxyz/ai-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vercel AI SDK tools: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "README.md"],
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/ai-sdk" },
-  "homepage": "https://t0ll.xyz/agents",
-  "keywords": ["ai-sdk", "vercel", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/ai-sdk"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "ai-sdk",
+    "vercel",
+    "robinhood-chain",
+    "solana",
+    "bsc",
+    "x402",
+    "mcp",
+    "ai-agent",
+    "rug-check",
+    "larp",
+    "toll"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": { "@tollxyz/sdk": "^0.1.0" },
-  "peerDependencies": { "ai": ">=6 <8", "zod": "^3.25.76 || ^4.1.8" },
+  "dependencies": {
+    "@tollxyz/sdk": "^0.1.1"
+  },
+  "peerDependencies": {
+    "ai": ">=6 <8",
+    "zod": "^3.25.76 || ^4.1.8"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "ai": "^7.0.154",

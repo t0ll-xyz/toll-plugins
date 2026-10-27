@@ -1,19 +1,45 @@
 {
   "name": "@tollxyz/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "README.md"],
-  "engines": { "node": ">=20.19" },
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/sdk-js" },
-  "homepage": "https://t0ll.xyz/agents",
-  "keywords": ["robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/sdk-js"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "robinhood-chain",
+    "solana",
+    "bsc",
+    "x402",
+    "mcp",
+    "ai-agent",
+    "rug-check",
+    "larp",
+    "toll"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "tsx --test tests/*.test.ts",

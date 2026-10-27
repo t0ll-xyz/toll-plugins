@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toll-sdk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Standard library only."
 readme = "README.md"
 license = "MIT"
@@ -26,7 +26,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://t0ll.xyz/agents"
+Homepage = "https://t0ll.xyz/agents/plugins"
 Documentation = "https://t0ll.xyz/llms.txt"
 Repository = "https://github.com/t0ll-xyz/toll-plugins"
 

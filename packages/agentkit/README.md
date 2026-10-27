@@ -1,6 +1,6 @@
 # @tollxyz/agentkit
 
-A [Coinbase AgentKit](https://github.com/coinbase/agentkit) action provider for [Toll](https://t0ll.xyz/agents). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
+A [Coinbase AgentKit](https://github.com/coinbase/agentkit) action provider for [Toll](https://t0ll.xyz/agents/plugins). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
 
 Actions: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, `launch_record`, `fresh_launches`, `chain_pulse`. AgentKit prefixes the names with the class, e.g. `TollActionProvider_check_coin`. `supportsNetwork` is true for every network: Toll reads public chain data, whatever chain the agent's wallet is on.
 
@@ -29,4 +29,4 @@ const agentKit = await AgentKit.from({ walletProvider, actionProviders: [tollAct
 
 Note: AgentKit's own `@CreateAction` decorator sends AgentKit's usage analytics on each action call; that is AgentKit's behaviour, not Toll's.
 
-Links: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.
+Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.

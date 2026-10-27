@@ -1,6 +1,6 @@
 # guarded-agent
 
-A pattern for agent builders: an agent that will not buy until [Toll](https://t0ll.xyz/agents)'s check passes. Information only, not financial advice. This is an example of how to wire a check into an agent, not a recommendation to buy or not buy anything. `buy()` is a stub that prints a line and never signs or sends a transaction.
+A pattern for agent builders: an agent that will not buy until [Toll](https://t0ll.xyz/agents/plugins)'s check passes. Information only, not financial advice. This is an example of how to wire a check into an agent, not a recommendation to buy or not buy anything. `buy()` is a stub that prints a line and never signs or sends a transaction.
 
 ## Run
 
@@ -27,4 +27,4 @@ Change the rule to fit your own risk. The tally is parsed from Toll's text, with
 
 10 new coins a day per caller are free (coins already read stay free). Past that, Toll's answer ends with the x402 URL for that coin (0.05 USDG on Robinhood Chain), or hold 1M $TOLL. The script prints that URL; paying it from code is in the [`@tollxyz/sdk`](../../packages/sdk-js) README (`pay()`).
 
-Links: <https://t0ll.xyz/agents>, <https://t0ll.xyz/llms.txt>. MIT.
+Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>. MIT.

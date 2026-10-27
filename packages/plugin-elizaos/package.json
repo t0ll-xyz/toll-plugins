@@ -1,26 +1,59 @@
 {
   "name": "@tollxyz/plugin-elizaos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "elizaOS plugin: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist", "README.md"],
-  "engines": { "node": ">=20.19" },
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "git+https://github.com/t0ll-xyz/toll-plugins.git", "directory": "packages/plugin-elizaos" },
-  "homepage": "https://t0ll.xyz/agents",
-  "keywords": ["elizaos", "elizaos-plugin", "robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/plugin-elizaos"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "elizaos",
+    "elizaos-plugin",
+    "robinhood-chain",
+    "solana",
+    "bsc",
+    "x402",
+    "mcp",
+    "ai-agent",
+    "rug-check",
+    "larp",
+    "toll",
+    "eliza"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.readme.json && tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "dependencies": { "@tollxyz/sdk": "^0.1.0" },
-  "peerDependencies": { "@elizaos/core": "^1.6.0" },
+  "dependencies": {
+    "@tollxyz/sdk": "^0.1.1"
+  },
+  "peerDependencies": {
+    "@elizaos/core": "^1.6.0"
+  },
   "devDependencies": {
     "@elizaos/core": "^1.7.2",
     "@types/node": "^22.0.0",
