@@ -1,9 +1,9 @@
 /**
- * @t0ll/plugin-elizaos - Toll coin checks for elizaOS agents.
+ * @tollxyz/plugin-elizaos - Toll coin checks for elizaOS agents.
  * Information only, not financial advice.
  */
 import type { Action, HandlerCallback, IAgentRuntime, Memory, Plugin, Provider, State } from "@elizaos/core";
-import { Toll, TollError, type TollResult } from "@t0ll/sdk";
+import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { extractAddress, extractWallet, formatResult } from "./format.js";
 
 export { extractAddress, extractWallet, formatResult } from "./format.js";

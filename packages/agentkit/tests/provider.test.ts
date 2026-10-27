@@ -2,7 +2,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Toll } from "@t0ll/sdk";
+import { Toll } from "@tollxyz/sdk";
 import { TollActionProvider, tollActionProvider } from "../src/index.js";
 
 // AgentKit's decorator fires its own analytics fetch on every call; keep unit tests offline.

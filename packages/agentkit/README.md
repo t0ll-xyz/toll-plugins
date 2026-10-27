@@ -1,4 +1,4 @@
-# @t0ll/agentkit
+# @tollxyz/agentkit
 
 A [Coinbase AgentKit](https://github.com/coinbase/agentkit) action provider for [Toll](https://t0ll.xyz/agents). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
 
@@ -7,7 +7,7 @@ Actions: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, 
 ## Install
 
 ```sh
-npm install @t0ll/agentkit @coinbase/agentkit zod@3
+npm install @tollxyz/agentkit @coinbase/agentkit zod@3
 ```
 
 `@coinbase/agentkit` (>= 0.10) and `zod` 3 are peer dependencies. Built and tested against `@coinbase/agentkit` 0.10.4.
@@ -16,12 +16,12 @@ npm install @t0ll/agentkit @coinbase/agentkit zod@3
 
 ```ts
 import { AgentKit } from "@coinbase/agentkit";
-import { tollActionProvider } from "@t0ll/agentkit";
+import { tollActionProvider } from "@tollxyz/agentkit";
 
 const agentKit = await AgentKit.from({ walletProvider, actionProviders: [tollActionProvider()] });
 ```
 
-Pass your own client for an x402-aware `payFetch`: `tollActionProvider(new Toll({ payFetch }))` (`Toll` from `@t0ll/sdk`).
+Pass your own client for an x402-aware `payFetch`: `tollActionProvider(new Toll({ payFetch }))` (`Toll` from `@tollxyz/sdk`).
 
 ## Free limit and the paid path
 

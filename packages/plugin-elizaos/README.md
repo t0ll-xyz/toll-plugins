@@ -1,4 +1,4 @@
-# @t0ll/plugin-elizaos
+# @tollxyz/plugin-elizaos
 
 An [elizaOS](https://docs.elizaos.ai) plugin for [Toll](https://t0ll.xyz/agents). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
 
@@ -7,7 +7,7 @@ Actions: `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK` (Robinhood Chain and Solana), `TOL
 ## Install
 
 ```sh
-npm install @t0ll/plugin-elizaos
+npm install @tollxyz/plugin-elizaos
 ```
 
 `@elizaos/core` (>= 1.6) is a peer dependency. Built and typed against `@elizaos/core` 1.7.2.
@@ -15,19 +15,19 @@ npm install @t0ll/plugin-elizaos
 ## Example
 
 ```ts
-import { tollPlugin } from "@t0ll/plugin-elizaos";
+import { tollPlugin } from "@tollxyz/plugin-elizaos";
 
 export const character = {
   name: "Trader",
-  plugins: [tollPlugin],   // or: plugins: ["@t0ll/plugin-elizaos"]
+  plugins: [tollPlugin],   // or: plugins: ["@tollxyz/plugin-elizaos"]
 };
 ```
 
 Custom client (your own `fetch`, or an x402-aware `payFetch`):
 
 ```ts
-import { Toll } from "@t0ll/sdk";
-import { createTollPlugin } from "@t0ll/plugin-elizaos";
+import { Toll } from "@tollxyz/sdk";
+import { createTollPlugin } from "@tollxyz/plugin-elizaos";
 
 const plugin = createTollPlugin({ client: new Toll({ payFetch }) });
 ```

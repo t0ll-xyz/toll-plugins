@@ -1,4 +1,4 @@
-import type { TollResult } from "@t0ll/sdk";
+import type { TollResult } from "@tollxyz/sdk";
 
 /** Toll's text, plus one line when the free coins are used up or the read is still running. */
 export function formatResult(r: TollResult): string {

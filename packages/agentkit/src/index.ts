@@ -1,9 +1,9 @@
 /**
- * @t0ll/agentkit - Toll coin checks as a Coinbase AgentKit action provider.
+ * @tollxyz/agentkit - Toll coin checks as a Coinbase AgentKit action provider.
  * Information only, not financial advice.
  */
 import { ActionProvider, CreateAction, type Network } from "@coinbase/agentkit";
-import { Toll, TollError, type TollResult } from "@t0ll/sdk";
+import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod";
 import { formatResult } from "./format.js";
 
