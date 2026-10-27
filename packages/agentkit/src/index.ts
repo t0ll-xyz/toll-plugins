@@ -8,6 +8,8 @@ import { z } from "zod";
 import { formatResult } from "./format.js";
 
 export { formatResult } from "./format.js";
+export { Toll, TollError } from "@tollxyz/sdk";
+export type { TollResult } from "@tollxyz/sdk";
 
 const address = z.string().describe("Token contract address: 0x + 40 hex on Robinhood Chain or BSC, or a Solana base58 mint.");
 const wallet = z.string().describe("Wallet address: 0x + 40 hex.");

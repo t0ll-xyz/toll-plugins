@@ -2,8 +2,9 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Toll } from "@tollxyz/sdk";
+import { Toll, TollError } from "@tollxyz/sdk";
 import { TollActionProvider, tollActionProvider } from "../src/index.js";
+import * as Reexported from "../src/index.js";
 
 // AgentKit's decorator fires its own analytics fetch on every call; keep unit tests offline.
 before(() => {
@@ -94,4 +95,9 @@ test("errors come back as text, not a throw", async () => {
 test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async () => {
   const out = await getAction(new TollActionProvider(), "chain_pulse").invoke({});
   assert.ok(out.length > 0);
+});
+
+test("re-exports Toll and TollError from @tollxyz/sdk", () => {
+  assert.equal(Reexported.Toll, Toll);
+  assert.equal(Reexported.TollError, TollError);
 });

@@ -2,15 +2,17 @@
  * @tollxyz/ai-sdk - Toll coin checks as Vercel AI SDK tools.
  * Information only, not financial advice.
  */
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod/v4";
 import { formatResult } from "./format.js";
 
 export { formatResult } from "./format.js";
+export { Toll, TollError } from "@tollxyz/sdk";
+export type { TollResult } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
-  /** A ready Toll client (custom fetch, payFetch). Default: new Toll(). */
+  /** A ready Toll client (for example with a custom fetch). Default: new Toll(). */
   client?: Toll;
   /** Which tools to return. Default: all six. */
   only?: TollToolName[];
@@ -32,7 +34,7 @@ const address = z.string().describe("Token contract address: 0x + 40 hex on Robi
  * Returns a record of AI SDK tools to pass as `tools` to generateText / streamText.
  * Each tool returns Toll's text; the model decides what it means.
  */
-export function tollTools(opts: TollToolsOptions = {}) {
+export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolName, Tool>> {
   const toll = opts.client ?? new Toll();
   const all = {
     check_coin: tool({
@@ -80,7 +82,7 @@ export function tollTools(opts: TollToolsOptions = {}) {
     }),
   };
   if (!opts.only) return all;
-  const picked: Partial<typeof all> = {};
-  for (const n of opts.only) (picked as Record<string, unknown>)[n] = all[n];
-  return picked as typeof all;
+  const picked: Partial<Record<TollToolName, Tool>> = {};
+  for (const n of opts.only) picked[n] = all[n];
+  return picked;
 }
