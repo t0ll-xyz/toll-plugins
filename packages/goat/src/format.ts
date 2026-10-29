@@ -4,7 +4,7 @@ import type { TollResult } from "@tollxyz/sdk";
 export function formatResult(r: TollResult): string {
   let out = r.text.trim();
   if (r.paidUrl) {
-    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402, 0.05 USDG on Robinhood Chain) or hold 1M $TOLL.`;
+    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402: 0.05 USDG on Robinhood Chain or USDC on Base). Holding $TOLL does not lift this limit.`;
   }
   if (r.pending) {
     const note = `Part of the answer is still being read: ask again in ${r.pending.retryAfterS} seconds.`;

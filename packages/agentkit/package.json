@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/agentkit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Coinbase AgentKit action provider: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
   "author": "Toll",
