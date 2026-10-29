@@ -27,6 +27,6 @@ const agentKit = await AgentKit.from({ walletProvider, actionProviders: [tollAct
 
 10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the provider tells the agent it can pay per check there (0.05 USDG on Robinhood Chain) or hold 1M $TOLL. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
 
-Note: AgentKit's own `@CreateAction` decorator sends AgentKit's usage analytics on each action call; that is AgentKit's behaviour, not Toll's.
+Note: AgentKit's own `@CreateAction` decorator sends AgentKit's usage analytics on each action call; that is AgentKit's behaviour, not Toll's. In AgentKit 0.10.4 that call is not awaited: if the analytics endpoint answers with an error (we saw HTTP 400 on every call, 2026-10-29) the rejection is unhandled and Node exits. Until AgentKit catches it, add `process.on("unhandledRejection", (e) => console.warn(e))` or similar in your app.
 
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.

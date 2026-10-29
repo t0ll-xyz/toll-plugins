@@ -10,7 +10,7 @@ Actions: `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK` (Robinhood Chain and Solana; for a
 npm install @tollxyz/plugin-elizaos
 ```
 
-`@elizaos/core` (^1.6.0) is a peer dependency. ESM only, Node >= 20.19. Built and typed against `@elizaos/core` 1.7.2.
+`@elizaos/core` (^1.6.0) is a peer dependency. ESM only, Node >= 20.19. Built and typed against `@elizaos/core` 1.7.2. Type-check with `"moduleResolution": "bundler"` (as elizaOS projects do): under `nodenext`, `@elizaos/core` 1.7.2's own type files resolve to nothing and `Character`/`Project` show as missing.
 
 ## Example
 
