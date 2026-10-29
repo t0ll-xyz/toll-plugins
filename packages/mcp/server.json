@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.t0ll-xyz/toll",
+  "title": "Toll",
+  "description": "Safety checks for agents: who is behind a coin, real product or not, dev record, ERC-8004 agents.",
+  "websiteUrl": "https://t0ll.xyz/agents/mcp",
+  "repository": {
+    "url": "https://github.com/t0ll-xyz/toll-plugins",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@tollxyz/mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "TOLL_BASE_URL",
+          "description": "Toll's base URL (default https://t0ll.xyz)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    { "type": "streamable-http", "url": "https://t0ll.xyz/mcp" }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "name": "@tollxyz/mcp",
+  "mcpName": "io.github.t0ll-xyz/toll",
+  "version": "0.1.0",
+  "description": "Local stdio MCP server for Toll: before an agent buys a coin or trusts an agent, check who is behind it (Robinhood Chain, Solana, BSC, Arc). Proxies t0ll.xyz/mcp. Free tier, read-only, no key. Information only.",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "toll-mcp": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "server.json"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "robinhood-chain",
+    "solana",
+    "bsc",
+    "erc-8004",
+    "ai-agent",
+    "rug-check",
+    "larp",
+    "toll"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && tsx --test tests/*.test.ts",
+    "snapshot": "node scripts/snapshot.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tollxyz/sdk": "^0.1.1",
+    "zod": "^3.25.76 || ^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
