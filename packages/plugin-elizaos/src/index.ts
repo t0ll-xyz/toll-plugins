@@ -35,6 +35,10 @@ function makeAction(
     validate: async (_rt: IAgentRuntime, message: Memory) => spec.canRun(textOf(message)),
     handler: async (_rt: IAgentRuntime, message: Memory, _state?: State, _options?: unknown, callback?: HandlerCallback) => {
       try {
+        // The runtime can pick an action without validate (for example "check 0x1234"): say what is missing.
+        if (!spec.canRun(textOf(message))) {
+          throw new TollError(`No valid address in the message for ${spec.name}: send the full 0x address (40 hex characters) or Solana mint.`);
+        }
         const text = formatResult(await spec.run(client, textOf(message)));
         await callback?.({ text, actions: [spec.name], source: message.content?.source });
         return { success: true, text, data: { actionName: spec.name } };
