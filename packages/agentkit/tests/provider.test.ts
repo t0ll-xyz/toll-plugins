@@ -63,7 +63,7 @@ test("check_coin invokes the server tool", async () => {
 test("over quota appends the pay line", async () => {
   const { p } = provider([fx("check_coin_over")]);
   const out = await getAction(p, "check_coin").invoke({ address: TOKEN });
-  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402, 0\.05 USDG on Robinhood Chain\) or hold 1M \$TOLL/s);
+  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base\)\. Holding \$TOLL does not lift this limit/s);
 });
 
 test("larp_check waits while Toll is still reading", async () => {
