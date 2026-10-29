@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/plugin-elizaos",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "elizaOS plugin: before an agent buys a coin, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
   "author": "Toll",
