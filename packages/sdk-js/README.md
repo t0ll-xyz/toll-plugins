@@ -22,6 +22,8 @@ const larp = await toll.larpCheck("0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", 
 console.log(larp.text);                        // product found / partly found / not found / not read
 ```
 
+Run it as an ES module (an `.mjs`/`.mts` file, or `"type": "module"` in package.json; `npm init -y` writes `"type": "commonjs"`, where top-level `await` fails).
+
 Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` or null) means part of the answer is still being read: ask again after that many seconds. `paidUrl` is set when the free coins are used up (see below).
 
 ## API
