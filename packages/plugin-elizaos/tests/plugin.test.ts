@@ -127,6 +127,22 @@ test("pending text gives seconds", () => {
   assert.match(t, /ask again in 20 seconds/);
 });
 
+test("pending note goes above the closing t0ll.xyz link", () => {
+  const link = `Full report: https://t0ll.xyz/check/${TOKEN}?utm_source=mcp`;
+  const t = formatResult({ text: `Facts\nStill reading the holders.\n\n${link}`, paidUrl: null, pending: { retryAfterS: 20 } });
+  assert.equal(t.split("\n").pop(), link);
+  assert.match(t, /ask again in 20 seconds\.\n\nFull report/);
+});
+
+test("handler without an address says so and sends nothing", async () => {
+  const { toll, bodies } = client([]);
+  const p = createTollPlugin({ client: toll });
+  const res = await act(p, "TOLL_CHECK_COIN").handler({}, msg("check 0x1234 please"));
+  assert.equal(res.success, false);
+  assert.match(res.text, /No valid address/);
+  assert.equal(bodies.length, 0);
+});
+
 test("dev record calls dev_record", async () => {
   const { toll, bodies } = client([JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "Dev record" }] } })]);
   const p = createTollPlugin({ client: toll });
