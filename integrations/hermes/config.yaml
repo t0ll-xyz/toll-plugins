@@ -1,0 +1,14 @@
+# Toll for the Nous Research Hermes agent: merge into ~/.hermes/config.yaml, then run /reload-mcp.
+# Tools arrive as mcp_toll_check_coin, mcp_toll_larp_check, mcp_toll_check_agent, ...
+# Free, read-only, no key. Information only, not financial advice.
+mcp_servers:
+  toll:
+    url: "https://t0ll.xyz/mcp"
+    tools:
+      prompts: false
+      resources: false
+
+  # Or the same tools over stdio (use one of the two):
+  # toll:
+  #   command: "npx"
+  #   args: ["-y", "@tollxyz/mcp"]
