@@ -1,0 +1,69 @@
+{
+  "name": "@tollxyz/guard",
+  "version": "0.1.0",
+  "description": "Toll's live pre-sign check in front of an AI agent's wallet: viem, ethers and x402 fetch wrappers that ask Toll (ALLOW / WARN / BLOCK, ERC-8265) before anything is signed on Robinhood Chain. Zero runtime dependencies.",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/guard"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "agent-wallet",
+    "transaction-guard",
+    "pre-sign",
+    "x402",
+    "erc-8004",
+    "erc-8470",
+    "erc-8265",
+    "robinhood-chain",
+    "viem",
+    "ethers",
+    "ai-agent",
+    "toll"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json --noEmit && tsx --test tests/*.test.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "ethers": "^6.0.0",
+    "viem": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ethers": {
+      "optional": true
+    },
+    "viem": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
