@@ -28,7 +28,8 @@ Before it settles, it checks the payTo against the seller's ERC-8004 identity
 ([ERC-8478](https://github.com/ethereum/ERCs/pull/2132)), and every settlement comes back with a Toll-signed EIP-712
 receipt (who paid whom, how much, which transaction, what the payee check said).
 
-Point your x402 server at the facilitator URL and name USDG and its signing domain explicitly (most x402 libraries have
+The quickest way is [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
+With another x402 library, point your server at the facilitator URL and name USDG and its signing domain explicitly (most x402 libraries have
 no default for chain 4663):
 
 ```json
@@ -58,6 +59,7 @@ its payTo is bound to its identity.
 | [`@tollxyz/sdk`](packages/sdk-js) | TypeScript client, zero dependencies, `pay()` for the x402 paid path | `npm install @tollxyz/sdk` |
 | [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`) | `pip install toll-sdk` |
 | [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing | `npm install @tollxyz/guard` |
+| [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check and signed receipt | `npm install @tollxyz/x402-seller` |
 | [`@tollxyz/mcp`](packages/mcp) | Local stdio MCP server, Toll's tools 1:1 (bin `toll-mcp`) | `npx -y @tollxyz/mcp` |
 | [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |
 | [`@tollxyz/agentkit`](packages/agentkit) | Coinbase AgentKit action provider | `npm install @tollxyz/agentkit @coinbase/agentkit zod@3` |
