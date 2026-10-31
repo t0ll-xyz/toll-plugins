@@ -69,6 +69,23 @@ For a client that only starts local servers. It holds no key and never pays.
 {"mcpServers": {"toll": {"command": "npx", "args": ["-y", "@tollxyz/mcp"]}}}
 ```
 
+### Before you pay an x402 seller: ERC-8478 payee verification
+
+Send the 402's payment requirement to the pre-sign check (`check_tx` over MCP, or `POST /api/tx/check` with `{x402: <the PaymentRequired>, agentId?, registry?}`) and Toll checks that the payTo belongs to the seller's ERC-8004 identity: the registered agentWallet, or a payee delegation that wallet signed (EIP-712), on Robinhood Chain or Base registries. One of nine outcomes comes back (verified-wallet, verified-delegation, mismatch, invalid-delegation, endpoint-unlisted, owner-only, no-agent-wallet, no-identity, not-read); a mismatch or a broken delegation is BLOCK.
+
+### Guard your wallet: one line
+
+Every transaction, signature and x402 payment your agent makes goes through Toll's pre-sign check first (ALLOW / WARN / BLOCK with reasons: unlimited approvals, fake Robinhood stock tokens, a pool far from its Chainlink price, an x402 payTo that is not the seller's registered wallet, instructions hidden in token text). The checks run on Toll's side, so new ones reach you without an update.
+
+```
+npm install @tollxyz/guard
+```
+
+```
+import { guard } from "@tollxyz/guard";
+const wallet = guard(walletClient);   // viem WalletClient or ethers Signer: BLOCK throws, WARN is logged
+```
+
 ### Agent frameworks
 
 | Framework | Install | The line to add |
@@ -140,3 +157,13 @@ https://t0ll.xyz/agents/x402. The paid list: https://t0ll.xyz/.well-known/x402
 - The short index: https://t0ll.xyz/llms.txt
 
 Information only, not financial advice.
+
+## x402 facilitator (settle USDG on Robinhood Chain)
+
+Toll runs a keyless x402 facilitator: `https://t0ll.xyz/api/facilitator` (also `https://x402.t0ll.xyz`).
+- `POST /verify` and `POST /settle` take the x402 body (v1 or v2, scheme exact, USDG on eip155:4663) and answer the x402 shapes.
+- Every payment's payTo is checked against the seller's registered ERC-8004 identity (ERC-8478); the outcome is in `extensions.erc8478`. A mismatch is flagged, not blocked; an identity that could not be read never refuses a payment.
+- Every settlement carries a signed receipt in `extensions.receipt` (EIP-712 "Toll x402 Receipt"); `GET /receipt/<id or tx>` returns it.
+- `GET /supported` lists what it settles. Limits: 0.001 to 100 USDG a payment, EOA payers only. Page: https://t0ll.xyz/x402
+- Selling over x402? `npm i @tollxyz/x402-seller`: `paywall({ payTo, price: "0.05", agentId }, handler)` puts a USDG price on any Next.js, Hono, Bun or Workers handler, settled here, charged only for a good answer.
+- The x402 Register (https://x402.t0ll.xyz/#register) lists every Robinhood Chain agent selling over x402 and whether its payTo is its registered agent wallet.
