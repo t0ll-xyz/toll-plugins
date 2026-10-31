@@ -14,6 +14,9 @@ Sell over x402 on Robinhood Chain in one line. Buyers pay in USDG; the payment i
 npm i @tollxyz/x402-seller
 ```
 
+Or start from a ready Next.js app: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api`
+([templates/x402-starter](https://github.com/t0ll-xyz/toll-plugins/tree/main/templates/x402-starter)).
+
 ## Next.js (App Router)
 
 ```ts
