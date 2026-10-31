@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-10-29). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-10-31). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -232,6 +232,123 @@ export const SNAPSHOT_TOOLS: Tool[] = [
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "check_tx",
+    "title": "Check before signing",
+    "description": "Pre-sign check, before an agent signs anything on Robinhood Chain (chain id 4663): send the transaction (to, data, value, and from), an EIP-712 signature request (typedData: Permit, Permit2, TransferWithAuthorization) or an x402 payment (x402: the PaymentRequired from the 402, or one accepts entry; agentId optional), and Toll answers ALLOW / WARN / BLOCK with the reasons, as an ERC-8265 RiskAssessment. It reads approvals (unlimited, to a plain wallet, to a contract we do not know, to a wallet the coin's own check names), transfers (to a burn address, the token itself, a router, a flagged wallet, an unknown contract), swaps (the router, who it pays out to, and the coin bought, through Toll's coin check: BLOCK only for findings whose coins rugged at 40% or more in our calibration), and x402 payments (ERC-8478 payee verification: payTo against the seller's ERC-8004 agent wallet or a payee delegation it signed, read live from the Robinhood Chain or Base identity registry, with the outcome in x-toll; the seller's last delivery spot-check, the asset and amount). Calldata it cannot read is WARN, never ALLOW; a coin still being read is WARN with the seconds to wait. Robinhood Chain only. Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chainId": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "string",
+              "maxLength": 80
+            }
+          ],
+          "description": "The chain id: 4663 (Robinhood Chain), the only one read; leave it out for 4663"
+        },
+        "from": {
+          "type": "string",
+          "maxLength": 42,
+          "description": "The signer's address (0x + 40 hex): a swap paying out to anyone else is flagged"
+        },
+        "to": {
+          "type": "string",
+          "maxLength": 42,
+          "description": "The transaction's to: the contract or wallet it is sent to (0x + 40 hex)"
+        },
+        "data": {
+          "type": "string",
+          "maxLength": 40000,
+          "description": "The calldata, hex (0x for a plain send)"
+        },
+        "value": {
+          "$ref": "#/properties/chainId",
+          "description": "Wei sent with it, decimal or 0x hex (default 0)"
+        },
+        "typedData": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "An EIP-712 signature request: {domain, types, primaryType, message}"
+        },
+        "x402": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "An x402 payment: the PaymentRequired the 402 sent (with accepts), or one accepts entry; optional payment (the signed payload) and resource (the URL)"
+        },
+        "agentId": {
+          "$ref": "#/properties/chainId",
+          "description": "The x402 seller's ERC-8004 agent id, when known"
+        },
+        "registry": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "The identity registry agentId is in, CAIP-10 (default eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432, Robinhood Chain; Base: eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Check before signing",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "presign_risk_report",
+    "title": "Pre-sign risk report",
+    "description": "Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): send a PresignRequest {version: \"erc-presign/1\", subject: {type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x...\", calls: [{to, value, data}], typedData?}, context?: {payment?, texts?, tokens?}} and get a PresignReport: typed facts about the unsigned request on Robinhood Chain, each read or not read at one pinned block (approval amount, unlimited, share of supply, expiry, current allowance; address code; issuer listing of stock tokens; ERC-8470 launch observations; ERC-8478 payee binding; control characters, mixed scripts and addresses in text), bound to the request by digest and EIP-712 signed by Toll (ERC-8004 agent #20030). No verdict: apply your own policy, and treat not read as unknown, never as clean. For an ALLOW / WARN / BLOCK answer use check_tx (which carries this report too).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "erc-presign/1",
+          "description": "Always \"erc-presign/1\""
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "{type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x<signer>\", calls: [{to, value (wei, decimal string), data}], typedData?}"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Optional: {payment: {requirements (the x402 accepts entry chosen), resource?, payee?: {registry, agentId}}, texts: [{field, ref?, text}], tokens: [CAIP-10]}"
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "maxItems": 40,
+          "description": "Optional: only these finding kinds"
+        }
+      },
+      "required": [
+        "version",
+        "subject"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Pre-sign risk report",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
       "openWorldHint": true
     }
   }

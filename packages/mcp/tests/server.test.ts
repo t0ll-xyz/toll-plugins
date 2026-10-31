@@ -37,7 +37,7 @@ test("tools/list is Toll's live list, 1:1", async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((t) => t.name), TOOLS.map((t: any) => t.name));
   assert.deepEqual(tools.find((t) => t.name === "check_coin")!.inputSchema, TOOLS[0].inputSchema);
-  assert.equal(tools.length, 8);
+  assert.equal(tools.length, 10);
   await close();
 });
 
