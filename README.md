@@ -28,7 +28,8 @@ Before it settles, it checks the payTo against the seller's ERC-8004 identity
 ([ERC-8478](https://github.com/ethereum/ERCs/pull/2132)), and every settlement comes back with a Toll-signed EIP-712
 receipt (who paid whom, how much, which transaction, what the payee check said).
 
-The quickest way is [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
+Start from the template: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api` ([templates/x402-starter](templates/x402-starter), a Next.js API with one paid route).
+Or add [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
 With another x402 library, point your server at the facilitator URL and name USDG and its signing domain explicitly (most x402 libraries have
 no default for chain 4663):
 
