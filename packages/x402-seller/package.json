@@ -1,0 +1,56 @@
+{
+  "name": "@tollxyz/x402-seller",
+  "version": "0.1.0",
+  "description": "Sell over x402 on Robinhood Chain in one line: a paywall for any Web-standard handler (Next.js, Hono, Bun, Workers) that takes USDG through Toll's keyless facilitator (x402.t0ll.xyz), with ERC-8478 payee verification and a signed receipt for every payment. Zero runtime dependencies.",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/x402-seller"
+  },
+  "homepage": "https://x402.t0ll.xyz",
+  "keywords": [
+    "x402",
+    "x402-facilitator",
+    "paywall",
+    "usdg",
+    "erc-8004",
+    "erc-8478",
+    "robinhood-chain",
+    "ai-agent",
+    "agent-payments",
+    "nextjs",
+    "hono",
+    "toll"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json --noEmit && tsx --test tests/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
