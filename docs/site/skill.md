@@ -165,5 +165,5 @@ Toll runs a keyless x402 facilitator: `https://t0ll.xyz/api/facilitator` (also `
 - Every payment's payTo is checked against the seller's registered ERC-8004 identity (ERC-8478); the outcome is in `extensions.erc8478`. A mismatch is flagged, not blocked; an identity that could not be read never refuses a payment.
 - Every settlement carries a signed receipt in `extensions.receipt` (EIP-712 "Toll x402 Receipt"); `GET /receipt/<id or tx>` returns it.
 - `GET /supported` lists what it settles. Limits: 0.001 to 100 USDG a payment, EOA payers only. Page: https://t0ll.xyz/x402
-- Selling over x402? `npm i @tollxyz/x402-seller`: `paywall({ payTo, price: "0.05", agentId }, handler)` puts a USDG price on any Next.js, Hono, Bun or Workers handler, settled here, charged only for a good answer.
+- Selling over x402? `npm i @tollxyz/x402-seller`: `paywall({ payTo, price: "0.05", agentId }, handler)` puts a USDG price on any Next.js, Hono, Bun or Workers handler, settled here, charged only for a good answer. A ready Next.js API to start from: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api`.
 - The x402 Register (https://x402.t0ll.xyz/#register) lists every Robinhood Chain agent selling over x402 and whether its payTo is its registered agent wallet.
