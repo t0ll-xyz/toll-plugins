@@ -21,6 +21,36 @@ what an ERC-8004 agent's registration and payment terms say, read from the chain
 | Hermes agent | `mcp_servers: { toll: { url: "https://t0ll.xyz/mcp" } }` in `~/.hermes/config.yaml`, plus `hermes skills install https://t0ll.xyz/skill.md` |
 | Any agent that reads skills | <https://t0ll.xyz/skill.md> ([source](docs/site/skill.md)) |
 
+## Sell over x402: the Toll facilitator
+
+Toll runs an x402 facilitator for USDG on Robinhood Chain at **<https://x402.t0ll.xyz>**: keyless, free, no account.
+Before it settles, it checks the payTo against the seller's ERC-8004 identity
+([ERC-8478](https://github.com/ethereum/ERCs/pull/2132)), and every settlement comes back with a Toll-signed EIP-712
+receipt (who paid whom, how much, which transaction, what the payee check said).
+
+Point your x402 server at the facilitator URL and name USDG and its signing domain explicitly (most x402 libraries have
+no default for chain 4663):
+
+```json
+{
+  "scheme": "exact",
+  "network": "eip155:4663",
+  "asset": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+  "amount": "50000",
+  "payTo": "0xYourAgentWallet",
+  "maxTimeoutSeconds": 300,
+  "extra": {
+    "name": "Global Dollar",
+    "version": "1",
+    "erc8004": { "registry": "eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432", "agentId": "<your agent id>" }
+  }
+}
+```
+
+Endpoints: `/verify`, `/settle`, `/supported`, `/stats`, `/receipt/<id or tx>`. The
+[x402 Register](https://x402.t0ll.xyz/#register) lists every agent on Robinhood Chain that sells over x402 and whether
+its payTo is bound to its identity.
+
 ## Packages
 
 | Package | What | Install |
