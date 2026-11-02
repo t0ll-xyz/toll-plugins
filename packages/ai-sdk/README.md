@@ -2,7 +2,7 @@
 
 [Vercel AI SDK](https://ai-sdk.dev) tools for [Toll](https://t0ll.xyz/agents/plugins). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
 
-Tools: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, `launch_record`, `fresh_launches`, `chain_pulse`, and for Robinhood Stock Tokens `stock_token` and `stock_tokens`.
+Tools: `check_coin`, `larp_check` (Robinhood Chain and Solana), `dev_record`, `launch_record`, `fresh_launches`, `chain_pulse`, for Robinhood Stock Tokens `stock_token` and `stock_tokens`, and for the companies behind them and US macro `fundamentals`, `insider_trades` and `macro`.
 
 ## Install
 
@@ -33,6 +33,12 @@ const { text } = await generateText({
 
 Facts with their sources, not advice. Robinhood Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares.
 
+## Company facts and US macro (Toll Markets)
+
+`fundamentals` takes `id` (a Stock Token's ticker or contract, as above) and an optional `period` (`ttm`, `annual` or `quarterly`), and returns the JSON of <https://t0ll.xyz/api/markets/fundamentals/NVDA>: the company's revenue, margins, earnings, balance sheet, growth, shares outstanding and valuation from its SEC filings, every figure with its filing and link. `insider_trades` takes `id` and an optional `limit` (1 to 100) and returns the JSON of <https://t0ll.xyz/api/markets/insiders/NVDA>: SEC Form 4 rows (who, role, transaction code, shares, price, owned after, the filing link), 90-day totals and 13D/13G holders. `macro` takes nothing and returns the JSON of <https://t0ll.xyz/api/markets/macro>: the US Treasury daily par yield curve, the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. Each JSON is returned unchanged.
+
+Facts with their sources, not advice. The EFFR is subject to the Terms of Use posted at newyorkfed.org; Toll is not affiliated with the New York Fed.
+
 ## Free limit and the paid path
 
 10 new coins a day per caller are free (coins already read stay free). Past that, the tool's answer ends with the x402 URL for that coin and tells the agent it can pay per check there (0.05 USDG on Robinhood Chain or USDC on Base), with the owner's consent; the tool never pays. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
@@ -42,8 +48,8 @@ Holding $TOLL lifts the daily limits. Make a Toll key at <https://t0ll.xyz/toll#
 | Per UTC day | Free | 1M $TOLL | 5M $TOLL | 20M $TOLL |
 | --- | --- | --- | --- | --- |
 | New coins (check_coin, larp_check) | 10 | 100 | 500 | 2,000 |
-| Markets calls (stock_token, stock_tokens) | 50 | 1,000 | 5,000 | 20,000 |
+| Markets calls (stock_token, stock_tokens, fundamentals, insider_trades, macro) | 50 | 1,000 | 5,000 | 20,000 |
 
-Past that, x402 per call: 0.05 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base). Over the Markets count, `stock_token` answers with the paid URL for that token and the tiers instead of the JSON.
+Past that, x402 per call: 0.05 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base); 0.01 USDG on Robinhood Chain for fundamentals (`https://t0ll.xyz/api/x402/markets/fundamentals/{id}`), insider trades (`https://t0ll.xyz/api/x402/markets/insiders/{id}`), macro (`https://t0ll.xyz/api/x402/markets/macro`), the Stock Token list (`https://t0ll.xyz/api/x402/markets/stocks`) and the chain pulse (`https://t0ll.xyz/api/x402/pulse`). Over the Markets count, each Markets tool answers with the paid URL for that call and the tiers instead of the JSON; nothing here pays.
 
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.

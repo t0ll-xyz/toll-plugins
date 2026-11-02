@@ -5,10 +5,38 @@
 import type { Action, HandlerCallback, IAgentRuntime, Memory, Plugin, Provider, State } from "@elizaos/core";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { extractAddress, extractStockId, extractWallet, formatResult } from "./format.js";
-import { MARKETS_NOTE, stockToken, stockTokens, withTollKey, type FetchLike, type MarketsOptions } from "./markets.js";
+import {
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  fundamentals,
+  insiderTrades,
+  macro,
+  stockToken,
+  stockTokens,
+  withTollKey,
+  type FetchLike,
+  type FundamentalsPeriod,
+  type MarketsOptions,
+} from "./markets.js";
 
 export { extractAddress, extractStockId, extractWallet, formatResult } from "./format.js";
-export { MARKETS_NOTE, LIMITS_NOTE, paidStockUrl, stockToken, stockTokens, type MarketsOptions } from "./markets.js";
+export {
+  FACTS_NOTE,
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  LIMITS_NOTE,
+  FUNDAMENTALS_PERIODS,
+  paidStockUrl,
+  paidMarketsUrl,
+  stockToken,
+  stockTokens,
+  fundamentals,
+  insiderTrades,
+  macro,
+  type FundamentalsPeriod,
+  type MarketsOptions,
+  type PaidMarketsKind,
+} from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
@@ -51,6 +79,22 @@ function contextResolver(client: Toll | undefined, opts: Omit<TollPluginOptions,
     }
     return { client: c, markets: { fetch: fetchFn, tollKey: key } };
   };
+}
+
+/** Words that ask for a company's fundamentals. */
+const FUNDAMENTALS_WORDS = /\b(fundamentals?|financials?|revenue|sales|earnings|eps|profits?|margins?|income statement|balance sheet|valuation|p\/?e|price[ -]to[ -]earnings)(?![A-Za-z])/i;
+/** Words that ask for insider trades. */
+const INSIDER_WORDS = /\b(insiders?|form\s*4)\b/i;
+/** Words that ask for US macro. */
+const MACRO_WORDS =
+  /\b(macro|interest rates?|rates|inflation|cpi|yield curve|yields|treasur(?:y|ies)|fed funds|federal funds|effr|jobs|payrolls|nonfarm|unemployment)\b/i;
+
+/** The period a fundamentals question names, if any. */
+export function periodOf(text: string): FundamentalsPeriod | undefined {
+  if (/\b(quarter(?:ly|s)?|10-?q)\b/i.test(text)) return "quarterly";
+  if (/\b(annual(?:ly)?|yearly|fiscal years?|10-?k)\b/i.test(text)) return "annual";
+  if (/\b(ttm|trailing)\b/i.test(text)) return "ttm";
+  return undefined;
 }
 
 const textOf = (m: Memory): string => (typeof m?.content?.text === "string" ? m.content.text : "");
@@ -170,6 +214,40 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       example: ["list the Robinhood stock tokens", "Here are the Stock Tokens Toll reads on Robinhood Chain, with their sources."],
       missing: "TOLL_STOCK_TOKENS runs when the message asks for stock tokens.",
     }),
+    makeAction(resolve, {
+      name: "TOLL_FUNDAMENTALS",
+      similes: ["FUNDAMENTALS", "COMPANY_FINANCIALS", "SEC_FINANCIALS", "EARNINGS"],
+      description: `A company's fundamentals from its SEC filings, by the ticker or contract of its Robinhood Stock Token: revenue, margins, earnings, balance sheet, growth, shares outstanding and valuation, every figure with its filing and link. Needs a word like fundamentals, financials, revenue, earnings or P/E and a ticker (NVDA, $NVDA) or 0x contract in the message; "quarterly", "annual" or "ttm" picks the period. Answers with Toll's JSON. ${MARKETS_NOTE}`,
+      canRun: (t) => FUNDAMENTALS_WORDS.test(t) && extractStockId(t) !== null,
+      run: ({ markets }, t) => {
+        const period = periodOf(t);
+        return fundamentals({ id: extractStockId(t)!, ...(period ? { period } : {}) }, markets);
+      },
+      example: ["what are NVDA's fundamentals?", "Here are NVIDIA's figures from its SEC filings, each with its filing."],
+      missing: "No company in the message for TOLL_FUNDAMENTALS: name the ticker (NVDA or $NVDA) or the Stock Token's 0x contract, with a word like fundamentals or revenue.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_INSIDER_TRADES",
+      similes: ["INSIDER_TRADES", "INSIDER_TRADING", "FORM_4", "INSIDERS"],
+      description: `Insider trades from SEC Form 4 filings for the company behind a Robinhood Stock Token: who traded, their role, the transaction code, shares, price and shares owned after, each with its filing link, plus 90-day totals and 13D/13G holders. Needs the word insider or Form 4 and a ticker (NVDA, $NVDA) or 0x contract in the message; "last 10" sets how many rows (1 to 100). Answers with Toll's JSON. ${MARKETS_NOTE}`,
+      canRun: (t) => INSIDER_WORDS.test(t) && extractStockId(t) !== null,
+      run: ({ markets }, t) => {
+        const n = /\b(?:top|first|last|latest|limit)\s+(\d{1,3})\b/i.exec(t)?.[1];
+        const limit = n ? Math.min(100, Math.max(1, Number(n))) : undefined;
+        return insiderTrades({ id: extractStockId(t)!, ...(limit ? { limit } : {}) }, markets);
+      },
+      example: ["any insider trades at $NVDA lately?", "Here are the Form 4 filings Toll read for NVIDIA, each with its link."],
+      missing: "No company in the message for TOLL_INSIDER_TRADES: name the ticker (NVDA or $NVDA) or the Stock Token's 0x contract, with the word insider or Form 4.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_MACRO",
+      similes: ["MACRO", "US_MACRO", "INTEREST_RATES", "YIELD_CURVE", "INFLATION"],
+      description: `US macro facts: the Treasury daily par yield curve (latest day and 30 days), the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. Runs when the message asks about macro, rates, inflation, the yield curve or jobs. Answers with Toll's JSON. ${MACRO_NOTE}`,
+      canRun: (t) => MACRO_WORDS.test(t),
+      run: ({ markets }) => macro(markets),
+      example: ["where are US rates and inflation right now?", "Here are the latest Treasury yields, the EFFR and BLS figures, each with its date and source."],
+      missing: "TOLL_MACRO runs when the message asks about macro, rates, inflation, the yield curve or jobs.",
+    }),
   ];
 }
 
@@ -195,7 +273,7 @@ export function createTollPlugin(opts: TollPluginOptions = {}): Plugin {
   return {
     name: "toll",
     description:
-      "Toll coin checks for Robinhood Chain, Solana and BSC: who is behind a coin, the dev's record, whether there is a real product; and Robinhood Stock Token facts with their sources. Information only, not advice.",
+      "Toll coin checks for Robinhood Chain, Solana and BSC: who is behind a coin, the dev's record, whether there is a real product; and Robinhood Stock Token facts, the companies' SEC fundamentals and insider trades, and US macro, with their sources. Information only, not advice.",
     actions: createTollActions(client, rest),
     providers: [createTollProvider()],
   };

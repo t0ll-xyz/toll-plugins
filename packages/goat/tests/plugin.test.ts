@@ -25,10 +25,10 @@ async function setup(responses: string[]) {
   return { plugin, tools, get, bodies };
 }
 
-test("five tools with sharp descriptions and any-chain support", async () => {
+test("eight tools with sharp descriptions and any-chain support", async () => {
   const { plugin, tools } = await setup([]);
   assert.equal(plugin.name, "toll");
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["check_coin", "dev_record", "larp_check", "stock_token", "stock_tokens"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["check_coin", "dev_record", "fundamentals", "insider_trades", "larp_check", "macro", "stock_token", "stock_tokens"]);
   assert.equal(plugin.supportsChain({ type: "evm", id: 8453, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }), true);
   assert.equal(plugin.supportsChain({ type: "solana", nativeCurrency: { name: "Sol", symbol: "SOL", decimals: 9 } }), true);
   const c = tools.find((t) => t.name === "check_coin")!;

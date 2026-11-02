@@ -38,8 +38,9 @@ The same tools run locally over stdio with `npx -y @tollxyz/mcp`.
 Tools: `check_coin` (address, chain?: rh | sol | bsc | arc), `larp_check` (token, chain?: rh | sol), `dev_record`
 (wallet, chain?: rh | arc | bsc), `check_agent` (id), `launch_record` (address), `wallet_privacy` (wallet),
 `fresh_launches` (limit?), `chain_pulse`, and for Robinhood Stock Tokens `stock_token` (id: ticker or contract) and
-`stock_tokens` (query?, limit?). Facts with their sources, not advice. Robinhood Stock Tokens are debt securities
-issued by Robinhood Assets (Jersey) Ltd, not shares.
+`stock_tokens` (query?, limit?), for the companies behind them `fundamentals` (id, period?: ttm | annual | quarterly)
+and `insider_trades` (id, limit? 1 to 100), and `macro` (US yields, the EFFR, CPI, jobs). Facts with their sources, not
+advice. Robinhood Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares. The EFFR is subject to the Terms of Use posted at newyorkfed.org; Toll is not affiliated with the New York Fed.
 
 Without MCP, the same reads are free JSON over GET:
 
@@ -63,9 +64,10 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
 ## Free limit
 
 10 new coins a day per caller are free; coins already read stay free; `check_agent` uses no coin. Markets calls
-(Stock Tokens) have their own count: 50 a day free. Holding $TOLL lifts both: new coins a day 1M $TOLL 100 / 5M 500 /
+(Stock Tokens, fundamentals, insider trades, macro) have their own count: 50 a day free. Holding $TOLL lifts both: new coins a day 1M $TOLL 100 / 5M 500 /
 20M 2,000, Markets calls 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys sent as `x-toll-pass`
-or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.05 USDG a check, 0.02 USDG a stock, on
-Robinhood Chain). Pay it only with the owner's consent.
+or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.05 USDG a check, 0.02 USDG a stock, and
+0.01 USDG for fundamentals, insider trades, macro, the Stock Token list or the chain pulse, on Robinhood Chain). Pay it
+only with the owner's consent.
 
 More: https://t0ll.xyz/skill.md, https://t0ll.xyz/agents/plugins. Information only, not financial advice.

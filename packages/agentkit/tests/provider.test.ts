@@ -28,11 +28,11 @@ function provider(responses: string[]) {
 const ok = (text: string) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
 const getAction = (p: TollActionProvider, suffix: string) => p.getActions({} as any).find((a) => a.name.endsWith(suffix))!;
 
-test("declares eight actions with prefixed names and schemas", () => {
+test("declares eleven actions with prefixed names and schemas", () => {
   const actions = new TollActionProvider().getActions({} as any);
   assert.deepEqual(
     actions.map((a) => a.name).sort(),
-    ["chain_pulse", "check_coin", "dev_record", "fresh_launches", "larp_check", "launch_record", "stock_token", "stock_tokens"].map((n) => `TollActionProvider_${n}`).sort(),
+    ["chain_pulse", "check_coin", "dev_record", "fresh_launches", "larp_check", "launch_record", "stock_token", "stock_tokens", "fundamentals", "insider_trades", "macro"].map((n) => `TollActionProvider_${n}`).sort(),
   );
   for (const a of actions) assert.ok(a.description.length > 30 && a.schema);
 });

@@ -145,6 +145,11 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
   Robinhood Stock Tokens on Robinhood Chain (Toll Markets): Robinhood's listing, Chainlink's reference price, the
   deepest pool's price and liquidity, supply, corporate actions and the company's SEC facts. Facts with their sources,
   not advice. Robinhood Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares.
+- `fundamentals` (id, period?: ttm | annual | quarterly) and `insider_trades` (id, limit? 1 to 100): the company behind
+  a Stock Token, from SEC filings: revenue, margins, earnings, balance sheet, growth and valuation; Form 4 insider trades
+  with each filing's link, totals and 13D/13G holders. Facts with their sources, not advice.
+- `macro`: the US Treasury yield curve, the New York Fed's effective federal funds rate, and BLS CPI, unemployment and
+  payrolls, each with its date and source. The EFFR is subject to the Terms of Use posted at newyorkfed.org; Toll is not affiliated with the New York Fed.
 
 ## 6. Free limit and the paid path
 
@@ -154,13 +159,16 @@ charged only for a whole answer (https://t0ll.xyz/api/x402/check/{token}?chain=r
 https://t0ll.xyz/api/x402/larp/{token}?chain=rh|sol). Pay it only with your owner's consent. How to pay:
 https://t0ll.xyz/agents/x402. The paid list: https://t0ll.xyz/.well-known/x402
 
-Markets calls (`stock_token`, `stock_tokens`) have their own daily count: 50 free. Past it, one Stock Token is 0.02
-USDG over x402 at https://t0ll.xyz/api/x402/stock/{id}.
+Markets calls (`stock_token`, `stock_tokens`, `fundamentals`, `insider_trades`, `macro`) have their own daily count:
+50 free. Past it, over x402 on Robinhood Chain: one Stock Token is 0.02 USDG at https://t0ll.xyz/api/x402/stock/{id};
+0.01 USDG each for https://t0ll.xyz/api/x402/markets/fundamentals/{id}, https://t0ll.xyz/api/x402/markets/insiders/{id},
+https://t0ll.xyz/api/x402/markets/macro, https://t0ll.xyz/api/x402/markets/stocks (the list) and
+https://t0ll.xyz/api/x402/pulse (the chain pulse).
 
 Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls
 50 / 1,000 / 5,000 / 20,000. Your owner makes a Toll key at https://t0ll.xyz/toll#keys; send it as `x-toll-pass` or
 `Authorization: Bearer` (for example as a header on the remote MCP server). Past the tier, x402 per call: 0.05 USDG a
-check, 0.02 USDG a stock.
+check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, macro, the list or the pulse.
 
 ## More
 

@@ -22,9 +22,9 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("eight tools, sharp descriptions, no arc, no verdict words", () => {
+test("eleven tools, sharp descriptions, no arc, no verdict words", () => {
   const { tools } = setup([]);
-  assert.deepEqual(Object.keys(tools), ["check_coin", "larp_check", "dev_record", "launch_record", "fresh_launches", "chain_pulse", "stock_token", "stock_tokens"]);
+  assert.deepEqual(Object.keys(tools), ["check_coin", "larp_check", "dev_record", "launch_record", "fresh_launches", "chain_pulse", "stock_token", "stock_tokens", "fundamentals", "insider_trades", "macro"]);
   assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it/);
   assert.match(String(tools.larp_check!.description), /^Is there a real product behind this coin\?/);
   for (const t of Object.values(tools)) assert.ok(!/\b(scam|rug|safe)\b/i.test(String(t!.description)));

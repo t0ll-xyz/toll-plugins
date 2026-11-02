@@ -38,7 +38,9 @@ for (const [path, want] of Object.entries(files)) {
   assert.match(body, /facts, not advice/i, `${path}: facts not advice`);
   assert.match(body, /Never buy, pay[\s\S]{0,40}without (your|the) owner's consent/, `${path}: owner's consent`);
   assert.match(body, /never says a coin is safe|Never call a coin safe/i, `${path}: never safe`);
-  for (const [, name] of body.matchAll(/`(?:mcp_toll_)?([a-z]+_[a-z_]+)`/g)) {
+  // `mcp_toll_<tool>` (Hermes names, one-word tools such as macro too) or a bare `<word>_<word>` tool name.
+  for (const [, prefixed, bare] of body.matchAll(/`(?:mcp_toll_([a-z_]+)|([a-z]+_[a-z_]+))`/g)) {
+    const name = prefixed ?? bare;
     assert.ok(tools.includes(name), `${path}: unknown tool ${name}`);
   }
   for (const t of ["check_coin", "larp_check", "dev_record", "check_agent"]) assert.ok(body.includes(t), `${path}: mentions ${t}`);
