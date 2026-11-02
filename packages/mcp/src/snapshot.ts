@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-10-31). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-02). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -346,6 +346,64 @@ export const SNAPSHOT_TOOLS: Tool[] = [
     },
     "annotations": {
       "title": "Pre-sign risk report",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "stock_token",
+    "title": "Stock token",
+    "description": "One Robinhood Stock Token (a tokenized security: debt issued by Robinhood Assets (Jersey) Ltd, not a share) on Robinhood Chain, by its ticker (NVDA, AAPL) or its token contract: Robinhood's listing (company, contract, shares per token and any announced change), Chainlink's reference price read on chain with its age and the US session (stale only past the feed's heartbeat while a session is open), the price in the token's deepest pool priced from the chain and its venue (Uniswap v3 or v4) with its liquidity, the difference vs the reference in percent, supply in shares, whether its oracle is paused, Robinhood's corporate actions (dividends, splits), and the company from SEC EDGAR (CIK, industry, exchange, latest 10-K / 10-Q / 8-K with links). Every number with its source and time; anything not read says so. Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract on Robinhood Chain (0x + 40 hex)"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Stock token",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "stock_tokens",
+    "title": "Stock tokens",
+    "description": "The Stock Tokens Robinhood lists on Robinhood Chain (about 200): ticker, issuer's name, contract, Chainlink's reference price (or no feed) and its status, with how many have a feed, how many have SEC filings and how many corporate actions fall this month. Pass query (a ticker or part of a company name) to filter, limit for how many. For one token in full use stock_token.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Only tokens whose ticker or company contains this (NVDA, nvidia)"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 250,
+          "description": "How many tokens, 1 to 250 (default 25)"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Stock tokens",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": false,

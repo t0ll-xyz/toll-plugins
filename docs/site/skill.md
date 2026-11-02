@@ -141,6 +141,10 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
 - `chain_pulse`: launches, graduations and trades on Robinhood Chain right now.
 - `wallet_privacy` (wallet): what anyone can learn about a wallet. The grade measures exposure, not whether the wallet
   is good or bad.
+- `stock_token` (id: a ticker such as NVDA, or the token's contract) and `stock_tokens` (query?, limit? 1 to 250):
+  Robinhood Stock Tokens on Robinhood Chain (Toll Markets): Robinhood's listing, Chainlink's reference price, the
+  deepest pool's price and liquidity, supply, corporate actions and the company's SEC facts. Facts with their sources,
+  not advice. Robinhood Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares.
 
 ## 6. Free limit and the paid path
 
@@ -149,6 +153,14 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
 charged only for a whole answer (https://t0ll.xyz/api/x402/check/{token}?chain=rh|sol|bsc|arc and
 https://t0ll.xyz/api/x402/larp/{token}?chain=rh|sol). Pay it only with your owner's consent. How to pay:
 https://t0ll.xyz/agents/x402. The paid list: https://t0ll.xyz/.well-known/x402
+
+Markets calls (`stock_token`, `stock_tokens`) have their own daily count: 50 free. Past it, one Stock Token is 0.02
+USDG over x402 at https://t0ll.xyz/api/x402/stock/{id}.
+
+Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls
+50 / 1,000 / 5,000 / 20,000. Your owner makes a Toll key at https://t0ll.xyz/toll#keys; send it as `x-toll-pass` or
+`Authorization: Bearer` (for example as a header on the remote MCP server). Past the tier, x402 per call: 0.05 USDG a
+check, 0.02 USDG a stock.
 
 ## More
 
