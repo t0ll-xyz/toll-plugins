@@ -45,7 +45,11 @@ export function extractWallet(text: string): { wallet: string; chain?: "bsc" } |
 }
 
 // Capitalised words that are not tickers when they stand alone in a message.
-const NOT_TICKERS = new Set(["I", "A", "RH", "US", "USA", "USD", "USDG", "USDC", "ETH", "SEC", "ETF", "CEO", "API", "OK", "NYSE", "UTC", "AI", "IPO", "TOLL", "LARP", "BSC", "SOL", "NFT", "DM", "PM", "AM"]);
+const NOT_TICKERS = new Set([
+  "I", "A", "RH", "US", "USA", "USD", "USDG", "USDC", "ETH", "SEC", "ETF", "CEO", "API", "OK", "NYSE", "UTC", "AI", "IPO", "TOLL", "LARP", "BSC", "SOL", "NFT", "DM", "PM", "AM",
+  // Words a fundamentals, insider or macro question carries.
+  "P", "E", "PE", "EPS", "TTM", "YOY", "QOQ", "FY", "CFO", "COO", "CTO", "EVP", "SVP", "CPI", "GDP", "FED", "FOMC", "EFFR", "BLS",
+]);
 const CASHTAG = /(?<![A-Za-z0-9])\$([A-Za-z][A-Za-z0-9.\-]{0,11})(?![A-Za-z0-9])/;
 const CAPS = /(?<![A-Za-z0-9$.])([A-Z]{1,5}(?:\.[A-Z])?)(?![A-Za-z0-9])/g;
 

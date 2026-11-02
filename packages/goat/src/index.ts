@@ -6,10 +6,26 @@ import { PluginBase, Tool, createToolParameters, type Chain } from "@goat-sdk/co
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod";
 import { formatResult } from "./format.js";
-import { MARKETS_NOTE, stockToken, stockTokens, withTollKey, type FetchLike, type MarketsOptions } from "./markets.js";
+import { MACRO_NOTE, MARKETS_NOTE, fundamentals, insiderTrades, macro, stockToken, stockTokens, withTollKey, type FetchLike, type MarketsOptions } from "./markets.js";
 
 export { formatResult } from "./format.js";
-export { MARKETS_NOTE, LIMITS_NOTE, paidStockUrl, stockToken, stockTokens, type MarketsOptions } from "./markets.js";
+export {
+  FACTS_NOTE,
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  LIMITS_NOTE,
+  FUNDAMENTALS_PERIODS,
+  paidStockUrl,
+  paidMarketsUrl,
+  stockToken,
+  stockTokens,
+  fundamentals,
+  insiderTrades,
+  macro,
+  type FundamentalsPeriod,
+  type MarketsOptions,
+  type PaidMarketsKind,
+} from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
@@ -45,6 +61,19 @@ export class StockTokensParams extends createToolParameters(
     limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
   }),
 ) {}
+export class FundamentalsParams extends createToolParameters(
+  z.object({
+    id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+    period: z.enum(["ttm", "annual", "quarterly"]).optional().describe("Optional period: ttm = trailing twelve months, annual = fiscal years, quarterly = quarters."),
+  }),
+) {}
+export class InsiderTradesParams extends createToolParameters(
+  z.object({
+    id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+    limit: z.number().int().min(1).max(100).optional().describe("How many Form 4 rows, 1 to 100, newest first."),
+  }),
+) {}
+export class MacroParams extends createToolParameters(z.object({})) {}
 
 export interface TollPluginOptions {
   /** A ready Toll client for the coin tools (its own fetch). Default: a client that sends tollKey. */
@@ -110,6 +139,30 @@ export class TollService {
   })
   async stockTokens(parameters: StockTokensParams): Promise<string> {
     return stockTokens({ query: parameters.query, limit: parameters.limit }, this.markets);
+  }
+
+  @Tool({
+    name: "fundamentals",
+    description: `A company's fundamentals from its SEC filings, by the ticker or contract of its Robinhood Stock Token: revenue, margins, earnings, balance sheet, growth, shares outstanding and valuation at the reference price, every figure with its filing and link. ${MARKETS_NOTE}`,
+  })
+  async fundamentals(parameters: FundamentalsParams): Promise<string> {
+    return fundamentals({ id: parameters.id, period: parameters.period }, this.markets);
+  }
+
+  @Tool({
+    name: "insider_trades",
+    description: `Insider trades from SEC Form 4 filings for the company behind a Robinhood Stock Token: who traded, their role, the transaction code, shares, price and shares owned after, each with its filing link, plus 90-day totals and 13D/13G holders. ${MARKETS_NOTE}`,
+  })
+  async insiderTrades(parameters: InsiderTradesParams): Promise<string> {
+    return insiderTrades({ id: parameters.id, limit: parameters.limit }, this.markets);
+  }
+
+  @Tool({
+    name: "macro",
+    description: `US macro facts: the Treasury daily par yield curve (latest day and 30 days), the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. ${MACRO_NOTE}`,
+  })
+  async macro(_parameters: MacroParams): Promise<string> {
+    return macro(this.markets);
   }
 }
 

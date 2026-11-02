@@ -6,10 +6,26 @@ import { tool, type Tool } from "ai";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod/v4";
 import { formatResult } from "./format.js";
-import { MARKETS_NOTE, stockToken, stockTokens, withTollKey, type FetchLike } from "./markets.js";
+import { MACRO_NOTE, MARKETS_NOTE, fundamentals, insiderTrades, macro, stockToken, stockTokens, withTollKey, type FetchLike } from "./markets.js";
 
 export { formatResult } from "./format.js";
-export { MARKETS_NOTE, LIMITS_NOTE, paidStockUrl, stockToken, stockTokens, type MarketsOptions } from "./markets.js";
+export {
+  FACTS_NOTE,
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  LIMITS_NOTE,
+  FUNDAMENTALS_PERIODS,
+  paidStockUrl,
+  paidMarketsUrl,
+  stockToken,
+  stockTokens,
+  fundamentals,
+  insiderTrades,
+  macro,
+  type FundamentalsPeriod,
+  type MarketsOptions,
+  type PaidMarketsKind,
+} from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
@@ -20,7 +36,7 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all eight. */
+  /** Which tools to return. Default: all eleven. */
   only?: TollToolName[];
 }
 
@@ -32,7 +48,10 @@ export type TollToolName =
   | "fresh_launches"
   | "chain_pulse"
   | "stock_token"
-  | "stock_tokens";
+  | "stock_tokens"
+  | "fundamentals"
+  | "insider_trades"
+  | "macro";
 
 async function run(fn: () => Promise<TollResult>): Promise<string> {
   try {
@@ -110,6 +129,27 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
         limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
       }),
       execute: async ({ query, limit }) => stockTokens({ query, limit }, markets),
+    }),
+    fundamentals: tool({
+      description: `A company's fundamentals from its SEC filings, by the ticker or contract of its Robinhood Stock Token: revenue, margins, earnings, balance sheet, growth, shares outstanding and valuation at the reference price, every figure with its filing and link. ${MARKETS_NOTE}`,
+      inputSchema: z.object({
+        id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+        period: z.enum(["ttm", "annual", "quarterly"]).optional().describe("Optional period: ttm = trailing twelve months, annual = fiscal years, quarterly = quarters."),
+      }),
+      execute: async ({ id, period }) => fundamentals({ id, period }, markets),
+    }),
+    insider_trades: tool({
+      description: `Insider trades from SEC Form 4 filings for the company behind a Robinhood Stock Token: who traded, their role, the transaction code, shares, price and shares owned after, each with its filing link, plus 90-day totals and 13D/13G holders. ${MARKETS_NOTE}`,
+      inputSchema: z.object({
+        id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+        limit: z.number().int().min(1).max(100).optional().describe("How many Form 4 rows, 1 to 100, newest first."),
+      }),
+      execute: async ({ id, limit }) => insiderTrades({ id, limit }, markets),
+    }),
+    macro: tool({
+      description: `US macro facts: the Treasury daily par yield curve (latest day and 30 days), the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. ${MACRO_NOTE}`,
+      inputSchema: z.object({}),
+      execute: async () => macro(markets),
     }),
   };
   if (!opts.only) return all;

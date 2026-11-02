@@ -78,10 +78,11 @@ Example: [`examples/guarded-agent`](examples/guarded-agent), an agent that will 
 (its `buy()` is a stub that never sends a transaction).
 
 The npm packages are ESM only. Free: 10 new coins a day per caller (coins already read stay free) and 50 Markets
-calls (Robinhood Stock Tokens). Holding $TOLL lifts both: 1M $TOLL 100 coins / 1,000 Markets calls, 5M 500 / 5,000,
+calls (Robinhood Stock Tokens, fundamentals, insider trades, macro). Holding $TOLL lifts both: 1M $TOLL 100 coins / 1,000 Markets calls, 5M 500 / 5,000,
 20M 2,000 / 20,000, with a Toll key from <https://t0ll.xyz/toll#keys> sent as `x-toll-pass` (the `tollKey` option in
 `@tollxyz/agentkit`, `@tollxyz/ai-sdk`, `@tollxyz/goat-plugin` and `@tollxyz/plugin-elizaos`). Past that, x402 per
-call: 0.05 USDG a coin check, 0.02 USDG a Stock Token, on Robinhood Chain.
+call: 0.05 USDG a coin check, 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, macro, the Stock Token
+list or the chain pulse, on Robinhood Chain.
 Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 ## Develop

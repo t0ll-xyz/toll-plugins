@@ -24,7 +24,7 @@ const act = (p: any, name: string) => p.actions.find((a: any) => a.name === name
 
 test("plugin shape", () => {
   assert.equal(tollPlugin.name, "toll");
-  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), ["TOLL_CHECK_COIN", "TOLL_LARP_CHECK", "TOLL_DEV_RECORD", "TOLL_STOCK_TOKEN", "TOLL_STOCK_TOKENS"]);
+  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), ["TOLL_CHECK_COIN", "TOLL_LARP_CHECK", "TOLL_DEV_RECORD", "TOLL_STOCK_TOKEN", "TOLL_STOCK_TOKENS", "TOLL_FUNDAMENTALS", "TOLL_INSIDER_TRADES", "TOLL_MACRO"]);
   assert.equal(tollPlugin.providers!.length, 1);
   for (const a of tollPlugin.actions!) {
     assert.ok(a.description.length > 40);
