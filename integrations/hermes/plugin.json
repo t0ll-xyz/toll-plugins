@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "toll",
+  "version": "0.1.0",
+  "description": "Read-only safety checks before an agent buys a coin, signs a transaction or pays an agent: who is behind a coin, the dev's record, LP pull risk, LARP check, pre-sign check, ERC-8004 agent check, and Robinhood Stock Token market data. Robinhood Chain, Solana, BSC and Arc.",
+  "author": {
+    "name": "Toll",
+    "url": "https://t0ll.xyz"
+  },
+  "homepage": "https://t0ll.xyz/agents/mcp",
+  "repository": "https://github.com/t0ll-xyz/toll-plugins",
+  "license": "MIT",
+  "keywords": ["toll", "crypto", "safety", "rug-check", "pre-sign", "robinhood-chain", "solana", "bsc", "erc-8004", "x402", "stock-tokens", "mcp"],
+  "extensions": {
+    "com.nousresearch.hermes": {
+      "servers": {
+        "toll": { "trust": "untrusted" }
+      }
+    }
+  }
+}
