@@ -6,19 +6,33 @@ import { tool, type Tool } from "ai";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod/v4";
 import { formatResult } from "./format.js";
+import { MARKETS_NOTE, stockToken, stockTokens, withTollKey, type FetchLike } from "./markets.js";
 
 export { formatResult } from "./format.js";
+export { MARKETS_NOTE, LIMITS_NOTE, paidStockUrl, stockToken, stockTokens, type MarketsOptions } from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
-  /** A ready Toll client (for example with a custom fetch). Default: new Toll(). */
+  /** A ready Toll client for the coin tools (for example with a custom fetch). Default: a client that sends tollKey. */
   client?: Toll;
-  /** Which tools to return. Default: all six. */
+  /** A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every t0ll.xyz call: carries the key wallet's daily tier. */
+  tollKey?: string;
+  /** fetch for t0ll.xyz calls. Default: global fetch. */
+  fetch?: FetchLike;
+  /** Which tools to return. Default: all eight. */
   only?: TollToolName[];
 }
 
-export type TollToolName = "check_coin" | "larp_check" | "dev_record" | "launch_record" | "fresh_launches" | "chain_pulse";
+export type TollToolName =
+  | "check_coin"
+  | "larp_check"
+  | "dev_record"
+  | "launch_record"
+  | "fresh_launches"
+  | "chain_pulse"
+  | "stock_token"
+  | "stock_tokens";
 
 async function run(fn: () => Promise<TollResult>): Promise<string> {
   try {
@@ -35,7 +49,9 @@ const address = z.string().describe("Token contract address: 0x + 40 hex on Robi
  * Each tool returns Toll's text; the model decides what it means.
  */
 export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolName, Tool>> {
-  const toll = opts.client ?? new Toll();
+  const fetchFn: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  const toll = opts.client ?? new Toll({ fetch: withTollKey(fetchFn, opts.tollKey) });
+  const markets = { fetch: fetchFn, tollKey: opts.tollKey };
   const all = {
     check_coin: tool({
       description:
@@ -79,6 +95,21 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: "How busy Robinhood Chain is right now: launches, graduations and trades.",
       inputSchema: z.object({}),
       execute: async () => run(() => toll.chainPulse()),
+    }),
+    stock_token: tool({
+      description: `One Robinhood Stock Token on Robinhood Chain by ticker or contract: Chainlink's reference price with the US session, the deepest pool's price and liquidity, supply, the multiplier, corporate actions and the company's SEC facts, each with its source and time. ${MARKETS_NOTE}`,
+      inputSchema: z.object({
+        id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+      }),
+      execute: async ({ id }) => stockToken(id, markets),
+    }),
+    stock_tokens: tool({
+      description: `The Robinhood Stock Tokens on Robinhood Chain: ticker, name, contract, multiplier and Chainlink reference price, optionally filtered by a query. ${MARKETS_NOTE}`,
+      inputSchema: z.object({
+        query: z.string().optional().describe("Optional: part of a ticker or company name to filter by (for example nvid)."),
+        limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
+      }),
+      execute: async ({ query, limit }) => stockTokens({ query, limit }, markets),
     }),
   };
   if (!opts.only) return all;

@@ -6,8 +6,10 @@ import { ActionProvider, CreateAction, type Network } from "@coinbase/agentkit";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod";
 import { formatResult } from "./format.js";
+import { MARKETS_NOTE, stockToken, stockTokens, withTollKey, type FetchLike } from "./markets.js";
 
 export { formatResult } from "./format.js";
+export { MARKETS_NOTE, LIMITS_NOTE, paidStockUrl, stockToken, stockTokens, type MarketsOptions } from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
@@ -29,6 +31,22 @@ export const DevRecordSchema = z.object({
 export const LaunchRecordSchema = z.object({ address: z.string().describe("Token contract address on Robinhood Chain (0x + 40 hex).") });
 export const FreshLaunchesSchema = z.object({ limit: z.number().int().min(1).max(20).optional().describe("How many coins, 1 to 20.") });
 export const ChainPulseSchema = z.object({});
+export const StockTokenSchema = z.object({
+  id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
+});
+export const StockTokensSchema = z.object({
+  query: z.string().optional().describe("Optional: part of a ticker or company name to filter by (for example nvid)."),
+  limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
+});
+
+export interface TollActionProviderOptions {
+  /** A ready Toll client for the MCP actions (its own fetch). Default: a client that sends tollKey. */
+  client?: Toll;
+  /** A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every t0ll.xyz call: carries the key wallet's daily tier. */
+  tollKey?: string;
+  /** fetch for t0ll.xyz calls. Default: global fetch. */
+  fetch?: FetchLike;
+}
 
 async function run(fn: () => Promise<TollResult>): Promise<string> {
   try {
@@ -44,10 +62,16 @@ async function run(fn: () => Promise<TollResult>): Promise<string> {
  */
 export class TollActionProvider extends ActionProvider {
   private readonly client: Toll;
+  private readonly fetchFn: FetchLike;
+  private readonly tollKey?: string;
 
-  constructor(client: Toll = new Toll()) {
+  /** Takes a Toll client (as before) or options with a tollKey. */
+  constructor(clientOrOptions: Toll | TollActionProviderOptions = {}) {
     super("toll", []);
-    this.client = client;
+    const o: TollActionProviderOptions = clientOrOptions instanceof Toll ? { client: clientOrOptions } : clientOrOptions;
+    this.tollKey = o.tollKey;
+    this.fetchFn = o.fetch ?? ((input, init) => globalThis.fetch(input, init));
+    this.client = o.client ?? new Toll({ fetch: withTollKey(this.fetchFn, o.tollKey) });
   }
 
   @CreateAction({
@@ -108,10 +132,29 @@ export class TollActionProvider extends ActionProvider {
     return run(() => this.client.chainPulse());
   }
 
+  @CreateAction({
+    name: "stock_token",
+    description: `One Robinhood Stock Token on Robinhood Chain by ticker or contract: Chainlink's reference price with the US session, the deepest pool's price and liquidity, supply, the multiplier, corporate actions and the company's SEC facts, each with its source and time. ${MARKETS_NOTE}`,
+    schema: StockTokenSchema,
+  })
+  async stockToken(args: z.infer<typeof StockTokenSchema>): Promise<string> {
+    return stockToken(args.id, { fetch: this.fetchFn, tollKey: this.tollKey });
+  }
+
+  @CreateAction({
+    name: "stock_tokens",
+    description: `The Robinhood Stock Tokens on Robinhood Chain: ticker, name, contract, multiplier and Chainlink reference price, optionally filtered by a query. ${MARKETS_NOTE}`,
+    schema: StockTokensSchema,
+  })
+  async stockTokens(args: z.infer<typeof StockTokensSchema>): Promise<string> {
+    return stockTokens({ query: args.query, limit: args.limit }, { fetch: this.fetchFn, tollKey: this.tollKey });
+  }
+
   /** Toll reads public chain data, so it works whatever network the agent's wallet is on. */
   supportsNetwork(_network: Network): boolean {
     return true;
   }
 }
 
-export const tollActionProvider = (client?: Toll): TollActionProvider => new TollActionProvider(client);
+export const tollActionProvider = (clientOrOptions?: Toll | TollActionProviderOptions): TollActionProvider =>
+  new TollActionProvider(clientOrOptions);

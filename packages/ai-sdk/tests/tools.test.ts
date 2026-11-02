@@ -22,9 +22,9 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("six tools, sharp descriptions, no arc, no verdict words", () => {
+test("eight tools, sharp descriptions, no arc, no verdict words", () => {
   const { tools } = setup([]);
-  assert.deepEqual(Object.keys(tools), ["check_coin", "larp_check", "dev_record", "launch_record", "fresh_launches", "chain_pulse"]);
+  assert.deepEqual(Object.keys(tools), ["check_coin", "larp_check", "dev_record", "launch_record", "fresh_launches", "chain_pulse", "stock_token", "stock_tokens"]);
   assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it/);
   assert.match(String(tools.larp_check!.description), /^Is there a real product behind this coin\?/);
   for (const t of Object.values(tools)) assert.ok(!/\b(scam|rug|safe)\b/i.test(String(t!.description)));
@@ -51,7 +51,7 @@ test("check_coin executes against the server tool", async () => {
 test("over quota appends the pay line", async () => {
   const { tools } = setup([fx("check_coin_over")]);
   const out = String(await tools.check_coin!.execute!({ address: TOKEN }, opts));
-  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base\)\. Holding \$TOLL does not lift this limit/s);
+  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent\)\. Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/s);
 });
 
 test("larp_check waits for a pending read", async () => {

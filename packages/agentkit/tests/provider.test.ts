@@ -28,11 +28,11 @@ function provider(responses: string[]) {
 const ok = (text: string) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
 const getAction = (p: TollActionProvider, suffix: string) => p.getActions({} as any).find((a) => a.name.endsWith(suffix))!;
 
-test("declares six actions with prefixed names and schemas", () => {
+test("declares eight actions with prefixed names and schemas", () => {
   const actions = new TollActionProvider().getActions({} as any);
   assert.deepEqual(
     actions.map((a) => a.name).sort(),
-    ["chain_pulse", "check_coin", "dev_record", "fresh_launches", "larp_check", "launch_record"].map((n) => `TollActionProvider_${n}`).sort(),
+    ["chain_pulse", "check_coin", "dev_record", "fresh_launches", "larp_check", "launch_record", "stock_token", "stock_tokens"].map((n) => `TollActionProvider_${n}`).sort(),
   );
   for (const a of actions) assert.ok(a.description.length > 30 && a.schema);
 });
@@ -63,7 +63,7 @@ test("check_coin invokes the server tool", async () => {
 test("over quota appends the pay line", async () => {
   const { p } = provider([fx("check_coin_over")]);
   const out = await getAction(p, "check_coin").invoke({ address: TOKEN });
-  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base\)\. Holding \$TOLL does not lift this limit/s);
+  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent\)\. Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/s);
 });
 
 test("larp_check waits while Toll is still reading", async () => {

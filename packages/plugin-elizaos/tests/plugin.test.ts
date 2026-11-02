@@ -24,7 +24,7 @@ const act = (p: any, name: string) => p.actions.find((a: any) => a.name === name
 
 test("plugin shape", () => {
   assert.equal(tollPlugin.name, "toll");
-  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), ["TOLL_CHECK_COIN", "TOLL_LARP_CHECK", "TOLL_DEV_RECORD"]);
+  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), ["TOLL_CHECK_COIN", "TOLL_LARP_CHECK", "TOLL_DEV_RECORD", "TOLL_STOCK_TOKEN", "TOLL_STOCK_TOKENS"]);
   assert.equal(tollPlugin.providers!.length, 1);
   for (const a of tollPlugin.actions!) {
     assert.ok(a.description.length > 40);
@@ -105,6 +105,8 @@ test("over quota appends the pay line", async () => {
   assert.match(got[0].text, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\//);
   assert.match(got[0].text, /0\.05 USDG/);
   assert.match(got[0].text, /1M \$TOLL/);
+  assert.match(got[0].text, /Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/);
+  assert.ok(!/does not lift/.test(got[0].text));
 });
 
 test("larp waits through a pending read", async () => {

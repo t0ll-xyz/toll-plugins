@@ -25,10 +25,10 @@ async function setup(responses: string[]) {
   return { plugin, tools, get, bodies };
 }
 
-test("three tools with sharp descriptions and any-chain support", async () => {
+test("five tools with sharp descriptions and any-chain support", async () => {
   const { plugin, tools } = await setup([]);
   assert.equal(plugin.name, "toll");
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["check_coin", "dev_record", "larp_check"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["check_coin", "dev_record", "larp_check", "stock_token", "stock_tokens"]);
   assert.equal(plugin.supportsChain({ type: "evm", id: 8453, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }), true);
   assert.equal(plugin.supportsChain({ type: "solana", nativeCurrency: { name: "Sol", symbol: "SOL", decimals: 9 } }), true);
   const c = tools.find((t) => t.name === "check_coin")!;
@@ -55,7 +55,7 @@ test("check_coin executes against the server tool", async () => {
 test("over quota appends the pay line", async () => {
   const { get } = await setup([fx("check_coin_over")]);
   const out = String(await get("check_coin").execute({ address: TOKEN }));
-  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base\)\. Holding \$TOLL does not lift this limit/s);
+  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent\)\. Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/s);
 });
 
 test("larp_check waits for a pending read; dev_record works; errors are text", async () => {
