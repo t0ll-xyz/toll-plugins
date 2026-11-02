@@ -1,7 +1,7 @@
 ---
 name: toll
 description: Safety check before an agent buys a coin or pays an agent, on Robinhood Chain, Solana, BSC and Arc. Use when the user gives a token contract or asks whether a coin looks like a rug, who sniped or bundled it, who made it, whether its liquidity can be pulled, or whether there is a real product behind it; and before paying or trusting an ERC-8004 agent. Toll (t0ll.xyz) answers with facts read from the chain, not advice.
-version: 0.1.0
+version: 0.1.1
 author: Toll
 metadata:
   hermes:
@@ -51,7 +51,9 @@ mcp_servers:
 Hermes names them `mcp_toll_<tool>`: `mcp_toll_check_coin` (address, chain?: rh | sol | bsc | arc),
 `mcp_toll_larp_check` (token, chain?: rh | sol), `mcp_toll_dev_record` (wallet, chain?: rh | arc | bsc),
 `mcp_toll_check_agent` (id), `mcp_toll_launch_record` (address), `mcp_toll_wallet_privacy` (wallet),
-`mcp_toll_fresh_launches` (limit?), `mcp_toll_chain_pulse`.
+`mcp_toll_fresh_launches` (limit?), `mcp_toll_chain_pulse`, and for Robinhood Stock Tokens `mcp_toll_stock_token`
+(id: ticker or contract) and `mcp_toll_stock_tokens` (query?, limit?). Facts with their sources, not advice. Robinhood
+Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares.
 
 Without MCP, the same reads are free JSON over GET:
 
@@ -74,7 +76,10 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
 
 ## Free limit
 
-10 new coins a day per caller are free; coins already read stay free; `check_agent` uses no coin. Past that, the answer
-gives the paid x402 URL for that coin (0.05 USDG on Robinhood Chain). Pay it only with the owner's consent.
+10 new coins a day per caller are free; coins already read stay free; `check_agent` uses no coin. Markets calls
+(Stock Tokens) have their own count: 50 a day free. Holding $TOLL lifts both: new coins a day 1M $TOLL 100 / 5M 500 /
+20M 2,000, Markets calls 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys sent as `x-toll-pass`
+or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.05 USDG a check, 0.02 USDG a stock, on
+Robinhood Chain). Pay it only with the owner's consent.
 
 More: https://t0ll.xyz/skill.md, https://t0ll.xyz/agents/plugins. Information only, not financial advice.

@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/mastra",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mastra tools: before an agent buys a coin or trusts an agent, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
   "license": "MIT",
   "author": "Toll",
