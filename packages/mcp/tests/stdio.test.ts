@@ -30,14 +30,18 @@ async function spawnServer(env: Record<string, string>) {
 
 test("stdio smoke: initialize, tools/list, tools/call (Toll mocked)", async () => {
   const client = await spawnServer({ TOLL_BASE_URL: mock.url });
-  assert.equal(client.getServerVersion()?.name, "toll");
-  const { tools } = await client.listTools();
-  assert.equal(tools.length, 8);
-  assert.ok(tools.some((t) => t.name === "check_agent"));
-  const r: any = await client.callTool({ name: "check_coin", arguments: { address: OVER } });
-  assert.match(r.content.at(-1).text, /This server does not pay/);
-  assert.ok(mock.calls.some((c) => c.method === "initialize"));
-  await client.close();
+  try {
+    assert.equal(client.getServerVersion()?.name, "toll");
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 10);
+    assert.ok(tools.some((t) => t.name === "check_agent"));
+    const r: any = await client.callTool({ name: "check_coin", arguments: { address: OVER } });
+    assert.match(r.content.at(-1).text, /This server does not pay/);
+    assert.ok(mock.calls.some((c) => c.method === "initialize"));
+  } finally {
+    // A failed assert must not leave the spawned server (and the test run) hanging.
+    await client.close();
+  }
 });
 
 test("--version and --help print and exit", () => {
