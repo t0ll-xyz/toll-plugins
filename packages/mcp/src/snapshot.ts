@@ -497,5 +497,50 @@ export const SNAPSHOT_TOOLS: Tool[] = [
       "idempotentHint": false,
       "openWorldHint": true
     }
+  },
+  {
+    "name": "stock_events",
+    "title": "Stock token events",
+    "description": "What changed on Robinhood's Stock Tokens on Robinhood Chain, oldest first: listed / delisted, multiplier_scheduled / multiplier_applied, corporate_action (status changes), feed_stale / feed_paused / feed_resumed (a Chainlink stock feed past its heartbeat while a session is open, or the token's oracle paused), and filing (SEC 8-K, 10-Q, 10-K, Form 4, Schedule 13D/G, by acceptance time). Each event has its id, source time (at, with what that time is) and when Toll found it. Pass since (the last answer's next) to get only newer events, kind to filter, limit (1 to 100). With a Toll key: Team (20M+ $TOLL) live, Pro (5M+) 15 minutes late; without one, the last 10 events found an hour ago or more, free. Funds and tickers with no SEC CIK get no filing events. Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The next of the last answer (an event id): only newer events. Leave out for the newest."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "listed",
+            "delisted",
+            "multiplier_scheduled",
+            "multiplier_applied",
+            "corporate_action",
+            "feed_stale",
+            "feed_paused",
+            "feed_resumed",
+            "filing"
+          ],
+          "description": "Only this kind: listed, delisted, multiplier_scheduled, multiplier_applied, corporate_action, feed_stale, feed_paused, feed_resumed, filing"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "How many events, 1 to 100 (default 25; the keyless preview is always the last 10)"
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Stock token events",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
   }
 ];
