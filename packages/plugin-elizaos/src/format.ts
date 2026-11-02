@@ -1,10 +1,11 @@
 import type { TollResult } from "@tollxyz/sdk";
+import { LIMITS_NOTE } from "./markets.js";
 
 /** Toll's text, plus one line when the free coins are used up or the read is still running. */
 export function formatResult(r: TollResult): string {
   let out = r.text.trim();
   if (r.paidUrl) {
-    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402: 0.05 USDG on Robinhood Chain or USDC on Base). Holding $TOLL does not lift this limit.`;
+    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402: 0.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent). ${LIMITS_NOTE}`;
   }
   if (r.pending) {
     const note = `Part of the answer is still being read: ask again in ${r.pending.retryAfterS} seconds.`;
@@ -41,4 +42,24 @@ export function extractWallet(text: string): { wallet: string; chain?: "bsc" } |
   if (!evm) return null;
   const chain = /\b(bsc|bnb|binance)\b/i.test(text) ? "bsc" : undefined;
   return { wallet: evm[0], ...(chain ? { chain } : {}) };
+}
+
+// Capitalised words that are not tickers when they stand alone in a message.
+const NOT_TICKERS = new Set(["I", "A", "RH", "US", "USA", "USD", "USDG", "USDC", "ETH", "SEC", "ETF", "CEO", "API", "OK", "NYSE", "UTC", "AI", "IPO", "TOLL", "LARP", "BSC", "SOL", "NFT", "DM", "PM", "AM"]);
+const CASHTAG = /(?<![A-Za-z0-9])\$([A-Za-z][A-Za-z0-9.\-]{0,11})(?![A-Za-z0-9])/;
+const CAPS = /(?<![A-Za-z0-9$.])([A-Z]{1,5}(?:\.[A-Z])?)(?![A-Za-z0-9])/g;
+
+/**
+ * The Stock Token a message names: a 0x contract, a cashtag ($NVDA), or a standalone capitalised ticker (NVDA, BRK.B).
+ * Null when it names none.
+ */
+export function extractStockId(text: string): string | null {
+  const evm = EVM.exec(text);
+  if (evm) return evm[0];
+  const tag = CASHTAG.exec(text);
+  if (tag) return tag[1].replace(/[.\-]+$/, "").toUpperCase();
+  for (const m of text.matchAll(CAPS)) {
+    if (!NOT_TICKERS.has(m[1])) return m[1];
+  }
+  return null;
 }

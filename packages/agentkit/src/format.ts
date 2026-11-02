@@ -1,10 +1,11 @@
 import type { TollResult } from "@tollxyz/sdk";
+import { LIMITS_NOTE } from "./markets.js";
 
 /** Toll's text, plus one line when the free coins are used up or the read is still running. */
 export function formatResult(r: TollResult): string {
   let out = r.text.trim();
   if (r.paidUrl) {
-    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402: 0.05 USDG on Robinhood Chain or USDC on Base). Holding $TOLL does not lift this limit.`;
+    out += `\n\nFree coins for today are used up. You can pay per check at ${r.paidUrl} (x402: 0.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent). ${LIMITS_NOTE}`;
   }
   if (r.pending) {
     const note = `Part of the answer is still being read: ask again in ${r.pending.retryAfterS} seconds.`;
