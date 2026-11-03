@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-02). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-03). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -292,6 +292,10 @@ export const SNAPSHOT_TOOLS: Tool[] = [
           "type": "string",
           "maxLength": 80,
           "description": "The identity registry agentId is in, CAIP-10 (default eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432, Robinhood Chain; Base: eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)"
+        },
+        "strict": {
+          "type": "boolean",
+          "description": "Strict payee policy: an x402 payment whose payTo is not verified as the seller's (ERC-8478 verified-wallet or verified-delegation) is BLOCK instead of a warning; not read is BLOCK too"
         }
       },
       "additionalProperties": false,
@@ -475,6 +479,74 @@ export const SNAPSHOT_TOOLS: Tool[] = [
     },
     "annotations": {
       "title": "Insider trades",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "institutions",
+    "title": "Institutional holders (13F)",
+    "description": "Institutional holders of the company behind one Robinhood Stock Token on Robinhood Chain, from SEC's quarterly Form 13F data sets, by ticker (NVDA) or token contract: the top investment managers by shares for the latest quarter (limit: 1 to 20, default 10), each with its change vs the prior quarter (only managers that filed both quarters; one new this quarter says so), total institutional shares, the number of filers and the change over the managers present in both quarters. Puts and calls are left out; amendments are applied; a value that looks filed in thousands is flagged. Every answer starts with \"13F for the quarter ended <date>, SEC data set published <date>\". Funds and foreign issuers are not covered; a ticker without a reviewed CUSIP says 13F not mapped. 13F shares are the company's shares, not the Stock Token. Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "A stock ticker as Robinhood lists it (AAPL, NVDA, BRK.B) or the Stock Token's contract on Robinhood Chain (0x + 40 hex)"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "How many holders to list, 1 to 20 (default 10)"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Institutional holders (13F)",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "guidance",
+    "title": "Earnings release guidance and KPIs",
+    "description": "What the company behind one Robinhood Stock Token on Robinhood Chain said in its last 4 earnings releases (SEC 8-K Item 2.02, the press release exhibit), by ticker (NVDA) or token contract, AI-extracted from cited filings: forward guidance (a range low to high, a single figure, or words only), company KPIs, non-GAAP measures and the GAAP lines they are reconciled from, each with its period, its quote from the filing (at most 300 characters) and the filing link. A model picked each value's sentence or table cell; the number was read from that quote by code, never written by the model; figures the code could not read, and GAAP lines that disagree with the company's XBRL facts, were dropped. Read once per release (never per question). limit: values per release (1 to 60, default 25). Funds and foreign issuers (6-K) are not covered. Quotes are the company's words. Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "A stock ticker as Robinhood lists it (AAPL, NVDA, BRK.B) or the Stock Token's contract on Robinhood Chain (0x + 40 hex)"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60,
+          "description": "How many values to list per release, 1 to 60 (default 25)"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Earnings release guidance and KPIs",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": false,
