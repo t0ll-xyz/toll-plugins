@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { convertToOpenAITool } from "@langchain/core/utils/function_calling";
 import { ToolMessage } from "@langchain/core/messages";
-import { Toll } from "@tollxyz/sdk";
+import { TOOL_NAMES as SDK_TOOL_NAMES, Toll } from "@tollxyz/sdk";
 import { tollTools, TOOL_NAMES } from "../src/index.js";
+import { LIVE_DESCRIPTIONS } from "../src/live.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");
 const TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
@@ -23,13 +24,16 @@ function setup(responses: string[]) {
   return { tools, by, bodies };
 }
 
-test("eight tools with Toll's names, sharp descriptions, no verdict words", () => {
+test("all 18 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools, by } = setup([]);
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
-  assert.equal(tools.length, 8);
-  assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it/);
+  assert.deepEqual(TOOL_NAMES, [...SDK_TOOL_NAMES]);
+  assert.equal(tools.length, 18);
+  assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(by.check_agent.description, /^Before paying or trusting an ERC-8004 agent/);
-  assert.match(by.larp_check.description, /^Is there a real product behind this coin\?/);
+  assert.match(by.larp_check.description, /^Is there a real product behind this coin on Robinhood Chain\?/);
+  for (const n of ["check_tx", "presign_risk_report", "institutions", "guidance", "stock_events"] as const) assert.equal(by[n].description, LIVE_DESCRIPTIONS[n]);
+  for (const t of tools) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t.description), t.name);
   for (const t of tools) assert.ok(!/\b(scam|rug|safe)\b/i.test(t.description), t.name);
 });
 
@@ -37,10 +41,14 @@ test("schemas convert to OpenAI function JSON for bindTools", () => {
   const { by } = setup([]);
   const fn: any = convertToOpenAITool(by.check_coin as any).function;
   assert.equal(fn.name, "check_coin");
-  assert.deepEqual(fn.parameters.properties.chain.enum, ["rh", "sol", "bsc"]);
+  assert.deepEqual(fn.parameters.properties.chain.enum, ["rh"]);
   assert.deepEqual(fn.parameters.required, ["address"]);
   const agent: any = convertToOpenAITool(by.check_agent as any).function;
-  assert.equal(agent.parameters.properties.id.type, "integer");
+  assert.deepEqual(agent.parameters.properties.id.anyOf.map((x: any) => x.type), ["integer", "string"]);
+  const tx: any = convertToOpenAITool(by.check_tx as any).function;
+  assert.deepEqual(Object.keys(tx.parameters.properties).sort(), ["agentId", "chainId", "data", "from", "registry", "strict", "to", "typedData", "value", "x402"]);
+  const ev: any = convertToOpenAITool(by.stock_events as any).function;
+  assert.equal(ev.parameters.properties.kind.enum.length, 9);
 });
 
 test("check_coin calls the server tool and returns Toll's text", async () => {
@@ -60,7 +68,9 @@ test("a tool call returns a ToolMessage with the call id (createAgent / ToolNode
 
 test("invalid input is refused by the schema before any request", async () => {
   const { by, bodies } = setup([]);
-  await assert.rejects(by.check_coin.invoke({ address: TOKEN, chain: "arc" }));
+  for (const chain of ["arc", "sol", "bsc"]) await assert.rejects(by.check_coin.invoke({ address: TOKEN, chain }));
+  await assert.rejects(by.presign_risk_report.invoke({ version: "erc-presign/9", subject: {} }));
+  await assert.rejects(by.institutions.invoke({ id: "NVDA", limit: 21 }));
   await assert.rejects(by.check_agent.invoke({ id: -1 }));
   assert.equal(bodies.length, 0);
 });
@@ -92,6 +102,50 @@ test("other tools call their server tools; errors come back as text", async () =
   );
   assert.deepEqual(bodies[1].params.arguments, { id: 20030 });
   assert.match(String(await by.check_coin.invoke({ address: "nope" })), /Invalid address/);
+});
+
+test("pre-sign and Markets tools call the MCP tools with the live argument names", async () => {
+  const { by, bodies } = setup(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"].map(ok));
+  const tx = { to: TOKEN, data: "0x", value: "0", from: TOKEN };
+  const presign = { version: "erc-presign/1", subject: { type: "calls", chainId: "eip155:4663", calls: [] } };
+  assert.equal(await by.check_tx.invoke(tx), "a");
+  assert.equal(await by.presign_risk_report.invoke(presign), "b");
+  assert.equal(await by.stock_token.invoke({ id: "NVDA" }), "c");
+  assert.equal(await by.stock_tokens.invoke({ query: "nvid" }), "d");
+  assert.equal(await by.fundamentals.invoke({ id: "AAPL", period: "annual" }), "e");
+  assert.equal(await by.insider_trades.invoke({ id: "AAPL", limit: 5 }), "f");
+  assert.equal(await by.institutions.invoke({ id: "NVDA", limit: 3 }), "g");
+  assert.equal(await by.guidance.invoke({ id: "NVDA" }), "h");
+  assert.equal(await by.macro.invoke({}), "i");
+  assert.equal(await by.stock_events.invoke({ kind: "filing" }), "j");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["check_tx", tx],
+    ["presign_risk_report", presign],
+    ["stock_token", { id: "NVDA" }],
+    ["stock_tokens", { query: "nvid" }],
+    ["fundamentals", { id: "AAPL", period: "annual" }],
+    ["insider_trades", { id: "AAPL", limit: 5 }],
+    ["institutions", { id: "NVDA", limit: 3 }],
+    ["guidance", { id: "NVDA" }],
+    ["macro", {}],
+    ["stock_events", { kind: "filing" }],
+  ]);
+});
+
+test("tollKey goes on every call as x-toll-pass", async () => {
+  const keys: Array<string | null> = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (_u: string, init?: RequestInit) => {
+    keys.push(new Headers(init?.headers).get("x-toll-pass"));
+    return new Response(ok("x"));
+  }) as typeof fetch;
+  try {
+    const t = Object.fromEntries(tollTools({ tollKey: "tk_7" }).map((x) => [x.name, x]));
+    await t.macro.invoke({});
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.deepEqual(keys, ["tk_7"]);
 });
 
 test("only: returns a subset; an unknown name throws", () => {

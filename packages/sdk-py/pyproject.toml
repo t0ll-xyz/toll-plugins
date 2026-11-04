@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toll-sdk"
-version = "0.1.1"
-description = "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Standard library only."
+version = "0.2.0"
+description = "Client for Toll's checks on Robinhood Chain over MCP: coins, dev records, LARP, ERC-8004 agents, pre-sign checks (check_tx, ERC-8265) and Robinhood Stock Token data. Standard library only."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 authors = [{ name = "Toll" }]
-keywords = ["robinhood-chain", "solana", "bsc", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"]
+keywords = ["robinhood-chain", "erc-8004", "erc-8265", "presign", "stock-tokens", "x402", "mcp", "ai-agent", "rug-check", "larp", "toll"]
 dependencies = []
 classifiers = [
     "Development Status :: 3 - Alpha",

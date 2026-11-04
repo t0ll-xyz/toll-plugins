@@ -1,6 +1,6 @@
 /**
  * An agent that will not buy until Toll's check passes.
- *   npm start -- <token> [--chain rh|sol|bsc]
+ *   npm start -- <token> [--chain rh]   (Toll reads Robinhood Chain only)
  * Information only, not financial advice. buy() is a stub: it prints and sends nothing.
  */
 import { Toll, TollError, type Chain } from "@tollxyz/sdk";
@@ -19,9 +19,9 @@ export function parseArgs(argv: string[]): { token: string; chain?: Chain } | { 
     chain = args[i + 1];
     args.splice(i, 2);
   }
-  if (chain !== undefined && !["rh", "sol", "bsc"].includes(chain)) return { error: `Invalid --chain "${chain}": use rh, sol or bsc.` };
+  if (chain !== undefined && chain !== "rh") return { error: `Invalid --chain "${chain}": Toll reads Robinhood Chain only right now (rh).` };
   const token = args[0];
-  if (!token) return { error: "Usage: npm start -- <token> [--chain rh|sol|bsc]" };
+  if (!token) return { error: "Usage: npm start -- <token> [--chain rh]" };
   return { token, ...(chain ? { chain: chain as Chain } : {}) };
 }
 
@@ -35,9 +35,7 @@ async function main(): Promise<number> {
   const toll = new Toll();
   try {
     const check = await toll.checkCoin(token, chain ? { chain } : {});
-    // The LARP check reads Robinhood Chain and Solana only; for BSC the product label stays unread.
-    const larpChain = chain === "rh" || chain === "sol" ? chain : undefined;
-    const larp = chain === "bsc" ? null : await toll.larpCheck(token, { wait: true, ...(larpChain ? { chain: larpChain } : {}) });
+    const larp = await toll.larpCheck(token, { wait: true, ...(chain ? { chain } : {}) });
 
     console.log(check.text);
     if (larp) console.log("\n" + larp.text);
@@ -47,7 +45,7 @@ async function main(): Promise<number> {
     console.log(`\nDecision: ${d.outcome}`);
     for (const r of d.reasons) console.log(`- ${r}`);
     console.log("Information only, not financial advice.");
-    if (d.outcome === "would proceed") buy(token, chain ?? "auto");
+    if (d.outcome === "would proceed") buy(token, "Robinhood Chain");
     return d.outcome === "refuse" ? 1 : 0;
   } catch (e) {
     console.error(e instanceof TollError ? e.message : "Request failed.");

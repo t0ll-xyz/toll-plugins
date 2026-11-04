@@ -21,14 +21,16 @@ function setup(responses: string[]) {
   return { tools: tollTools({ client: new Toll({ fetch: f, sleep: async () => {} }) }), bodies };
 }
 
-test("eight tools keyed and id'd by Toll's names, sharp descriptions, no verdict words", () => {
+test("all 18 live tools keyed and id'd by Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools), TOOL_NAMES);
+  assert.equal(Object.keys(tools).length, 18);
+  for (const t of Object.values(tools)) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t!.description));
   for (const [k, t] of Object.entries(tools)) {
     assert.equal(t!.id, k);
     assert.ok(!/\b(scam|rug|safe)\b/i.test(t!.description), k);
   }
-  assert.match(tools.check_coin!.description, /^Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it/);
+  assert.match(tools.check_coin!.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(tools.check_agent!.description, /^Before paying or trusting an ERC-8004 agent/);
 });
 
@@ -39,12 +41,32 @@ test("check_coin executes against the server tool", async () => {
   assert.match(String(out), /Findings: 2 against/);
 });
 
-test("Mastra's input validation refuses a bad chain before any request", async () => {
+test("Mastra's input validation refuses any chain but rh before any request", async () => {
   const { tools, bodies } = setup([]);
-  const out: any = await tools.check_coin!.execute!({ address: TOKEN, chain: "arc" } as any, ctx);
-  assert.equal(out.error, true);
-  assert.match(out.message, /validation failed for check_coin/);
+  for (const chain of ["arc", "sol", "bsc"]) {
+    const out: any = await tools.check_coin!.execute!({ address: TOKEN, chain } as any, ctx);
+    assert.equal(out.error, true);
+    assert.match(out.message, /validation failed for check_coin/);
+  }
   assert.equal(bodies.length, 0);
+});
+
+test("pre-sign and Markets tools call the MCP tools with the live argument names", async () => {
+  const { tools, bodies } = setup(["a", "b", "c", "d", "e"].map(ok));
+  const tx = { to: TOKEN, data: "0x", value: "0", from: TOKEN };
+  const presign = { version: "erc-presign/1" as const, subject: { type: "calls", chainId: "eip155:4663", calls: [] } };
+  assert.equal(await tools.check_tx!.execute!(tx, ctx), "a");
+  assert.equal(await tools.presign_risk_report!.execute!(presign, ctx), "b");
+  assert.equal(await tools.institutions!.execute!({ id: "NVDA", limit: 3 }, ctx), "c");
+  assert.equal(await tools.guidance!.execute!({ id: "NVDA" }, ctx), "d");
+  assert.equal(await tools.stock_events!.execute!({ since: 9 }, ctx), "e");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["check_tx", tx],
+    ["presign_risk_report", presign],
+    ["institutions", { id: "NVDA", limit: 3 }],
+    ["guidance", { id: "NVDA" }],
+    ["stock_events", { since: 9 }],
+  ]);
 });
 
 test("over quota appends the pay line", async () => {
@@ -100,6 +122,8 @@ test("defs.ts is the same file as @tollxyz/langchain's", () => {
   const read = (u: string) => readFileSync(new URL(u, import.meta.url), "utf8");
   assert.equal(read("../src/defs.ts"), read("../../langchain/src/defs.ts"));
   assert.equal(read("../src/format.ts"), read("../../langchain/src/format.ts"));
+  assert.equal(read("../src/live.ts"), read("../../langchain/src/live.ts"));
+  assert.equal(read("../src/schemas.ts"), read("../../langchain/src/schemas.ts"));
 });
 
 test("re-exports Toll and TollError", async () => {

@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Toll, TollError } from "@tollxyz/sdk";
-import { toll } from "../src/index.js";
+import { TOOL_NAMES, Toll, TollError } from "@tollxyz/sdk";
+import { LIVE_DESCRIPTIONS, MARKETS_NOTE, toll } from "../src/index.js";
 import * as Reexported from "../src/index.js";
 
 // npm test runs from the package directory.
@@ -25,24 +25,75 @@ async function setup(responses: string[]) {
   return { plugin, tools, get, bodies };
 }
 
-test("eight tools with sharp descriptions and any-chain support", async () => {
+test("all 18 live tools with sharp descriptions and any-chain support", async () => {
   const { plugin, tools } = await setup([]);
   assert.equal(plugin.name, "toll");
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["check_coin", "dev_record", "fundamentals", "insider_trades", "larp_check", "macro", "stock_token", "stock_tokens"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), [...TOOL_NAMES].sort());
+  for (const t of tools) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t.description), t.name);
+  for (const n of ["wallet_privacy", "check_agent", "check_tx", "presign_risk_report"] as const) {
+    assert.equal(tools.find((t) => t.name === n)!.description, LIVE_DESCRIPTIONS[n]);
+  }
+  for (const n of ["institutions", "guidance", "stock_events"]) assert.ok(tools.find((t) => t.name === n)!.description.includes(MARKETS_NOTE));
   assert.equal(plugin.supportsChain({ type: "evm", id: 8453, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } }), true);
   assert.equal(plugin.supportsChain({ type: "solana", nativeCurrency: { name: "Sol", symbol: "SOL", decimals: 9 } }), true);
   const c = tools.find((t) => t.name === "check_coin")!;
-  assert.match(c.description, /^Before buying a token on Robinhood Chain, Solana or BSC/);
+  assert.match(c.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   for (const t of tools) assert.ok(!/\b(scam|rug|safe)\b/i.test(t.description));
 });
 
-test("schemas reject arc and missing address", async () => {
+test("schemas are Robinhood Chain only and follow the live shapes", async () => {
   const { get } = await setup([]);
   const s = get("check_coin").parameters;
-  assert.ok(s.safeParse({ address: TOKEN, chain: "bsc" }).success);
-  assert.ok(!s.safeParse({ address: TOKEN, chain: "arc" }).success);
+  assert.ok(s.safeParse({ address: TOKEN, chain: "rh" }).success);
+  for (const c of ["sol", "bsc", "arc"]) assert.ok(!s.safeParse({ address: TOKEN, chain: c }).success);
   assert.ok(!s.safeParse({}).success);
-  assert.ok(!get("larp_check").parameters.safeParse({ token: TOKEN, chain: "bsc" }).success);
+  assert.ok(!get("larp_check").parameters.safeParse({ token: TOKEN, chain: "sol" }).success);
+  assert.ok(!get("dev_record").parameters.safeParse({ wallet: TOKEN, chain: "bsc" }).success);
+  assert.ok(get("check_agent").parameters.safeParse({ id: 20030 }).success);
+  assert.ok(get("check_tx").parameters.safeParse({ typedData: { primaryType: "Permit" } }).success);
+  assert.ok(!get("presign_risk_report").parameters.safeParse({ subject: {} }).success);
+  assert.ok(!get("institutions").parameters.safeParse({ id: "NVDA", limit: 21 }).success);
+  assert.ok(!get("stock_events").parameters.safeParse({ kind: "ipo" }).success);
+});
+
+test("the coin, agent, pre-sign and event tools call the MCP tools with the live argument names", async () => {
+  const { get, bodies } = await setup(["a", "b", "c", "d", "e", "f", "g", "h"].map(ok));
+  const tx = { to: TOKEN, data: "0x", value: "0", from: TOKEN };
+  const presign = { version: "erc-presign/1", subject: { type: "calls", chainId: "eip155:4663", calls: [] } };
+  assert.equal(await get("wallet_privacy").execute({ wallet: TOKEN }), "a");
+  assert.equal(await get("launch_record").execute({ address: TOKEN }), "b");
+  assert.equal(await get("fresh_launches").execute({ limit: 3 }), "c");
+  assert.equal(await get("chain_pulse").execute({}), "d");
+  assert.equal(await get("check_agent").execute({ id: "20030" }), "e");
+  assert.equal(await get("check_tx").execute(tx), "f");
+  assert.equal(await get("presign_risk_report").execute(presign), "g");
+  assert.equal(await get("stock_events").execute({ kind: "listed", limit: 5 }), "h");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["wallet_privacy", { wallet: TOKEN }],
+    ["launch_record", { address: TOKEN }],
+    ["fresh_launches", { limit: 3 }],
+    ["chain_pulse", {}],
+    ["check_agent", { id: "20030" }],
+    ["check_tx", tx],
+    ["presign_risk_report", presign],
+    ["stock_events", { kind: "listed", limit: 5 }],
+  ]);
+});
+
+test("institutions and guidance GET their Markets routes with the key", async () => {
+  const calls: Array<{ url: string; key: string | null }> = [];
+  const f = async (url: string, init?: RequestInit) => {
+    calls.push({ url, key: new Headers(init?.headers).get("x-toll-pass") });
+    return new Response(JSON.stringify({ ticker: "NVDA" }));
+  };
+  const tools = await toll({ fetch: f, tollKey: "tk_4" }).getTools({} as any);
+  const get = (n: string) => tools.find((t) => t.name === n)!;
+  assert.deepEqual(JSON.parse(String(await get("institutions").execute({ id: "NVDA", limit: 2 }))), { ticker: "NVDA" });
+  assert.deepEqual(JSON.parse(String(await get("guidance").execute({ id: "NVDA" }))), { ticker: "NVDA" });
+  assert.deepEqual(calls, [
+    { url: "https://t0ll.xyz/api/markets/institutions/NVDA?limit=2", key: "tk_4" },
+    { url: "https://t0ll.xyz/api/markets/guidance/NVDA", key: "tk_4" },
+  ]);
 });
 
 test("check_coin executes against the server tool", async () => {

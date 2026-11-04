@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { generateText, asSchema } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { Toll } from "@tollxyz/sdk";
-import { tollTools } from "../src/index.js";
+import { TOOL_NAMES, Toll } from "@tollxyz/sdk";
+import { LIVE_DESCRIPTIONS, tollTools } from "../src/index.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");
 const TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
@@ -22,22 +22,27 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("eleven tools, sharp descriptions, no arc, no verdict words", () => {
+test("all 18 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
-  assert.deepEqual(Object.keys(tools), ["check_coin", "larp_check", "dev_record", "launch_record", "fresh_launches", "chain_pulse", "stock_token", "stock_tokens", "fundamentals", "insider_trades", "macro"]);
-  assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it/);
-  assert.match(String(tools.larp_check!.description), /^Is there a real product behind this coin\?/);
+  assert.deepEqual(Object.keys(tools).sort(), [...TOOL_NAMES].sort());
+  assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, check who is behind it/);
+  for (const t of Object.values(tools)) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(String(t!.description)));
+  for (const n of ["wallet_privacy", "check_agent", "check_tx", "presign_risk_report"] as const) assert.equal(tools[n]!.description, LIVE_DESCRIPTIONS[n]);
+  assert.match(String(tools.larp_check!.description), /^Is there a real product behind this coin on Robinhood Chain\?/);
   for (const t of Object.values(tools)) assert.ok(!/\b(scam|rug|safe)\b/i.test(String(t!.description)));
 });
 
-test("input schema is JSON-schema ready and rejects arc", async () => {
+test("input schema is JSON-schema ready and Robinhood Chain only", async () => {
   const { tools } = setup([]);
   const s = asSchema(tools.check_coin!.inputSchema);
   const json: any = await s.jsonSchema;
-  assert.deepEqual(json.properties.chain.enum, ["rh", "sol", "bsc"]);
+  assert.deepEqual(json.properties.chain.enum, ["rh"]);
   assert.deepEqual(json.required, ["address"]);
-  const parsed = await s.validate!({ address: TOKEN, chain: "arc" });
-  assert.equal(parsed.success, false);
+  for (const c of ["arc", "sol", "bsc"]) assert.equal((await s.validate!({ address: TOKEN, chain: c })).success, false);
+  const ev: any = await asSchema(tools.stock_events!.inputSchema).jsonSchema;
+  assert.equal(ev.properties.kind.enum.length, 9);
+  const pr: any = await asSchema(tools.presign_risk_report!.inputSchema).jsonSchema;
+  assert.deepEqual(pr.required.sort(), ["subject", "version"]);
   assert.equal((await s.validate!({ address: TOKEN })).success, true);
 });
 
@@ -70,6 +75,44 @@ test("other tools call their server tools; errors come back as text", async () =
   assert.deepEqual(bodies.map((b) => b.params.name), ["dev_record", "launch_record", "fresh_launches", "chain_pulse"]);
   const bad = String(await tools.check_coin!.execute!({ address: "nope" }, opts));
   assert.match(bad, /Invalid address/);
+});
+
+test("the agent, pre-sign and event tools call the MCP tools with the live argument names", async () => {
+  const { tools, bodies } = setup([ok("a"), ok("b"), ok("c"), ok("d"), ok("e")]);
+  const tx = { to: TOKEN, data: "0x", value: "0", from: TOKEN };
+  const presign = { version: "erc-presign/1" as const, subject: { type: "calls", chainId: "eip155:4663", calls: [] } };
+  assert.equal(await tools.wallet_privacy!.execute!({ wallet: TOKEN }, opts), "a");
+  assert.equal(await tools.check_agent!.execute!({ id: 20030 }, opts), "b");
+  assert.equal(await tools.check_tx!.execute!(tx, opts), "c");
+  assert.equal(await tools.presign_risk_report!.execute!(presign, opts), "d");
+  assert.equal(await tools.stock_events!.execute!({ since: 7 }, opts), "e");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["wallet_privacy", { wallet: TOKEN }],
+    ["check_agent", { id: 20030 }],
+    ["check_tx", tx],
+    ["presign_risk_report", presign],
+    ["stock_events", { since: 7 }],
+  ]);
+  const sol = String(await tools.check_coin!.execute!({ address: "So11111111111111111111111111111111111111112" }, opts));
+  assert.match(sol, /Robinhood Chain only/);
+});
+
+test("institutions and guidance GET their Markets routes with the key; over quota they point to x402", async () => {
+  const calls: Array<{ url: string; key: string | null }> = [];
+  const OVER = { error: "50 Markets calls used today (free).", quota: { used: 50, limit: 50, left: 0, tier: "free" } };
+  const rs = [new Response(JSON.stringify({ ticker: "NVDA" })), new Response(JSON.stringify({ ticker: "NVDA" })), new Response(JSON.stringify(OVER), { status: 429 })];
+  const f = async (url: string, init?: RequestInit) => {
+    calls.push({ url, key: new Headers(init?.headers).get("x-toll-pass") });
+    return rs.shift()!;
+  };
+  const t = tollTools({ fetch: f, tollKey: "tk_3" });
+  assert.deepEqual(JSON.parse(String(await t.institutions!.execute!({ id: "NVDA", limit: 5 }, opts))), { ticker: "NVDA" });
+  assert.deepEqual(JSON.parse(String(await t.guidance!.execute!({ id: "$AAPL", limit: 10 }, opts))), { ticker: "NVDA" });
+  assert.deepEqual(calls, [
+    { url: "https://t0ll.xyz/api/markets/institutions/NVDA?limit=5", key: "tk_3" },
+    { url: "https://t0ll.xyz/api/markets/guidance/AAPL?limit=10", key: "tk_3" },
+  ]);
+  assert.match(String(await t.guidance!.execute!({ id: "NVDA" }, opts)), /https:\/\/t0ll\.xyz\/api\/x402\/markets\/guidance\/NVDA \(0\.01 USDG on Robinhood Chain/);
 });
 
 test("only: returns a subset", () => {

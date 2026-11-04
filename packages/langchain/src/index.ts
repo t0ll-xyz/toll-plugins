@@ -1,5 +1,5 @@
 /**
- * @tollxyz/langchain - Toll coin and agent checks as LangChain JS tools (createAgent, LangGraph ToolNode).
+ * @tollxyz/langchain - Toll's checks on Robinhood Chain (coins, agents, pre-sign, Stock Token data) as LangChain JS tools (createAgent, LangGraph ToolNode).
  * Information only, not financial advice.
  */
 import { tool, type StructuredToolInterface } from "@langchain/core/tools";
@@ -13,9 +13,14 @@ export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
-  /** A ready Toll client (for example with a custom fetch). Default: new Toll(). */
+  /** A ready Toll client (for example with a custom fetch). Default: new Toll({ tollKey }). */
   client?: Toll;
-  /** Which tools to return. Default: all eight. */
+  /**
+   * A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every call: carries the key wallet's daily tier
+   * (more new coins and Markets calls a day, the live stock_events feed). Ignored when client is given.
+   */
+  tollKey?: string;
+  /** Which tools to return. Default: all eighteen. */
   only?: TollToolName[];
 }
 
@@ -24,7 +29,7 @@ export interface TollToolsOptions {
  * Each tool returns Toll's text; the model decides what it means.
  */
 export function tollTools(opts: TollToolsOptions = {}): StructuredToolInterface[] {
-  const run = runners(opts.client ?? new Toll());
+  const run = runners(opts.client ?? new Toll({ tollKey: opts.tollKey }));
   return pick(opts.only).map(
     (name) =>
       tool(run[name] as (input: any) => Promise<string>, {

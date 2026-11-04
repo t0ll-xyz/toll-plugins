@@ -1,14 +1,49 @@
 /**
- * @tollxyz/agentkit - Toll coin checks as a Coinbase AgentKit action provider.
+ * @tollxyz/agentkit - Toll's checks on Robinhood Chain as a Coinbase AgentKit action provider.
  * Information only, not financial advice.
  */
 import { ActionProvider, CreateAction, type Network } from "@coinbase/agentkit";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
 import { z } from "zod";
 import { formatResult } from "./format.js";
-import { MACRO_NOTE, MARKETS_NOTE, fundamentals, insiderTrades, macro, stockToken, stockTokens, withTollKey, type FetchLike } from "./markets.js";
+import { LIVE_DESCRIPTIONS } from "./live.js";
+import {
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  fundamentals,
+  guidance,
+  insiderTrades,
+  institutions,
+  macro,
+  stockToken,
+  stockTokens,
+  withTollKey,
+  type FetchLike,
+} from "./markets.js";
+import {
+  ChainPulseSchema,
+  CheckAgentSchema,
+  CheckCoinSchema,
+  CheckTxSchema,
+  DevRecordSchema,
+  FreshLaunchesSchema,
+  FundamentalsSchema,
+  GuidanceSchema,
+  InsiderTradesSchema,
+  InstitutionsSchema,
+  LarpCheckSchema,
+  LaunchRecordSchema,
+  MacroSchema,
+  PresignRiskReportSchema,
+  StockEventsSchema,
+  StockTokenSchema,
+  StockTokensSchema,
+  WalletPrivacySchema,
+} from "./schemas.js";
 
 export { formatResult } from "./format.js";
+export { LIVE_DESCRIPTIONS, STOCK_EVENT_KINDS } from "./live.js";
+export * from "./schemas.js";
 export {
   FACTS_NOTE,
   MACRO_NOTE,
@@ -21,6 +56,8 @@ export {
   stockTokens,
   fundamentals,
   insiderTrades,
+  institutions,
+  guidance,
   macro,
   type FundamentalsPeriod,
   type MarketsOptions,
@@ -28,41 +65,6 @@ export {
 } from "./markets.js";
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
-
-const address = z.string().describe("Token contract address: 0x + 40 hex on Robinhood Chain or BSC, or a Solana base58 mint.");
-const wallet = z.string().describe("Wallet address: 0x + 40 hex.");
-
-export const CheckCoinSchema = z.object({
-  address,
-  chain: z.enum(["rh", "sol", "bsc"]).optional().describe("rh = Robinhood Chain, sol = Solana, bsc = BSC. Leave out and Toll finds the chain."),
-});
-export const LarpCheckSchema = z.object({
-  token: address,
-  chain: z.enum(["rh", "sol"]).optional().describe("rh = Robinhood Chain, sol = Solana."),
-});
-export const DevRecordSchema = z.object({
-  wallet,
-  chain: z.enum(["rh", "bsc"]).optional().describe("Default rh (Robinhood Chain)."),
-});
-export const LaunchRecordSchema = z.object({ address: z.string().describe("Token contract address on Robinhood Chain (0x + 40 hex).") });
-export const FreshLaunchesSchema = z.object({ limit: z.number().int().min(1).max(20).optional().describe("How many coins, 1 to 20.") });
-export const ChainPulseSchema = z.object({});
-export const StockTokenSchema = z.object({
-  id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-});
-export const StockTokensSchema = z.object({
-  query: z.string().optional().describe("Optional: part of a ticker or company name to filter by (for example nvid)."),
-  limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
-});
-export const FundamentalsSchema = z.object({
-  id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-  period: z.enum(["ttm", "annual", "quarterly"]).optional().describe("Optional period: ttm = trailing twelve months, annual = fiscal years, quarterly = quarters."),
-});
-export const InsiderTradesSchema = z.object({
-  id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-  limit: z.number().int().min(1).max(100).optional().describe("How many Form 4 rows, 1 to 100, newest first."),
-});
-export const MacroSchema = z.object({});
 
 export interface TollActionProviderOptions {
   /** A ready Toll client for the MCP actions (its own fetch). Default: a client that sends tollKey. */
@@ -82,8 +84,8 @@ async function run(fn: () => Promise<TollResult>): Promise<string> {
 }
 
 /**
- * Action provider for Toll. Action names AgentKit shows the model are prefixed with the class name,
- * for example `TollActionProvider_check_coin`.
+ * Action provider for Toll (Robinhood Chain, chain id 4663). Action names AgentKit shows the model are prefixed with the
+ * class name, for example `TollActionProvider_check_coin`.
  */
 export class TollActionProvider extends ActionProvider {
   private readonly client: Toll;
@@ -99,10 +101,14 @@ export class TollActionProvider extends ActionProvider {
     this.client = o.client ?? new Toll({ fetch: withTollKey(this.fetchFn, o.tollKey) });
   }
 
+  private get markets() {
+    return { fetch: this.fetchFn, tollKey: this.tollKey };
+  }
+
   @CreateAction({
     name: "check_coin",
     description:
-      "Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Information only, not advice.",
+      "Before buying a token on Robinhood Chain, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Robinhood Chain (4663) only. Information only, not advice.",
     schema: CheckCoinSchema,
   })
   async checkCoin(args: z.infer<typeof CheckCoinSchema>): Promise<string> {
@@ -112,7 +118,7 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({
     name: "larp_check",
     description:
-      "Is there a real product behind this coin? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: product found, partly found, not found or not read. Robinhood Chain and Solana. Information only, not advice.",
+      "Is there a real product behind this coin on Robinhood Chain? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: product found, partly found, not found or not read. Information only, not advice.",
     schema: LarpCheckSchema,
   })
   async larpCheck(args: z.infer<typeof LarpCheckSchema>): Promise<string> {
@@ -122,17 +128,22 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({
     name: "dev_record",
     description:
-      "A launcher wallet's record: how many coins it launched, how many graduated, and whether it sold. Robinhood Chain (default) or BSC. Information only, not advice.",
+      "A launcher wallet's record on Robinhood Chain: how many coins it launched, how many graduated, and whether it sold. Information only, not advice.",
     schema: DevRecordSchema,
   })
   async devRecord(args: z.infer<typeof DevRecordSchema>): Promise<string> {
     return run(() => this.client.devRecord(args.wallet, args.chain ? { chain: args.chain } : {}));
   }
 
+  @CreateAction({ name: "wallet_privacy", description: LIVE_DESCRIPTIONS.wallet_privacy, schema: WalletPrivacySchema })
+  async walletPrivacy(args: z.infer<typeof WalletPrivacySchema>): Promise<string> {
+    return run(() => this.client.walletPrivacy(args.wallet));
+  }
+
   @CreateAction({
     name: "launch_record",
     description:
-      "The call Toll froze 3 minutes after a Robinhood Chain coin launched, and how it ended 24 hours later. It is not the coin now (use check_coin for that).",
+      "The call Toll froze a few minutes after a Robinhood Chain coin launched, and how it ended 24 hours later. It is not the coin now (use check_coin for that).",
     schema: LaunchRecordSchema,
   })
   async launchRecord(args: z.infer<typeof LaunchRecordSchema>): Promise<string> {
@@ -157,13 +168,28 @@ export class TollActionProvider extends ActionProvider {
     return run(() => this.client.chainPulse());
   }
 
+  @CreateAction({ name: "check_agent", description: LIVE_DESCRIPTIONS.check_agent, schema: CheckAgentSchema })
+  async checkAgent(args: z.infer<typeof CheckAgentSchema>): Promise<string> {
+    return run(() => this.client.checkAgent(args.id));
+  }
+
+  @CreateAction({ name: "check_tx", description: LIVE_DESCRIPTIONS.check_tx, schema: CheckTxSchema })
+  async checkTx(args: z.infer<typeof CheckTxSchema>): Promise<string> {
+    return run(() => this.client.checkTx(args));
+  }
+
+  @CreateAction({ name: "presign_risk_report", description: LIVE_DESCRIPTIONS.presign_risk_report, schema: PresignRiskReportSchema })
+  async presignRiskReport(args: z.infer<typeof PresignRiskReportSchema>): Promise<string> {
+    return run(() => this.client.presignRiskReport(args));
+  }
+
   @CreateAction({
     name: "stock_token",
     description: `One Robinhood Stock Token on Robinhood Chain by ticker or contract: Chainlink's reference price with the US session, the deepest pool's price and liquidity, supply, the multiplier, corporate actions and the company's SEC facts, each with its source and time. ${MARKETS_NOTE}`,
     schema: StockTokenSchema,
   })
   async stockToken(args: z.infer<typeof StockTokenSchema>): Promise<string> {
-    return stockToken(args.id, { fetch: this.fetchFn, tollKey: this.tollKey });
+    return stockToken(args.id, this.markets);
   }
 
   @CreateAction({
@@ -172,7 +198,7 @@ export class TollActionProvider extends ActionProvider {
     schema: StockTokensSchema,
   })
   async stockTokens(args: z.infer<typeof StockTokensSchema>): Promise<string> {
-    return stockTokens({ query: args.query, limit: args.limit }, { fetch: this.fetchFn, tollKey: this.tollKey });
+    return stockTokens({ query: args.query, limit: args.limit }, this.markets);
   }
 
   @CreateAction({
@@ -181,7 +207,7 @@ export class TollActionProvider extends ActionProvider {
     schema: FundamentalsSchema,
   })
   async fundamentals(args: z.infer<typeof FundamentalsSchema>): Promise<string> {
-    return fundamentals({ id: args.id, period: args.period }, { fetch: this.fetchFn, tollKey: this.tollKey });
+    return fundamentals({ id: args.id, period: args.period }, this.markets);
   }
 
   @CreateAction({
@@ -190,7 +216,17 @@ export class TollActionProvider extends ActionProvider {
     schema: InsiderTradesSchema,
   })
   async insiderTrades(args: z.infer<typeof InsiderTradesSchema>): Promise<string> {
-    return insiderTrades({ id: args.id, limit: args.limit }, { fetch: this.fetchFn, tollKey: this.tollKey });
+    return insiderTrades({ id: args.id, limit: args.limit }, this.markets);
+  }
+
+  @CreateAction({ name: "institutions", description: `${LIVE_DESCRIPTIONS.institutions} ${MARKETS_NOTE}`, schema: InstitutionsSchema })
+  async institutions(args: z.infer<typeof InstitutionsSchema>): Promise<string> {
+    return institutions({ id: args.id, limit: args.limit }, this.markets);
+  }
+
+  @CreateAction({ name: "guidance", description: `${LIVE_DESCRIPTIONS.guidance} ${MARKETS_NOTE}`, schema: GuidanceSchema })
+  async guidance(args: z.infer<typeof GuidanceSchema>): Promise<string> {
+    return guidance({ id: args.id, limit: args.limit }, this.markets);
   }
 
   @CreateAction({
@@ -199,7 +235,12 @@ export class TollActionProvider extends ActionProvider {
     schema: MacroSchema,
   })
   async macro(_args: z.infer<typeof MacroSchema>): Promise<string> {
-    return macro({ fetch: this.fetchFn, tollKey: this.tollKey });
+    return macro(this.markets);
+  }
+
+  @CreateAction({ name: "stock_events", description: `${LIVE_DESCRIPTIONS.stock_events} ${MARKETS_NOTE}`, schema: StockEventsSchema })
+  async stockEvents(args: z.infer<typeof StockEventsSchema>): Promise<string> {
+    return run(() => this.client.stockEvents(args));
   }
 
   /** Toll reads public chain data, so it works whatever network the agent's wallet is on. */

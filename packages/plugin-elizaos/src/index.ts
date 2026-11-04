@@ -1,15 +1,18 @@
 /**
- * @tollxyz/plugin-elizaos - Toll coin checks for elizaOS agents.
+ * @tollxyz/plugin-elizaos - Toll's checks on Robinhood Chain for elizaOS agents.
  * Information only, not financial advice.
  */
 import type { Action, HandlerCallback, IAgentRuntime, Memory, Plugin, Provider, State } from "@elizaos/core";
-import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
-import { extractAddress, extractStockId, extractWallet, formatResult } from "./format.js";
+import { RH_ONLY, STOCK_EVENT_KINDS, Toll, TollError, type StockEventKind, type TollResult } from "@tollxyz/sdk";
+import { extractAddress, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
+import { LIVE_DESCRIPTIONS } from "./live.js";
 import {
   MACRO_NOTE,
   MARKETS_NOTE,
   fundamentals,
+  guidance,
   insiderTrades,
+  institutions,
   macro,
   stockToken,
   stockTokens,
@@ -19,7 +22,8 @@ import {
   type MarketsOptions,
 } from "./markets.js";
 
-export { extractAddress, extractStockId, extractWallet, formatResult } from "./format.js";
+export { extractAddress, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
+export { LIVE_DESCRIPTIONS } from "./live.js";
 export {
   FACTS_NOTE,
   MACRO_NOTE,
@@ -32,6 +36,8 @@ export {
   stockTokens,
   fundamentals,
   insiderTrades,
+  institutions,
+  guidance,
   macro,
   type FundamentalsPeriod,
   type MarketsOptions,
@@ -85,6 +91,21 @@ function contextResolver(client: Toll | undefined, opts: Omit<TollPluginOptions,
 const FUNDAMENTALS_WORDS = /\b(fundamentals?|financials?|revenue|sales|earnings|eps|profits?|margins?|income statement|balance sheet|valuation|p\/?e|price[ -]to[ -]earnings)(?![A-Za-z])/i;
 /** Words that ask for insider trades. */
 const INSIDER_WORDS = /\b(insiders?|form\s*4)\b/i;
+/** Words that ask for 13F institutional holders. */
+const INSTITUTION_WORDS = /\b(13f|institutions?|institutional|fund holders|who owns)\b/i;
+/** Words that ask for earnings-release guidance and KPIs. */
+const GUIDANCE_WORDS = /\b(guidance|outlook|forecast|kpis?|non-?gaap|earnings release)\b/i;
+/** Words that ask for the Stock Token event feed. */
+const EVENT_WORDS = /\b(stock (?:token )?events?|events? feed|listings?|delist(?:ed|ings?)?|multiplier|corporate actions?|feed (?:stale|paused|resumed)|new filings?)\b/i;
+/** Words that ask what a wallet gives away. */
+const PRIVACY_WORDS = /\b(privacy|private|exposed?|exposure|dox(?:x)?(?:ed)?|what can (?:anyone|people|someone) (?:see|learn))\b/i;
+/** Words that ask for the call Toll froze at launch. */
+const LAUNCH_RECORD_WORDS = /\b(launch record|call at launch|at launch|frozen call|launch call)\b/i;
+/** Words that ask for the newest coins. */
+const FRESH_WORDS = /\b(new(?:est)? (?:coins|launches|tokens)|fresh launches|latest (?:coins|launches)|just launched)\b/i;
+/** Words that ask how busy the chain is. */
+const PULSE_WORDS = /\b(chain pulse|pulse|how busy|activity on (?:the )?chain|launches (?:today|right now))\b/i;
+
 /** Words that ask for US macro. */
 const MACRO_WORDS =
   /\b(macro|interest rates?|rates|inflation|cpi|yield curve|yields|treasur(?:y|ies)|fed funds|federal funds|effr|jobs|payrolls|nonfarm|unemployment)\b/i;
@@ -122,7 +143,7 @@ function makeAction(
         // The runtime can pick an action without validate (for example "check 0x1234"): say what is missing.
         if (!spec.canRun(textOf(message))) {
           throw new TollError(
-            spec.missing ?? `No valid address in the message for ${spec.name}: send the full 0x address (40 hex characters) or Solana mint.`,
+            spec.missing ?? `No Robinhood Chain address in the message for ${spec.name}: send the full 0x address (40 hex characters). ${RH_ONLY}`,
           );
         }
         const out = await spec.run(resolve(rt), textOf(message));
@@ -154,42 +175,109 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       name: "TOLL_CHECK_COIN",
       similes: ["CHECK_COIN", "CHECK_TOKEN", "WHO_IS_BEHIND_COIN", "TOLL_CHECK"],
       description:
-        "Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Needs the token contract address in the message. Information only, not advice.",
+        "Before buying a token on Robinhood Chain, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Needs the token's 0x contract address in the message. Robinhood Chain (4663) only. Information only, not advice.",
       canRun: (t) => extractAddress(t) !== null,
-      run: ({ client: c }, t) => {
-        const a = extractAddress(t)!;
-        return c.checkCoin(a.address, a.chain ? { chain: a.chain } : {});
-      },
+      run: ({ client: c }, t) => c.checkCoin(extractAddress(t)!.address),
       example: [`check this coin before I buy ${CA}`, "Here is what Toll read from the chain for that token."],
     }),
     makeAction(resolve, {
       name: "TOLL_LARP_CHECK",
       similes: ["LARP_CHECK", "IS_THERE_A_PRODUCT", "PRODUCT_CHECK"],
       description:
-        "Is there a real product behind this coin? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: found, partly found, not found or not read. Robinhood Chain and Solana. Information only, not advice.",
+        "Is there a real product behind this coin on Robinhood Chain? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: found, partly found, not found or not read. Needs the token's 0x contract address. Information only, not advice.",
       canRun: (t) => extractAddress(t) !== null,
-      run: async ({ client: c }, t) => {
-        const a = extractAddress(t)!;
-        if (a.chain === "bsc") {
-          // Nothing is sent: the LARP check does not read BSC.
-          return { text: "The LARP check covers Robinhood Chain and Solana, not BSC. TOLL_CHECK_COIN reads BSC coins.", paidUrl: null, pending: null };
-        }
-        const chain = a.chain === "sol" ? "sol" : a.chain === "rh" ? "rh" : undefined;
-        return c.larpCheck(a.address, { wait: true, ...(chain ? { chain } : {}) });
-      },
+      run: ({ client: c }, t) => c.larpCheck(extractAddress(t)!.address, { wait: true }),
       example: [`is there a real product behind ${CA}?`, "Here is Toll's LARP check for that coin."],
     }),
     makeAction(resolve, {
       name: "TOLL_DEV_RECORD",
       similes: ["DEV_RECORD", "DEV_HISTORY", "WALLET_LAUNCH_HISTORY"],
       description:
-        "A launcher wallet's record: how many coins it launched, how many graduated, and whether it sold. Needs a 0x wallet address in the message. Robinhood Chain (default) or BSC. Information only, not advice.",
+        "A launcher wallet's record on Robinhood Chain: how many coins it launched, how many graduated, and whether it sold. Needs a 0x wallet address in the message. Information only, not advice.",
       canRun: (t) => extractWallet(t) !== null,
-      run: ({ client: c }, t) => {
-        const w = extractWallet(t)!;
-        return c.devRecord(w.wallet, w.chain ? { chain: w.chain } : {});
-      },
+      run: ({ client: c }, t) => c.devRecord(extractWallet(t)!.wallet),
       example: [`what has the dev ${DEV} launched before?`, "Here is that wallet's launch record from Toll."],
+    }),
+    makeAction(resolve, {
+      name: "TOLL_WALLET_PRIVACY",
+      similes: ["WALLET_PRIVACY", "PRIVACY_CHECK", "WHAT_CAN_ANYONE_SEE"],
+      description: `${LIVE_DESCRIPTIONS.wallet_privacy} Needs a word like privacy or exposed and a 0x wallet in the message.`,
+      canRun: (t) => PRIVACY_WORDS.test(t) && extractWallet(t) !== null,
+      run: ({ client: c }, t) => c.walletPrivacy(extractWallet(t)!.wallet),
+      example: [`how exposed is my wallet ${DEV}? what can anyone learn?`, "Here is Toll's privacy read of that wallet."],
+      missing: "No wallet in the message for TOLL_WALLET_PRIVACY: send the 0x wallet (40 hex characters) with a word like privacy.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_LAUNCH_RECORD",
+      similes: ["LAUNCH_RECORD", "CALL_AT_LAUNCH"],
+      description:
+        "The call Toll froze a few minutes after a Robinhood Chain coin launched, and how it ended 24 hours later. It is not the coin now (TOLL_CHECK_COIN reads that). Needs the words launch record or at launch and the token's 0x address.",
+      canRun: (t) => LAUNCH_RECORD_WORDS.test(t) && extractAddress(t) !== null,
+      run: ({ client: c }, t) => c.launchRecord(extractAddress(t)!.address),
+      example: [`what was Toll's call at launch for ${CA}?`, "Here is the call Toll froze at launch, and how it ended."],
+      missing: "No token in the message for TOLL_LAUNCH_RECORD: send the token's 0x address with the words launch record.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_FRESH_LAUNCHES",
+      similes: ["FRESH_LAUNCHES", "NEW_COINS", "NEWEST_COINS"],
+      description:
+        "The newest coins launched on Robinhood Chain, with the first facts Toll reads about each. Runs when the message asks for new coins or fresh launches; \"top 5\" sets how many (1 to 20).",
+      canRun: (t) => FRESH_WORDS.test(t),
+      run: ({ client: c }, t) => {
+        const n = /\b(?:top|first|last|latest|limit)\s+(\d{1,2})\b/i.exec(t)?.[1];
+        return c.freshLaunches(n ? Math.min(20, Math.max(1, Number(n))) : undefined);
+      },
+      example: ["what are the newest coins on Robinhood Chain?", "Here are the newest launches Toll read."],
+      missing: "TOLL_FRESH_LAUNCHES runs when the message asks for new coins or fresh launches.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_CHAIN_PULSE",
+      similes: ["CHAIN_PULSE", "HOW_BUSY_IS_THE_CHAIN"],
+      description: "How busy Robinhood Chain is right now: launches, graduations and trades. Runs when the message asks how busy the chain is.",
+      canRun: (t) => PULSE_WORDS.test(t),
+      run: ({ client: c }) => c.chainPulse(),
+      example: ["how busy is Robinhood Chain right now?", "Here is Toll's live count of launches, graduations and trades."],
+      missing: "TOLL_CHAIN_PULSE runs when the message asks how busy the chain is.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_CHECK_AGENT",
+      similes: ["CHECK_AGENT", "ERC8004_AGENT", "AGENT_CHECK"],
+      description: `${LIVE_DESCRIPTIONS.check_agent} Needs the agent id in the message (agent 20030 or agent #20030).`,
+      canRun: (t) => extractAgentId(t) !== null,
+      run: ({ client: c }, t) => c.checkAgent(extractAgentId(t)!),
+      example: ["check agent #20030 before I pay it", "Here is what Toll's agent census read for agent #20030."],
+      missing: "No agent id in the message for TOLL_CHECK_AGENT: write agent 20030 or agent #20030.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_CHECK_TX",
+      similes: ["CHECK_TX", "PRESIGN_CHECK", "CHECK_BEFORE_SIGNING"],
+      description: `${LIVE_DESCRIPTIONS.check_tx} Needs the request as JSON in the message: {to, data, value, from}, {typedData: {...}} or {x402: {...}}.`,
+      canRun: (t) => {
+        const j = extractJson(t);
+        return j !== null && j.version !== "erc-presign/1" && ("to" in j || "typedData" in j || "x402" in j || "accepts" in j);
+      },
+      run: ({ client: c }, t) => {
+        const j = extractJson(t)!;
+        // A pasted 402 body (with accepts) is the x402 payment itself.
+        return c.checkTx(("accepts" in j && !("x402" in j) ? { x402: j } : j) as Parameters<Toll["checkTx"]>[0]);
+      },
+      example: [
+        'check this before I sign: {"to":"0xff9e86e6b21fd688027981bee4b64c8b6b804ed3","data":"0x","value":"0","from":"0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc"}',
+        "Toll's pre-sign check answered with its reasons.",
+      ],
+      missing: "No request in the message for TOLL_CHECK_TX: paste it as JSON ({to, data, value, from}, {typedData} or {x402}).",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_PRESIGN_RISK_REPORT",
+      similes: ["PRESIGN_RISK_REPORT", "PRESIGN_REPORT"],
+      description: `${LIVE_DESCRIPTIONS.presign_risk_report} Needs the PresignRequest as JSON in the message.`,
+      canRun: (t) => extractJson(t)?.version === "erc-presign/1",
+      run: ({ client: c }, t) => c.presignRiskReport(extractJson(t)! as unknown as Parameters<Toll["presignRiskReport"]>[0]),
+      example: [
+        'presign report for {"version":"erc-presign/1","subject":{"type":"calls","chainId":"eip155:4663","from":"eip155:4663:0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc","calls":[{"to":"0xff9e86e6b21fd688027981bee4b64c8b6b804ed3","value":"0","data":"0x"}]}}',
+        "Here is Toll's signed pre-sign report: facts, no verdict.",
+      ],
+      missing: 'No PresignRequest in the message for TOLL_PRESIGN_RISK_REPORT: paste it as JSON with "version": "erc-presign/1".',
     }),
     makeAction(resolve, {
       name: "TOLL_STOCK_TOKEN",
@@ -240,6 +328,40 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       missing: "No company in the message for TOLL_INSIDER_TRADES: name the ticker (NVDA or $NVDA) or the Stock Token's 0x contract, with the word insider or Form 4.",
     }),
     makeAction(resolve, {
+      name: "TOLL_INSTITUTIONS",
+      similes: ["INSTITUTIONS", "INSTITUTIONAL_HOLDERS", "13F"],
+      description: `${LIVE_DESCRIPTIONS.institutions} Needs a word like 13F or institutions and a ticker (NVDA, $NVDA) or 0x contract in the message; "top 5" sets how many (1 to 20). Answers with Toll's JSON. ${MARKETS_NOTE}`,
+      canRun: (t) => INSTITUTION_WORDS.test(t) && extractStockId(t) !== null,
+      run: ({ markets }, t) => {
+        const n = /\b(?:top|first|limit)\s+(\d{1,2})\b/i.exec(t)?.[1];
+        const limit = n ? Math.min(20, Math.max(1, Number(n))) : undefined;
+        return institutions({ id: extractStockId(t)!, ...(limit ? { limit } : {}) }, markets);
+      },
+      example: ["who are the top institutional holders of $NVDA?", "Here are NVIDIA's 13F holders for the latest quarter, as SEC published them."],
+      missing: "No company in the message for TOLL_INSTITUTIONS: name the ticker (NVDA or $NVDA) or the Stock Token's 0x contract, with a word like 13F or institutions.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_GUIDANCE",
+      similes: ["GUIDANCE", "EARNINGS_GUIDANCE", "KPIS", "OUTLOOK"],
+      description: `${LIVE_DESCRIPTIONS.guidance} Needs a word like guidance, outlook or KPIs and a ticker (NVDA, $NVDA) or 0x contract in the message. Answers with Toll's JSON. ${MARKETS_NOTE}`,
+      canRun: (t) => GUIDANCE_WORDS.test(t) && extractStockId(t) !== null,
+      run: ({ markets }, t) => guidance({ id: extractStockId(t)! }, markets),
+      example: ["what guidance did NVDA give in its last earnings release?", "Here is what NVIDIA said in its last earnings releases, each value with its quote and filing."],
+      missing: "No company in the message for TOLL_GUIDANCE: name the ticker (NVDA or $NVDA) or the Stock Token's 0x contract, with a word like guidance or KPIs.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_STOCK_EVENTS",
+      similes: ["STOCK_EVENTS", "STOCK_TOKEN_EVENTS", "STOCK_TOKEN_FEED"],
+      description: `${LIVE_DESCRIPTIONS.stock_events} Runs when the message asks for Stock Token events, listings, multiplier changes, corporate actions or new filings; a kind named in the message (filing, listed, ...) filters. ${MARKETS_NOTE}`,
+      canRun: (t) => EVENT_WORDS.test(t),
+      run: ({ client: c }, t) => {
+        const kind = STOCK_EVENT_KINDS.find((k) => new RegExp(`\\b${k}\\b`, "i").test(t)) as StockEventKind | undefined;
+        return c.stockEvents(kind ? { kind } : {});
+      },
+      example: ["any new stock token events or listings?", "Here are the latest Stock Token events Toll found, oldest first."],
+      missing: "TOLL_STOCK_EVENTS runs when the message asks for Stock Token events, listings or filings.",
+    }),
+    makeAction(resolve, {
       name: "TOLL_MACRO",
       similes: ["MACRO", "US_MACRO", "INTEREST_RATES", "YIELD_CURVE", "INFLATION"],
       description: `US macro facts: the Treasury daily par yield curve (latest day and 30 days), the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. Runs when the message asks about macro, rates, inflation, the yield curve or jobs. Answers with Toll's JSON. ${MACRO_NOTE}`,
@@ -260,9 +382,9 @@ export function createTollProvider(): Provider {
       const a = extractAddress(textOf(message));
       if (!a) return { text: "", values: {}, data: {} };
       return {
-        text: `A token address (${a.address}) is in the message. Toll can check who is behind it (actions TOLL_CHECK_COIN, TOLL_LARP_CHECK). Information only, not advice.`,
+        text: `A token address (${a.address}) is in the message. Toll can check who is behind it on Robinhood Chain (actions TOLL_CHECK_COIN, TOLL_LARP_CHECK). Information only, not advice.`,
         values: { tollAddress: a.address },
-        data: { address: a.address, ...(a.chain ? { chain: a.chain } : {}) },
+        data: { address: a.address },
       };
     },
   };
@@ -273,7 +395,7 @@ export function createTollPlugin(opts: TollPluginOptions = {}): Plugin {
   return {
     name: "toll",
     description:
-      "Toll coin checks for Robinhood Chain, Solana and BSC: who is behind a coin, the dev's record, whether there is a real product; and Robinhood Stock Token facts, the companies' SEC fundamentals and insider trades, and US macro, with their sources. Information only, not advice.",
+      "Toll's checks on Robinhood Chain (4663): who is behind a coin, the dev's record, whether there is a real product, a wallet's privacy, ERC-8004 agents, a pre-sign check before signing (ALLOW / WARN / BLOCK) and the signed pre-sign report; and Robinhood Stock Token facts, the companies' SEC fundamentals, insider trades, 13F holders and earnings guidance, the Stock Token event feed and US macro, with their sources. Information only, not advice.",
     actions: createTollActions(client, rest),
     providers: [createTollProvider()],
   };

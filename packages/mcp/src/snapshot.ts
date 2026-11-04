@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-03). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-04). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -6,24 +6,21 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "check_coin",
     "title": "Check a coin",
-    "description": "Check one token on Robinhood Chain, Arc, BSC or Solana from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. On Arc, BSC: the launch, the dev's record, the first buyers, wallets that moved together, who holds the liquidity and whether it can be pulled, and the market. On BSC (four.meme and flap.sh coins): also how far along its curve it is and the tax the token declares. On Solana (pump.fun coins): mint and freeze authority, metadata, Token-2022 extensions, the creation slot and first 3 seconds, the dev's launch buy and whether it sold, its other pump.fun coins, the curve or graduation, the top holders and who first funded them. Toll's findings are tallied as against / careful / clear. The answer's first line names the chain. Reads Robinhood Chain (4663), Arc (5042), BSC (56) and Solana.",
+    "description": "Check one token on Robinhood Chain from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. Toll's findings are tallied as against / careful / clear. The answer's first line names the chain. Reads Robinhood Chain (4663).",
     "inputSchema": {
       "type": "object",
       "properties": {
         "address": {
           "type": "string",
-          "pattern": "^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$",
-          "description": "The token contract address (a Solana mint address works too): 0x followed by 40 hex characters, or a Solana mint address (base58, case-sensitive)"
+          "pattern": "^0x[0-9a-fA-F]{40}$",
+          "description": "The token contract address: 0x followed by 40 hex characters"
         },
         "chain": {
           "type": "string",
           "enum": [
-            "rh",
-            "arc",
-            "bsc",
-            "sol"
+            "rh"
           ],
-          "description": "Which chain: rh = Robinhood Chain (4663), arc = Arc (5042), bsc = BSC (56), sol = Solana. Leave it out and Toll finds which chain the token is on."
+          "description": "Which chain: rh = Robinhood Chain (4663). Leave it out for Robinhood Chain."
         }
       },
       "required": [
@@ -43,22 +40,21 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "larp_check",
     "title": "LARP check",
-    "description": "LARP check: is there a real product behind a coin on Robinhood Chain or Solana? Toll reads the coin's own site, launch post and code README, lists each thing it says it offers, and checks every claim against the chain and against its working parts that Toll tries itself (app page, API, MCP server, x402 payments, Chrome extension, Telegram bot, public code). Answers the label (product found / partly found / not found / not read: what we could check, never a verdict), each claim with found / partly / not found and the line that shows it, and the working parts that answered. A coin nobody asked about yet is queued and read within minutes: the answer says how many seconds to wait before calling again. Free: 10 new coins a day per caller, coins already read are always free.",
+    "description": "LARP check: is there a real product behind a coin on Robinhood Chain? Toll reads the coin's own site, launch post and code README, lists each thing it says it offers, and checks every claim against the chain and against its working parts that Toll tries itself (app page, API, MCP server, x402 payments, Chrome extension, Telegram bot, public code). Answers the label (product found / partly found / not found / not read: what we could check, never a verdict), each claim with found / partly / not found and the line that shows it, and the working parts that answered. A coin nobody asked about yet is queued and read within minutes: the answer says how many seconds to wait before calling again. Free: 10 new coins a day per caller, coins already read are always free.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "token": {
           "type": "string",
-          "pattern": "^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$",
-          "description": "The coin: its token contract on Robinhood Chain, or its Solana mint: 0x followed by 40 hex characters, or a Solana mint address (base58, case-sensitive)"
+          "pattern": "^0x[0-9a-fA-F]{40}$",
+          "description": "The coin: its token contract on Robinhood Chain: 0x followed by 40 hex characters"
         },
         "chain": {
           "type": "string",
           "enum": [
-            "rh",
-            "sol"
+            "rh"
           ],
-          "description": "Which chain: rh = Robinhood Chain, sol = Solana. Leave it out and Toll tells them apart by the address (0x is Robinhood Chain, base58 is Solana)."
+          "description": "Which chain: rh = Robinhood Chain. Leave it out for Robinhood Chain."
         }
       },
       "required": [
@@ -78,7 +74,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "dev_record",
     "title": "Deployer record",
-    "description": "Every coin one wallet launched on Robinhood Chain, Arc or BSC. On Robinhood Chain (Pons and Long launchpads): how many, how many graduated from the bonding curve, whether the dev sold, and the latest launches with how each ended. On Arc, BSC: how many it launched through the launchpads we know and which of them it still holds. Reads Robinhood Chain unless chain names another.",
+    "description": "Every coin one wallet launched on Robinhood Chain. On Robinhood Chain (Pons and Long launchpads): how many, how many graduated from the bonding curve, whether the dev sold, and the latest launches with how each ended. Reads Robinhood Chain.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -90,11 +86,9 @@ export const SNAPSHOT_TOOLS: Tool[] = [
         "chain": {
           "type": "string",
           "enum": [
-            "rh",
-            "arc",
-            "bsc"
+            "rh"
           ],
-          "description": "Which chain: rh = Robinhood Chain (4663), arc = Arc (5042), bsc = BSC (56). Leave it out for Robinhood Chain."
+          "description": "Which chain: rh = Robinhood Chain (4663). Leave it out for Robinhood Chain."
         }
       },
       "required": [
@@ -215,9 +209,17 @@ export const SNAPSHOT_TOOLS: Tool[] = [
       "type": "object",
       "properties": {
         "id": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 1000000000,
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]{1,10}$"
+            }
+          ],
           "description": "The agent id: its ERC-8004 token id in the Robinhood Chain identity registry (for example 20030)"
         }
       },

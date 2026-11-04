@@ -2,7 +2,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { Toll, TollError } from "@tollxyz/sdk";
+import { TOOL_NAMES, Toll, TollError } from "@tollxyz/sdk";
 import { TollActionProvider, tollActionProvider } from "../src/index.js";
 import * as Reexported from "../src/index.js";
 
@@ -28,11 +28,11 @@ function provider(responses: string[]) {
 const ok = (text: string) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
 const getAction = (p: TollActionProvider, suffix: string) => p.getActions({} as any).find((a) => a.name.endsWith(suffix))!;
 
-test("declares eleven actions with prefixed names and schemas", () => {
+test("declares all 18 live tools as actions with prefixed names and schemas", () => {
   const actions = new TollActionProvider().getActions({} as any);
   assert.deepEqual(
     actions.map((a) => a.name).sort(),
-    ["chain_pulse", "check_coin", "dev_record", "fresh_launches", "larp_check", "launch_record", "stock_token", "stock_tokens", "fundamentals", "insider_trades", "macro"].map((n) => `TollActionProvider_${n}`).sort(),
+    [...TOOL_NAMES].map((n) => `TollActionProvider_${n}`).sort(),
   );
   for (const a of actions) assert.ok(a.description.length > 30 && a.schema);
 });
@@ -43,13 +43,23 @@ test("supportsNetwork is true for any network", () => {
   assert.equal(p.supportsNetwork({ protocolFamily: "svm" }), true);
 });
 
-test("schemas reject bad input and never offer arc", () => {
-  const a = getAction(new TollActionProvider(), "check_coin");
-  assert.ok(a.schema.safeParse({ address: TOKEN, chain: "bsc" }).success);
-  assert.ok(!a.schema.safeParse({ address: TOKEN, chain: "arc" }).success);
-  assert.ok(!a.schema.safeParse({}).success);
-  const l = getAction(new TollActionProvider(), "larp_check");
-  assert.ok(!l.schema.safeParse({ token: TOKEN, chain: "bsc" }).success);
+test("schemas are Robinhood Chain only: chain is rh or left out", () => {
+  const p = new TollActionProvider();
+  for (const [n, k] of [["check_coin", "address"], ["larp_check", "token"], ["dev_record", "wallet"]] as const) {
+    const a = getAction(p, n);
+    assert.ok(a.schema.safeParse({ [k]: TOKEN }).success);
+    assert.ok(a.schema.safeParse({ [k]: TOKEN, chain: "rh" }).success);
+    for (const c of ["sol", "bsc", "arc"]) assert.ok(!a.schema.safeParse({ [k]: TOKEN, chain: c }).success, `${n} ${c}`);
+    assert.ok(!/Solana|BSC|Arc/.test(a.description), n);
+  }
+  assert.ok(!getAction(p, "check_coin").schema.safeParse({}).success);
+});
+
+test("a Solana mint is answered as text, never sent", async () => {
+  const { p, bodies } = provider([]);
+  const out = await getAction(p, "check_coin").invoke({ address: "So11111111111111111111111111111111111111112" });
+  assert.match(out, /Robinhood Chain only/);
+  assert.equal(bodies.length, 0);
 });
 
 test("check_coin invokes the server tool", async () => {

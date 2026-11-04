@@ -1,14 +1,30 @@
 /**
- * @tollxyz/goat-plugin - Toll coin checks as a GOAT SDK plugin.
+ * @tollxyz/goat-plugin - Toll's checks on Robinhood Chain as a GOAT SDK plugin.
  * Information only, not financial advice.
  */
 import { PluginBase, Tool, createToolParameters, type Chain } from "@goat-sdk/core";
 import { Toll, TollError, type TollResult } from "@tollxyz/sdk";
-import { z } from "zod";
 import { formatResult } from "./format.js";
-import { MACRO_NOTE, MARKETS_NOTE, fundamentals, insiderTrades, macro, stockToken, stockTokens, withTollKey, type FetchLike, type MarketsOptions } from "./markets.js";
+import { LIVE_DESCRIPTIONS } from "./live.js";
+import {
+  MACRO_NOTE,
+  MARKETS_NOTE,
+  fundamentals,
+  guidance,
+  insiderTrades,
+  institutions,
+  macro,
+  stockToken,
+  stockTokens,
+  withTollKey,
+  type FetchLike,
+  type MarketsOptions,
+} from "./markets.js";
+import { SCHEMAS } from "./schemas.js";
 
 export { formatResult } from "./format.js";
+export { LIVE_DESCRIPTIONS, STOCK_EVENT_KINDS } from "./live.js";
+export { SCHEMAS } from "./schemas.js";
 export {
   FACTS_NOTE,
   MACRO_NOTE,
@@ -21,6 +37,8 @@ export {
   stockTokens,
   fundamentals,
   insiderTrades,
+  institutions,
+  guidance,
   macro,
   type FundamentalsPeriod,
   type MarketsOptions,
@@ -29,54 +47,27 @@ export {
 export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
-const address = z.string().describe("Token contract address: 0x + 40 hex on Robinhood Chain or BSC, or a Solana base58 mint.");
-
-export class CheckCoinParams extends createToolParameters(
-  z.object({
-    address,
-    chain: z.enum(["rh", "sol", "bsc"]).optional().describe("rh = Robinhood Chain, sol = Solana, bsc = BSC. Leave out and Toll finds the chain."),
-  }),
-) {}
-export class LarpCheckParams extends createToolParameters(
-  z.object({
-    token: address,
-    chain: z.enum(["rh", "sol"]).optional().describe("rh = Robinhood Chain, sol = Solana."),
-  }),
-) {}
-export class DevRecordParams extends createToolParameters(
-  z.object({
-    wallet: z.string().describe("Wallet address: 0x + 40 hex."),
-    chain: z.enum(["rh", "bsc"]).optional().describe("Default rh (Robinhood Chain)."),
-  }),
-) {}
-
-export class StockTokenParams extends createToolParameters(
-  z.object({
-    id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-  }),
-) {}
-export class StockTokensParams extends createToolParameters(
-  z.object({
-    query: z.string().optional().describe("Optional: part of a ticker or company name to filter by (for example nvid)."),
-    limit: z.number().int().min(1).max(250).optional().describe("How many Stock Tokens, 1 to 250."),
-  }),
-) {}
-export class FundamentalsParams extends createToolParameters(
-  z.object({
-    id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-    period: z.enum(["ttm", "annual", "quarterly"]).optional().describe("Optional period: ttm = trailing twelve months, annual = fiscal years, quarterly = quarters."),
-  }),
-) {}
-export class InsiderTradesParams extends createToolParameters(
-  z.object({
-    id: z.string().describe("A stock ticker as Robinhood lists it (NVDA, AAPL, BRK.B) or the Stock Token's contract address on Robinhood Chain (0x + 40 hex)."),
-    limit: z.number().int().min(1).max(100).optional().describe("How many Form 4 rows, 1 to 100, newest first."),
-  }),
-) {}
-export class MacroParams extends createToolParameters(z.object({})) {}
+export class CheckCoinParams extends createToolParameters(SCHEMAS.check_coin) {}
+export class LarpCheckParams extends createToolParameters(SCHEMAS.larp_check) {}
+export class DevRecordParams extends createToolParameters(SCHEMAS.dev_record) {}
+export class WalletPrivacyParams extends createToolParameters(SCHEMAS.wallet_privacy) {}
+export class LaunchRecordParams extends createToolParameters(SCHEMAS.launch_record) {}
+export class FreshLaunchesParams extends createToolParameters(SCHEMAS.fresh_launches) {}
+export class ChainPulseParams extends createToolParameters(SCHEMAS.chain_pulse) {}
+export class CheckAgentParams extends createToolParameters(SCHEMAS.check_agent) {}
+export class CheckTxParams extends createToolParameters(SCHEMAS.check_tx) {}
+export class PresignRiskReportParams extends createToolParameters(SCHEMAS.presign_risk_report) {}
+export class StockTokenParams extends createToolParameters(SCHEMAS.stock_token) {}
+export class StockTokensParams extends createToolParameters(SCHEMAS.stock_tokens) {}
+export class FundamentalsParams extends createToolParameters(SCHEMAS.fundamentals) {}
+export class InsiderTradesParams extends createToolParameters(SCHEMAS.insider_trades) {}
+export class InstitutionsParams extends createToolParameters(SCHEMAS.institutions) {}
+export class GuidanceParams extends createToolParameters(SCHEMAS.guidance) {}
+export class MacroParams extends createToolParameters(SCHEMAS.macro) {}
+export class StockEventsParams extends createToolParameters(SCHEMAS.stock_events) {}
 
 export interface TollPluginOptions {
-  /** A ready Toll client for the coin tools (its own fetch). Default: a client that sends tollKey. */
+  /** A ready Toll client for the MCP tools (its own fetch). Default: a client that sends tollKey. */
   client?: Toll;
   /** A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every t0ll.xyz call: carries the key wallet's daily tier. */
   tollKey?: string;
@@ -101,7 +92,7 @@ export class TollService {
   @Tool({
     name: "check_coin",
     description:
-      "Before buying a token on Robinhood Chain, Solana or BSC, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Information only, not advice.",
+      "Before buying a token on Robinhood Chain, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Robinhood Chain (4663) only. Information only, not advice.",
   })
   async checkCoin(parameters: CheckCoinParams): Promise<string> {
     return run(() => this.client.checkCoin(parameters.address, parameters.chain ? { chain: parameters.chain } : {}));
@@ -110,7 +101,7 @@ export class TollService {
   @Tool({
     name: "larp_check",
     description:
-      "Is there a real product behind this coin? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: product found, partly found, not found or not read. Robinhood Chain and Solana. Information only, not advice.",
+      "Is there a real product behind this coin on Robinhood Chain? Reads its site, posts and code, checks each claim against the chain and its working parts (app, API, MCP server, code). Label: product found, partly found, not found or not read. Information only, not advice.",
   })
   async larpCheck(parameters: LarpCheckParams): Promise<string> {
     return run(() => this.client.larpCheck(parameters.token, { wait: true, ...(parameters.chain ? { chain: parameters.chain } : {}) }));
@@ -119,10 +110,49 @@ export class TollService {
   @Tool({
     name: "dev_record",
     description:
-      "A launcher wallet's record: how many coins it launched, how many graduated, and whether it sold. Robinhood Chain (default) or BSC. Information only, not advice.",
+      "A launcher wallet's record on Robinhood Chain: how many coins it launched, how many graduated, and whether it sold. Information only, not advice.",
   })
   async devRecord(parameters: DevRecordParams): Promise<string> {
     return run(() => this.client.devRecord(parameters.wallet, parameters.chain ? { chain: parameters.chain } : {}));
+  }
+
+  @Tool({ name: "wallet_privacy", description: LIVE_DESCRIPTIONS.wallet_privacy })
+  async walletPrivacy(parameters: WalletPrivacyParams): Promise<string> {
+    return run(() => this.client.walletPrivacy(parameters.wallet));
+  }
+
+  @Tool({
+    name: "launch_record",
+    description:
+      "The call Toll froze a few minutes after a Robinhood Chain coin launched, and how it ended 24 hours later. It is not the coin now (use check_coin for that).",
+  })
+  async launchRecord(parameters: LaunchRecordParams): Promise<string> {
+    return run(() => this.client.launchRecord(parameters.address));
+  }
+
+  @Tool({ name: "fresh_launches", description: "The newest coins launched on Robinhood Chain, with the first facts Toll reads about each." })
+  async freshLaunches(parameters: FreshLaunchesParams): Promise<string> {
+    return run(() => this.client.freshLaunches(parameters.limit));
+  }
+
+  @Tool({ name: "chain_pulse", description: "How busy Robinhood Chain is right now: launches, graduations and trades." })
+  async chainPulse(_parameters: ChainPulseParams): Promise<string> {
+    return run(() => this.client.chainPulse());
+  }
+
+  @Tool({ name: "check_agent", description: LIVE_DESCRIPTIONS.check_agent })
+  async checkAgent(parameters: CheckAgentParams): Promise<string> {
+    return run(() => this.client.checkAgent(parameters.id));
+  }
+
+  @Tool({ name: "check_tx", description: LIVE_DESCRIPTIONS.check_tx })
+  async checkTx(parameters: CheckTxParams): Promise<string> {
+    return run(() => this.client.checkTx({ ...parameters }));
+  }
+
+  @Tool({ name: "presign_risk_report", description: LIVE_DESCRIPTIONS.presign_risk_report })
+  async presignRiskReport(parameters: PresignRiskReportParams): Promise<string> {
+    return run(() => this.client.presignRiskReport({ ...parameters }));
   }
 
   @Tool({
@@ -157,12 +187,27 @@ export class TollService {
     return insiderTrades({ id: parameters.id, limit: parameters.limit }, this.markets);
   }
 
+  @Tool({ name: "institutions", description: `${LIVE_DESCRIPTIONS.institutions} ${MARKETS_NOTE}` })
+  async institutions(parameters: InstitutionsParams): Promise<string> {
+    return institutions({ id: parameters.id, limit: parameters.limit }, this.markets);
+  }
+
+  @Tool({ name: "guidance", description: `${LIVE_DESCRIPTIONS.guidance} ${MARKETS_NOTE}` })
+  async guidance(parameters: GuidanceParams): Promise<string> {
+    return guidance({ id: parameters.id, limit: parameters.limit }, this.markets);
+  }
+
   @Tool({
     name: "macro",
     description: `US macro facts: the Treasury daily par yield curve (latest day and 30 days), the New York Fed's effective federal funds rate with its target range, and from BLS the CPI-U year on year, the unemployment rate and the monthly change in nonfarm payrolls, each with its date and source. ${MACRO_NOTE}`,
   })
   async macro(_parameters: MacroParams): Promise<string> {
     return macro(this.markets);
+  }
+
+  @Tool({ name: "stock_events", description: `${LIVE_DESCRIPTIONS.stock_events} ${MARKETS_NOTE}` })
+  async stockEvents(parameters: StockEventsParams): Promise<string> {
+    return run(() => this.client.stockEvents({ since: parameters.since, kind: parameters.kind, limit: parameters.limit }));
   }
 }
 

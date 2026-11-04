@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Toll, TollError } from "@tollxyz/sdk";
-import { tollPlugin, createTollPlugin, extractAddress, extractWallet, formatResult } from "../src/index.js";
+import { tollPlugin, createTollPlugin, extractAddress, extractAgentId, extractJson, extractWallet, formatResult } from "../src/index.js";
 import * as Reexported from "../src/index.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");
@@ -24,46 +24,116 @@ const act = (p: any, name: string) => p.actions.find((a: any) => a.name === name
 
 test("plugin shape", () => {
   assert.equal(tollPlugin.name, "toll");
-  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), ["TOLL_CHECK_COIN", "TOLL_LARP_CHECK", "TOLL_DEV_RECORD", "TOLL_STOCK_TOKEN", "TOLL_STOCK_TOKENS", "TOLL_FUNDAMENTALS", "TOLL_INSIDER_TRADES", "TOLL_MACRO"]);
+  assert.deepEqual(tollPlugin.actions!.map((a) => a.name), [
+    "TOLL_CHECK_COIN",
+    "TOLL_LARP_CHECK",
+    "TOLL_DEV_RECORD",
+    "TOLL_WALLET_PRIVACY",
+    "TOLL_LAUNCH_RECORD",
+    "TOLL_FRESH_LAUNCHES",
+    "TOLL_CHAIN_PULSE",
+    "TOLL_CHECK_AGENT",
+    "TOLL_CHECK_TX",
+    "TOLL_PRESIGN_RISK_REPORT",
+    "TOLL_STOCK_TOKEN",
+    "TOLL_STOCK_TOKENS",
+    "TOLL_FUNDAMENTALS",
+    "TOLL_INSIDER_TRADES",
+    "TOLL_INSTITUTIONS",
+    "TOLL_GUIDANCE",
+    "TOLL_STOCK_EVENTS",
+    "TOLL_MACRO",
+  ]);
+  assert.ok(!/Solana|\bBSC\b/.test(tollPlugin.description!));
   assert.equal(tollPlugin.providers!.length, 1);
   for (const a of tollPlugin.actions!) {
     assert.ok(a.description.length > 40);
     assert.ok(!/\b(scam|rug|safe)\b/i.test(a.description));
     assert.ok(a.examples!.length > 0);
+    assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(a.description), a.name);
   }
 });
 
 test("address extraction", () => {
   assert.deepEqual(extractAddress(`check ${TOKEN} please`), { address: TOKEN });
-  assert.deepEqual(extractAddress(`check ${TOKEN} on bsc`), { address: TOKEN, chain: "bsc" });
-  assert.deepEqual(extractAddress(`${SOL}`), { address: SOL, chain: "sol" });
+  assert.deepEqual(extractAddress(`check ${TOKEN} on robinhood`), { address: TOKEN });
+  assert.equal(extractAddress(`${SOL}`), null); // Robinhood Chain only
   assert.equal(extractAddress("hello there, nothing here"), null);
   assert.equal(extractAddress("0x1234"), null);
   assert.equal(extractWallet(SOL), null);
   assert.equal(extractWallet(`dev ${TOKEN}`)!.wallet, TOKEN);
 });
 
-test("a Solana mint counts only as a whole word", () => {
-  assert.deepEqual(extractAddress(`check ${SOL}.`), { address: SOL, chain: "sol" });
-  assert.deepEqual(extractAddress(`(${SOL})`), { address: SOL, chain: "sol" });
-  assert.deepEqual(extractAddress(`https://solscan.io/token/${SOL}`), { address: SOL, chain: "sol" });
-  assert.equal(extractAddress(`x_${SOL}`), null);
-  assert.equal(extractAddress(`${SOL}_y`), null);
-  assert.equal(extractAddress(`0${SOL}`), null);
-  assert.equal(extractAddress(`a${SOL}0`), null);
-});
-
-test("LARP on a BSC message: says what it covers, sends nothing", async () => {
+test("a Solana mint is not an address: the check says Robinhood Chain only and sends nothing", async () => {
   const { toll, bodies } = client([]);
   const p = createTollPlugin({ client: toll });
-  const got: any[] = [];
-  const res = await act(p, "TOLL_LARP_CHECK").handler({}, msg(`is there a product behind ${TOKEN} on bsc`), undefined, {}, async (c: any) => {
-    got.push(c);
-    return [];
-  });
-  assert.equal(res.success, true);
+  assert.equal(await act(p, "TOLL_CHECK_COIN").validate({}, msg(`check ${SOL}`)), false);
+  const res = await act(p, "TOLL_CHECK_COIN").handler({}, msg(`check ${SOL}`));
+  assert.equal(res.success, false);
+  assert.match(res.text, /Robinhood Chain only/);
   assert.equal(bodies.length, 0);
-  assert.match(got[0].text, /covers Robinhood Chain and Solana/);
+});
+
+test("agent id and JSON extraction", () => {
+  assert.equal(extractAgentId("check agent #20030 please"), 20030);
+  assert.equal(extractAgentId("agent id 7"), 7);
+  assert.equal(extractAgentId("an agent"), null);
+  assert.deepEqual(extractJson('sign this? {"to":"0x1","data":"0x"} thanks'), { to: "0x1", data: "0x" });
+  assert.equal(extractJson("no json {here"), null);
+});
+
+const ok = (text: string) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
+
+test("the new actions call their MCP tools with the live argument names", async () => {
+  const { toll, bodies } = client(["a", "b", "c", "d", "e", "f", "g", "h", "i"].map(ok));
+  const p = createTollPlugin({ client: toll });
+  const tx = { to: TOKEN, data: "0x", value: "0", from: TOKEN };
+  const presign = { version: "erc-presign/1", subject: { type: "calls", chainId: "eip155:4663", calls: [] } };
+  const accepts = { x402Version: 2, accepts: [{ scheme: "exact", network: "eip155:4663" }] };
+  const cases: Array<[string, string]> = [
+    ["TOLL_WALLET_PRIVACY", `how exposed is ${TOKEN}?`],
+    ["TOLL_LAUNCH_RECORD", `launch record for ${TOKEN}`],
+    ["TOLL_FRESH_LAUNCHES", "show the newest coins, top 5"],
+    ["TOLL_CHAIN_PULSE", "how busy is the chain"],
+    ["TOLL_CHECK_AGENT", "check agent #20030"],
+    ["TOLL_CHECK_TX", `before I sign: ${JSON.stringify(tx)}`],
+    ["TOLL_CHECK_TX", `pay this 402? ${JSON.stringify(accepts)}`],
+    ["TOLL_PRESIGN_RISK_REPORT", `report: ${JSON.stringify(presign)}`],
+    ["TOLL_STOCK_EVENTS", "any new stock token events, filing only"],
+  ];
+  for (const [name, text] of cases) {
+    const a = act(p, name);
+    assert.equal(await a.validate({}, msg(text)), true, name);
+    assert.equal((await a.handler({}, msg(text))).success, true, name);
+  }
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["wallet_privacy", { wallet: TOKEN }],
+    ["launch_record", { address: TOKEN }],
+    ["fresh_launches", { limit: 5 }],
+    ["chain_pulse", {}],
+    ["check_agent", { id: 20030 }],
+    ["check_tx", tx],
+    ["check_tx", { x402: accepts }],
+    ["presign_risk_report", presign],
+    ["stock_events", { kind: "filing" }],
+  ]);
+  assert.equal(await act(p, "TOLL_CHECK_TX").validate({}, msg(`report: ${JSON.stringify(presign)}`)), false);
+});
+
+test("institutions and guidance GET their Markets routes with the key", async () => {
+  const calls: Array<{ url: string; key: string | null }> = [];
+  const f = async (url: string, init?: RequestInit) => {
+    calls.push({ url, key: new Headers(init?.headers).get("x-toll-pass") });
+    return new Response(JSON.stringify({ ticker: "NVDA" }));
+  };
+  const p = createTollPlugin({ fetch: f, tollKey: "tk_5" });
+  assert.equal(await act(p, "TOLL_INSTITUTIONS").validate({}, msg("top 5 institutional holders of $NVDA")), true);
+  assert.equal((await act(p, "TOLL_INSTITUTIONS").handler({}, msg("top 5 institutional holders of $NVDA"))).success, true);
+  assert.equal((await act(p, "TOLL_GUIDANCE").handler({}, msg("what guidance did AAPL give?"))).success, true);
+  assert.deepEqual(calls, [
+    { url: "https://t0ll.xyz/api/markets/institutions/NVDA?limit=5", key: "tk_5" },
+    { url: "https://t0ll.xyz/api/markets/guidance/AAPL", key: "tk_5" },
+  ]);
 });
 
 test("the dev record example names a deployer wallet, not the token", () => {
@@ -89,7 +159,7 @@ test("check handler calls callback with Toll's text", async () => {
   });
   assert.equal(res.success, true);
   assert.equal(bodies[0].params.name, "check_coin");
-  assert.deepEqual(bodies[0].params.arguments, { address: TOKEN, chain: "rh" });
+  assert.deepEqual(bodies[0].params.arguments, { address: TOKEN });
   assert.match(got[0].text, /Findings: 2 against/);
   assert.deepEqual(got[0].actions, ["TOLL_CHECK_COIN"]);
 });
@@ -141,7 +211,7 @@ test("handler without an address says so and sends nothing", async () => {
   const p = createTollPlugin({ client: toll });
   const res = await act(p, "TOLL_CHECK_COIN").handler({}, msg("check 0x1234 please"));
   assert.equal(res.success, false);
-  assert.match(res.text, /No valid address/);
+  assert.match(res.text, /No Robinhood Chain address/);
   assert.equal(bodies.length, 0);
 });
 

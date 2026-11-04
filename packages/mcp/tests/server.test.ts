@@ -148,3 +148,17 @@ test("server.json matches package.json (MCP registry)", () => {
   assert.equal(pkg.bin["toll-mcp"], "dist/cli.js");
   assert.equal(VERSION, pkg.version);
 });
+
+test("Robinhood Chain only: snapshot schemas and instructions name no other chain", () => {
+  assert.deepEqual(SNAPSHOT_TOOLS.map((t) => t.name).length, 18);
+  for (const t of SNAPSHOT_TOOLS) {
+    const props = (t.inputSchema as any).properties ?? {};
+    for (const p of Object.values<any>(props)) {
+      if (Array.isArray(p.enum) && p.enum.includes("rh")) assert.deepEqual(p.enum, ["rh"], t.name);
+      if (typeof p.pattern === "string") assert.ok(!p.pattern.includes("A-HJ-NP"), t.name);
+    }
+    assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t.description ?? ""), t.name);
+  }
+  assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(INSTRUCTIONS));
+  assert.match(INSTRUCTIONS, /check_tx/);
+});

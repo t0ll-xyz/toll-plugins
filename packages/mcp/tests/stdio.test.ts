@@ -45,7 +45,7 @@ test("stdio smoke: initialize, tools/list, tools/call (Toll mocked)", async () =
 });
 
 test("--version and --help print and exit", () => {
-  assert.equal(execFileSync(process.execPath, [CLI, "--version"], { encoding: "utf8" }).trim(), "0.1.4");
+  assert.equal(execFileSync(process.execPath, [CLI, "--version"], { encoding: "utf8" }).trim(), "0.2.0");
   assert.match(execFileSync(process.execPath, [CLI, "--help"], { encoding: "utf8" }), /npx -y @tollxyz\/mcp/);
 });
 

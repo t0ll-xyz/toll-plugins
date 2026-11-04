@@ -8,7 +8,17 @@ from pathlib import Path
 
 import pytest
 
-from toll_sdk import PaymentRequirements, Toll, TollError, is_valid_address, is_valid_wallet, parse_paid_url, parse_pending
+from toll_sdk import (
+    TOOL_NAMES,
+    PaymentRequirements,
+    Toll,
+    TollError,
+    is_valid_address,
+    is_valid_stock_id,
+    is_valid_wallet,
+    parse_paid_url,
+    parse_pending,
+)
 
 FX = Path(__file__).parent / "fixtures"
 TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3"
@@ -58,7 +68,7 @@ class Sleeper:
 
 
 def test_validators():
-    assert is_valid_address(TOKEN) and is_valid_address(SOL)
+    assert is_valid_address(TOKEN) and not is_valid_address(SOL)  # Robinhood Chain only
     assert not is_valid_address("0x123")
     assert not is_valid_address(TOKEN + "\n")
     assert not is_valid_address("0OIl" + "1" * 30)
@@ -68,7 +78,7 @@ def test_validators():
 def test_tools_from_real_list():
     op = FakeOpener(fx("tools_list"))
     tools = Toll(opener=op).tools()
-    assert [t["name"] for t in tools] == ["check_coin", "larp_check", "dev_record", "wallet_privacy", "fresh_launches", "chain_pulse", "launch_record"]
+    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 18
     req, timeout = op.requests[0]
     assert req.full_url == "https://t0ll.xyz/mcp" and timeout == 30.0
     assert req.get_header("Accept") == "application/json, text/event-stream"
@@ -189,10 +199,75 @@ def test_bad_input_never_reaches_network():
         lambda: t.wallet_privacy("0x1"),
         lambda: t.launch_record(SOL),
         lambda: t.fresh_launches(21),
+        lambda: t.check_coin(SOL),
+        lambda: t.check_coin(TOKEN, chain="sol"),
+        lambda: t.larp_check(TOKEN, chain="sol"),
+        lambda: t.dev_record(TOKEN, chain="bsc"),
+        lambda: t.check_agent(-1),
+        lambda: t.check_agent("12a"),
+        lambda: t.check_agent(True),
+        lambda: t.check_tx(),
+        lambda: t.check_tx(to=TOKEN, chain_id=8453),
+        lambda: t.presign_risk_report({}, version="erc-presign/0"),
+        lambda: t.stock_token("not a ticker!"),
+        lambda: t.fundamentals("NVDA", period="weekly"),
+        lambda: t.institutions("NVDA", limit=21),
+        lambda: t.guidance("NVDA", limit=61),
+        lambda: t.insider_trades("NVDA", limit=0),
+        lambda: t.stock_tokens(limit=251),
+        lambda: t.stock_events(kind="ipo"),
+        lambda: t.stock_events(since=-1),
     ):
         with pytest.raises(TollError):
             fn()
     assert op.requests == []
+
+
+def _ok(text="ok"):
+    return json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": text}]}})
+
+
+def test_agent_presign_and_markets_tools_send_live_argument_names():
+    op = FakeOpener(*[_ok() for _ in range(13)])
+    t = Toll(opener=op)
+    subject = {"type": "calls", "chainId": "eip155:4663", "from": f"eip155:4663:{TOKEN}", "calls": []}
+    t.check_agent(20030)
+    t.check_tx(to=TOKEN, data="0x095ea7b3", value="0", from_=TOKEN, strict=True)
+    t.check_tx(x402={"accepts": []}, agent_id="20030")
+    t.presign_risk_report(subject)
+    t.stock_token("$NVDA")
+    t.stock_tokens(query=" nvid ", limit=5)
+    t.fundamentals("AAPL", period="annual")
+    t.insider_trades("AAPL", limit=10)
+    t.institutions("NVDA", limit=3)
+    t.guidance("NVDA", limit=25)
+    t.macro()
+    t.stock_events(since=120, kind="filing", limit=10)
+    t.stock_events()
+    assert [op.body(i)["params"] for i in range(13)] == [
+        {"name": "check_agent", "arguments": {"id": 20030}},
+        {"name": "check_tx", "arguments": {"to": TOKEN, "data": "0x095ea7b3", "value": "0", "strict": True, "from": TOKEN}},
+        {"name": "check_tx", "arguments": {"x402": {"accepts": []}, "agentId": "20030"}},
+        {"name": "presign_risk_report", "arguments": {"version": "erc-presign/1", "subject": subject}},
+        {"name": "stock_token", "arguments": {"id": "NVDA"}},
+        {"name": "stock_tokens", "arguments": {"query": "nvid", "limit": 5}},
+        {"name": "fundamentals", "arguments": {"id": "AAPL", "period": "annual"}},
+        {"name": "insider_trades", "arguments": {"id": "AAPL", "limit": 10}},
+        {"name": "institutions", "arguments": {"id": "NVDA", "limit": 3}},
+        {"name": "guidance", "arguments": {"id": "NVDA", "limit": 25}},
+        {"name": "macro", "arguments": {}},
+        {"name": "stock_events", "arguments": {"since": 120, "kind": "filing", "limit": 10}},
+        {"name": "stock_events", "arguments": {}},
+    ]
+    assert is_valid_stock_id("BRK.B")
+
+
+def test_toll_key_sent_as_x_toll_pass():
+    op = FakeOpener(_ok(), _ok())
+    Toll(opener=op, toll_key=" tk_123 ").macro()
+    Toll(opener=op).macro()
+    assert op.requests[0][0].get_header("X-toll-pass") == "tk_123"
+    assert op.requests[1][0].get_header("X-toll-pass") is None
 
 
 def test_sse_frame():

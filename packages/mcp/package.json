@@ -1,8 +1,8 @@
 {
   "name": "@tollxyz/mcp",
   "mcpName": "io.github.t0ll-xyz/toll",
-  "version": "0.1.4",
-  "description": "Local stdio MCP server for Toll: before an agent buys a coin or trusts an agent, check who is behind it (Robinhood Chain, Solana, BSC, Arc). Proxies t0ll.xyz/mcp. Free tier, read-only, no key. Information only.",
+  "version": "0.2.0",
+  "description": "Local stdio MCP server for Toll on Robinhood Chain: before an agent buys a coin, pays an agent or signs, check it (18 tools: coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Proxies t0ll.xyz/mcp. Free tier, read-only, no key. Information only.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
@@ -39,8 +39,9 @@
     "mcp-server",
     "model-context-protocol",
     "robinhood-chain",
-    "solana",
-    "bsc",
+    "stock-tokens",
+    "presign",
+    "erc-8265",
     "erc-8004",
     "ai-agent",
     "rug-check",
@@ -55,7 +56,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@tollxyz/sdk": "^0.1.1",
+    "@tollxyz/sdk": "^0.2.0",
     "zod": "^3.25.76 || ^4.1.8"
   },
   "devDependencies": {
