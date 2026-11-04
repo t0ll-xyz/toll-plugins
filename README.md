@@ -1,8 +1,11 @@
 # toll-plugins
 
 SDKs, agent plugins and skills for [Toll](https://t0ll.xyz/agents/plugins), the safety check for agents on Robinhood
-Chain, Solana, BSC and Arc: who is behind a coin, the dev's record, whether there is a real product behind it, and
-what an ERC-8004 agent's registration and payment terms say, read from the chain over Toll's MCP server.
+Chain (chain id 4663, the only chain Toll reads): who is behind a coin, the dev's record, whether there is a real
+product behind it, what a transaction, signature or x402 payment does before it is signed (`check_tx`, ALLOW / WARN /
+BLOCK), what an ERC-8004 agent's registration and payment terms say, and Robinhood Stock Token data (SEC fundamentals,
+insider trades, 13F holders, earnings guidance, the event feed, US macro), read over Toll's MCP server. Every package
+exposes all 18 of the server's tools.
 
 ## The line to add it
 
@@ -65,7 +68,7 @@ its payTo is bound to its identity.
 | [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |
 | [`@tollxyz/agentkit`](packages/agentkit) | Coinbase AgentKit action provider | `npm install @tollxyz/agentkit @coinbase/agentkit zod@3` |
 | [`@tollxyz/ai-sdk`](packages/ai-sdk) | Vercel AI SDK tools | `npm install @tollxyz/ai-sdk ai zod` |
-| [`@tollxyz/langchain`](packages/langchain) | LangChain JS tools (createAgent, LangGraph) | `npm install @tollxyz/langchain @langchain/core zod` |
+| [`@tollxyz/langchain`](packages/langchain) | LangChain JS tools (createAgent, LangGraph) | `npm install @tollxyz/langchain langchain @langchain/core zod` |
 | [`@tollxyz/mastra`](packages/mastra) | Mastra tools | `npm install @tollxyz/mastra @mastra/core zod` |
 | [`@tollxyz/goat-plugin`](packages/goat) | GOAT SDK plugin | `npm install @tollxyz/goat-plugin @goat-sdk/core zod@3` |
 
@@ -78,11 +81,12 @@ Example: [`examples/guarded-agent`](examples/guarded-agent), an agent that will 
 (its `buy()` is a stub that never sends a transaction).
 
 The npm packages are ESM only. Free: 10 new coins a day per caller (coins already read stay free) and 50 Markets
-calls (Robinhood Stock Tokens, fundamentals, insider trades, macro). Holding $TOLL lifts both: 1M $TOLL 100 coins / 1,000 Markets calls, 5M 500 / 5,000,
+calls (Robinhood Stock Tokens, fundamentals, insider trades, institutions, guidance, macro). Holding $TOLL lifts both: 1M $TOLL 100 coins / 1,000 Markets calls, 5M 500 / 5,000,
 20M 2,000 / 20,000, with a Toll key from <https://t0ll.xyz/toll#keys> sent as `x-toll-pass` (the `tollKey` option in
-`@tollxyz/agentkit`, `@tollxyz/ai-sdk`, `@tollxyz/goat-plugin` and `@tollxyz/plugin-elizaos`). Past that, x402 per
-call: 0.05 USDG a coin check, 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, macro, the Stock Token
-list or the chain pulse, on Robinhood Chain.
+`@tollxyz/agentkit`, `@tollxyz/ai-sdk`, `@tollxyz/goat-plugin`, `@tollxyz/plugin-elizaos`, `@tollxyz/langchain`,
+`@tollxyz/mastra` and `@tollxyz/sdk`; `toll_key` in `toll-sdk`). Past that, x402 per
+call: 0.05 USDG a coin check, 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions,
+guidance, macro, the Stock Token list or the chain pulse, on Robinhood Chain.
 Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 ## Develop

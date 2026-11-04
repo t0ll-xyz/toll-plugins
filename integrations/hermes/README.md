@@ -4,7 +4,7 @@ A [Portable Agent Plugins v1](https://agent-plugins.org) package for [Hermes Age
 It gives a Hermes agent [Toll](https://t0ll.xyz)'s read-only safety checks: before it buys a coin, signs a transaction
 or pays another agent, it can read who is behind the coin, the dev's record, whether the LP can be pulled, whether the
 product the coin claims exists, what the transaction is about to do, and what an ERC-8004 agent's registration and x402
-terms say. It also reads Robinhood Stock Token market data. Coins on Robinhood Chain, Solana, BSC and Arc.
+terms say. It also reads Robinhood Stock Token market data. Robinhood Chain (4663) only.
 
 It bundles one MCP server and one skill, and nothing else (no Python, no executables, no local command):
 
@@ -21,7 +21,7 @@ hermes plugins enable toll        # portable packages install disabled
 ```
 
 The tools arrive as `mcp__toll__check_coin`, `mcp__toll__larp_check`, `mcp__toll__check_tx`, `mcp__toll__check_agent`
-and the rest (15 tools, all annotated `readOnlyHint`). If your `~/.hermes/config.yaml` already has an `mcp_servers.toll`
+and the rest (18 tools, all annotated `readOnlyHint`). If your `~/.hermes/config.yaml` already has an `mcp_servers.toll`
 entry (Toll's older setup), that entry wins over the plugin's server; remove it to use the plugin's.
 
 ## What it does
@@ -38,6 +38,8 @@ entry (Toll's older setup), that entry wins over the plugin's server; remove it 
 | An ERC-8004 agent's card, whether it answers over MCP or x402, whether x402 pays its registered wallet | `check_agent` |
 | Robinhood Stock Tokens: reference and pool price, supply, corporate actions, SEC facts | `stock_token`, `stock_tokens` |
 | The company behind a Stock Token: SEC fundamentals, Form 4 insider trades | `fundamentals`, `insider_trades` |
+| 13F institutional holders; earnings-release guidance and KPIs (AI-extracted from cited filings) | `institutions`, `guidance` |
+| What changed on the Stock Tokens: listings, multipliers, corporate actions, feed status, SEC filings | `stock_events` |
 | US Treasury yields, the effective federal funds rate, CPI, jobs | `macro` |
 
 Toll states facts with their sources, never advice, and never says a coin is safe. Robinhood Stock Tokens are debt
@@ -47,7 +49,7 @@ newyorkfed.org; Toll is not affiliated with the New York Fed.
 ## Free limit and the Toll key
 
 Free, with no key: 10 new coins a day per caller (coins already read stay free; `check_agent` uses no coin), and 50
-Markets calls a day (Stock Tokens, fundamentals, insider trades, macro). Past that, the answer gives a paid x402 URL on
+Markets calls a day (Stock Tokens, fundamentals, insider trades, institutions, guidance, macro). Past that, the answer gives a paid x402 URL on
 Robinhood Chain; this plugin cannot pay it, and the skill tells the agent never to pay without the user's consent.
 
 Holders of $TOLL get more with a Toll key from https://t0ll.xyz/toll#keys. The plugin itself is keyless and sends no
@@ -77,7 +79,7 @@ mcp_servers:
   day the list of coins counted, keyed by a code made from the IP address with a secret key that changes every day; the
   IP itself is not stored and the lists are deleted after 3 days ([privacy](https://t0ll.xyz/privacy)).
 - **Not covered by the pin:** the tool set is served by Toll's hosted server at runtime, and the server's code is not
-  public. A snapshot of its tool list (15 tools, all read-only) is in this repository at
+  public. A snapshot of its tool list (18 tools, all read-only, Robinhood Chain only) is in this repository at
   [`packages/mcp/tests/fixture_tools_list.json`](../../packages/mcp/tests/fixture_tools_list.json).
 
 ## Without the plugin

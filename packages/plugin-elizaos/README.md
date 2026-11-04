@@ -1,8 +1,17 @@
 # @tollxyz/plugin-elizaos
 
-An [elizaOS](https://docs.elizaos.ai) plugin for [Toll](https://t0ll.xyz/agents/plugins). Before your agent buys a coin on Robinhood Chain, Solana or BSC, it can check who is behind it (snipers, bundles, the dev's record, whether liquidity can be pulled) and whether there is a real product behind it. Facts read from the chain. Information only, not financial advice.
+An [elizaOS](https://docs.elizaos.ai) plugin for [Toll](https://t0ll.xyz/agents/plugins). Before your agent buys a coin, pays an agent or signs anything on Robinhood Chain (chain id 4663), it can check who is behind the coin (snipers, bundles, the dev's record, whether liquidity can be pulled), whether there is a real product behind it, and what the transaction or payment does. Facts read from the chain. Information only, not financial advice.
 
-Actions: `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK` (Robinhood Chain and Solana; for a message that names BSC it says so and sends nothing), `TOLL_DEV_RECORD` (a deployer wallet). Each one runs when the message holds an address, and answers with Toll's text. For Robinhood Stock Tokens: `TOLL_STOCK_TOKEN` (the word stock and a ticker, `$NVDA` or `NVDA`, or the token's contract) and `TOLL_STOCK_TOKENS` (the list); for the companies behind them `TOLL_FUNDAMENTALS` (a word like fundamentals, financials, revenue, earnings or P/E, and a ticker) and `TOLL_INSIDER_TRADES` (insider or Form 4, and a ticker); and `TOLL_MACRO` (macro, rates, inflation, the yield curve or jobs). These answer with Toll's JSON. A provider adds a one-line hint to the context only when a message contains a token address.
+Toll reads Robinhood Chain only right now: actions read 0x addresses only; a message with only a Solana mint or another chain's address gets "Toll reads Robinhood Chain only right now." and nothing is sent.
+
+18 actions, one per live Toll tool, each run when the message text holds what it needs:
+
+- `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK`: a token's 0x address. `TOLL_DEV_RECORD`: a deployer wallet. `TOLL_WALLET_PRIVACY`: a word like privacy or exposed and a wallet. `TOLL_LAUNCH_RECORD`: the words launch record or at launch and a token. `TOLL_FRESH_LAUNCHES`: new coins or fresh launches (`top 5` sets how many). `TOLL_CHAIN_PULSE`: how busy the chain is. These answer with Toll's text.
+- `TOLL_CHECK_AGENT`: an ERC-8004 agent id (`agent 20030` or `agent #20030`).
+- `TOLL_CHECK_TX`: the request pasted as JSON in the message: `{to, data, value, from}`, `{typedData: {...}}`, `{x402: {...}}` or a 402 body with `accepts`. `TOLL_PRESIGN_RISK_REPORT`: a PresignRequest pasted as JSON with `"version": "erc-presign/1"`.
+- For Robinhood Stock Tokens: `TOLL_STOCK_TOKEN` (the word stock and a ticker, `$NVDA` or `NVDA`, or the token's contract) and `TOLL_STOCK_TOKENS` (the list); for the companies behind them `TOLL_FUNDAMENTALS` (a word like fundamentals, financials, revenue, earnings or P/E, and a ticker), `TOLL_INSIDER_TRADES` (insider or Form 4, and a ticker), `TOLL_INSTITUTIONS` (13F or institutions, and a ticker) and `TOLL_GUIDANCE` (guidance, outlook or KPIs, and a ticker); `TOLL_STOCK_EVENTS` (stock token events, listings, multiplier changes, corporate actions or filings; a kind named in the message filters); and `TOLL_MACRO` (macro, rates, inflation, the yield curve or jobs). The Markets ones answer with Toll's JSON.
+
+A provider adds a one-line hint to the context only when a message contains a token address.
 
 ## Install
 
@@ -54,6 +63,12 @@ Facts with their sources, not advice. Robinhood Stock Tokens are debt securities
 
 Facts with their sources, not advice. The EFFR is subject to the Terms of Use posted at newyorkfed.org; Toll is not affiliated with the New York Fed.
 
+`TOLL_INSTITUTIONS` (`top 5` sets how many, 1 to 20) returns the JSON of <https://t0ll.xyz/api/markets/institutions/NVDA>: the company's 13F institutional holders for the latest quarter, each manager's change vs the prior quarter, total institutional shares and the number of filers, with the quarter and the date SEC published the data set. `TOLL_GUIDANCE` returns the JSON of <https://t0ll.xyz/api/markets/guidance/NVDA>: forward guidance, KPIs and non-GAAP measures from the company's last 4 earnings releases (SEC 8-K Item 2.02), AI-extracted from cited filings, each value with its quote and filing link. `TOLL_STOCK_EVENTS` (over Toll's MCP server) lists what changed on the Stock Tokens (listings, multiplier changes, corporate actions, Chainlink feed state, SEC filings), oldest first. Without a Toll key it shows the last 10 events found an hour ago or more; Pro holders read it 15 minutes late, Team holders live.
+
+## Before signing: TOLL_CHECK_TX and TOLL_PRESIGN_RISK_REPORT
+
+`TOLL_CHECK_TX` sends the pasted transaction, EIP-712 signature request or x402 payment to Toll's `check_tx`, which answers ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment. Pass on every warning; on BLOCK do not sign without the owner's say. `TOLL_PRESIGN_RISK_REPORT` sends a PresignRequest (ERC draft, ethereum/ERCs PR #2134) to `presign_risk_report`, which returns typed facts about the unsigned request, EIP-712 signed by Toll, with no verdict.
+
 ## Free limit and the paid path
 
 10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the plugin tells the agent it can pay per check there (0.05 USDG on Robinhood Chain or USDC on Base), with the owner's consent; the plugin never pays. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
@@ -63,8 +78,8 @@ Holding $TOLL lifts the daily limits. Make a Toll key at <https://t0ll.xyz/toll#
 | Per UTC day | Free | 1M $TOLL | 5M $TOLL | 20M $TOLL |
 | --- | --- | --- | --- | --- |
 | New coins (TOLL_CHECK_COIN, TOLL_LARP_CHECK) | 10 | 100 | 500 | 2,000 |
-| Markets calls (TOLL_STOCK_TOKEN, TOLL_STOCK_TOKENS, TOLL_FUNDAMENTALS, TOLL_INSIDER_TRADES, TOLL_MACRO) | 50 | 1,000 | 5,000 | 20,000 |
+| Markets calls (TOLL_STOCK_TOKEN, TOLL_STOCK_TOKENS, TOLL_FUNDAMENTALS, TOLL_INSIDER_TRADES, TOLL_INSTITUTIONS, TOLL_GUIDANCE, TOLL_MACRO) | 50 | 1,000 | 5,000 | 20,000 |
 
-Past that, x402 per call: 0.05 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base); 0.01 USDG on Robinhood Chain for fundamentals (`https://t0ll.xyz/api/x402/markets/fundamentals/{id}`), insider trades (`https://t0ll.xyz/api/x402/markets/insiders/{id}`), macro (`https://t0ll.xyz/api/x402/markets/macro`), the Stock Token list (`https://t0ll.xyz/api/x402/markets/stocks`) and the chain pulse (`https://t0ll.xyz/api/x402/pulse`). Over the Markets count, each Markets action answers with the paid URL for that call and the tiers instead of the JSON; nothing here pays.
+Past that, x402 per call: 0.05 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base); 0.01 USDG on Robinhood Chain for fundamentals (`https://t0ll.xyz/api/x402/markets/fundamentals/{id}`), insider trades (`https://t0ll.xyz/api/x402/markets/insiders/{id}`), institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`), macro (`https://t0ll.xyz/api/x402/markets/macro`), the Stock Token list (`https://t0ll.xyz/api/x402/markets/stocks`) and the chain pulse (`https://t0ll.xyz/api/x402/pulse`). Over the Markets count, each Markets action answers with the paid URL for that call and the tiers instead of the JSON; nothing here pays.
 
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.
