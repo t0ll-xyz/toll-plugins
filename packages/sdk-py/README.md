@@ -1,6 +1,6 @@
 # toll-sdk
 
-Python client for [Toll](https://t0ll.xyz/agents/plugins)'s coin checks, read from the chain (Robinhood Chain, Solana, BSC), over Toll's remote MCP server. Who is behind a coin, the dev's record, and whether there is a real product behind it. Standard library only, Python >= 3.9, typed.
+Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 18 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
 
 Information only, not financial advice.
 
@@ -26,19 +26,25 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 
 ## API
 
-`Toll(base_url="https://t0ll.xyz", opener=None, timeout=30.0, sign=None, pay_timeout=300.0)`
+`Toll(base_url="https://t0ll.xyz", opener=None, timeout=30.0, sign=None, pay_timeout=300.0, toll_key=None)` - `toll_key` (from <https://t0ll.xyz/toll#keys>) is sent as `x-toll-pass` on every MCP call and carries your $TOLL tier
 
-- `check_coin(address, chain=None)` - chain is `rh`, `sol` or `bsc`
-- `larp_check(token, chain=None, wait=False)` - `rh` or `sol`; `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
+- `check_coin(address, chain=None)` - chain is `rh` or left out
+- `larp_check(token, chain=None, wait=False)` - `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
-- `tools()` lists the server's tools, `call(name, args)` calls any of them
+- `check_agent(agent_id)` - an ERC-8004 agent on Robinhood Chain by its agent id
+- `check_tx(to=, data=, value=, from_=, typed_data=, x402=, agent_id=, registry=, strict=, chain_id=)` - the pre-sign check for a transaction, an EIP-712 signature (`typed_data`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chain_id` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
+- `presign_risk_report(subject, context=None, kinds=None)` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134, version `erc-presign/1`): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
+- `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
+- `fundamentals(id, period=None)` (`ttm`, `annual`, `quarterly`), `insider_trades(id, limit=None)` (1 to 100), `institutions(id, limit=None)` (13F holders, 1 to 20), `guidance(id, limit=None)` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
+- `stock_events(since=None, kind=None, limit=None)` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 18
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
-- `is_valid_address(x)`, `is_valid_wallet(x)` - the checks run before anything is sent
+- `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the result carries `paid_url`, the x402 endpoint for that coin (0.05 USDG on Robinhood Chain, charged only for a whole answer).
+10 new coins a day per caller are free (coins already read stay free). Past that, the result carries `paid_url`, the x402 endpoint for that coin (0.05 USDG on Robinhood Chain, charged only for a whole answer). Markets calls have their own free count (50 a day; 1,000 / 5,000 / 20,000 with 1M / 5M / 20M $TOLL via `toll_key`); past it, x402 per call: 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`) or macro.
 
 `pay(paid_url)` runs the x402 flow itself and asks your `sign` function for one payment:
 
