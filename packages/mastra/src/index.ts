@@ -1,5 +1,5 @@
 /**
- * @tollxyz/mastra - Toll coin and agent checks as Mastra tools (new Agent({ tools })).
+ * @tollxyz/mastra - Toll's checks on Robinhood Chain (coins, agents, pre-sign, Stock Token data) as Mastra tools (new Agent({ tools })).
  * Information only, not financial advice.
  */
 import { createTool, type Tool } from "@mastra/core/tools";
@@ -13,9 +13,14 @@ export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
-  /** A ready Toll client (for example with a custom fetch). Default: new Toll(). */
+  /** A ready Toll client (for example with a custom fetch). Default: new Toll({ tollKey }). */
   client?: Toll;
-  /** Which tools to return. Default: all eight. */
+  /**
+   * A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every call: carries the key wallet's daily tier
+   * (more new coins and Markets calls a day, the live stock_events feed). Ignored when client is given.
+   */
+  tollKey?: string;
+  /** Which tools to return. Default: all eighteen. */
   only?: TollToolName[];
 }
 
@@ -26,7 +31,7 @@ export type TollMastraTool = Tool<any, any, any, any, any, string, any>;
  * Each tool returns Toll's text; the model decides what it means.
  */
 export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolName, TollMastraTool>> {
-  const run = runners(opts.client ?? new Toll());
+  const run = runners(opts.client ?? new Toll({ tollKey: opts.tollKey }));
   const out: Partial<Record<TollToolName, TollMastraTool>> = {};
   for (const name of pick(opts.only)) {
     out[name] = createTool({

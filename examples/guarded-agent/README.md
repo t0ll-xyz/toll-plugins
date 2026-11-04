@@ -8,8 +8,7 @@ From the repo root, once: `npm install && npm run build -w @tollxyz/sdk`. Then:
 
 ```sh
 npm start -w @tollxyz/example-guarded-agent -- 0xff9e86e6b21fd688027981bee4b64c8b6b804ed3 --chain rh
-# Solana mint:  ... -- <mint> --chain sol
-# BSC:          ... -- 0x... --chain bsc     (the LARP check does not cover BSC, so its label counts as "not read")
+# Toll reads Robinhood Chain (4663) only; --chain is optional and takes only rh.
 ```
 
 Exit code 0 = would proceed, 1 = refuse, 2 = error.

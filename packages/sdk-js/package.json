@@ -1,7 +1,7 @@
 {
   "name": "@tollxyz/sdk",
-  "version": "0.1.2",
-  "description": "Client for Toll's coin checks (Robinhood Chain, Solana, BSC) over MCP. Zero runtime dependencies.",
+  "version": "0.2.0",
+  "description": "Client for Toll's checks on Robinhood Chain over MCP: coins, dev records, LARP, ERC-8004 agents, pre-sign checks (check_tx, ERC-8265) and Robinhood Stock Token data. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
@@ -31,8 +31,10 @@
   "homepage": "https://t0ll.xyz/agents/plugins",
   "keywords": [
     "robinhood-chain",
-    "solana",
-    "bsc",
+    "stock-tokens",
+    "presign",
+    "erc-8265",
+    "erc-8004",
     "x402",
     "mcp",
     "ai-agent",

@@ -1,7 +1,7 @@
 {
   "name": "@tollxyz/mastra",
-  "version": "0.1.1",
-  "description": "Mastra tools: before an agent buys a coin or trusts an agent, check who is behind it (Robinhood Chain, Solana, BSC) with Toll. Information only.",
+  "version": "0.2.0",
+  "description": "Mastra tools: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
@@ -32,8 +32,9 @@
   "keywords": [
     "mastra",
     "robinhood-chain",
-    "solana",
-    "bsc",
+    "stock-tokens",
+    "presign",
+    "erc-8265",
     "erc-8004",
     "mcp",
     "ai-agent",
@@ -47,7 +48,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@tollxyz/sdk": "^0.1.1"
+    "@tollxyz/sdk": "^0.2.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0 <2",

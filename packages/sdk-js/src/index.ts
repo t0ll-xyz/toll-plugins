@@ -3,8 +3,88 @@
  * Information only, not financial advice.
  */
 
-export type Chain = "rh" | "sol" | "bsc";
-export type LarpChain = "rh" | "sol";
+/** Toll reads Robinhood Chain (chain id 4663) only. The chain option stays for compatibility and takes only "rh". */
+export type Chain = "rh";
+export type LarpChain = "rh";
+
+/** Every tool of https://t0ll.xyz/mcp, in the server's order. */
+export const TOOL_NAMES = [
+  "check_coin",
+  "larp_check",
+  "dev_record",
+  "wallet_privacy",
+  "fresh_launches",
+  "chain_pulse",
+  "launch_record",
+  "check_agent",
+  "check_tx",
+  "presign_risk_report",
+  "stock_token",
+  "stock_tokens",
+  "fundamentals",
+  "insider_trades",
+  "institutions",
+  "guidance",
+  "macro",
+  "stock_events",
+] as const;
+export type TollToolName = (typeof TOOL_NAMES)[number];
+
+/** The periods fundamentals takes. */
+export const FUNDAMENTALS_PERIODS = ["ttm", "annual", "quarterly"] as const;
+export type FundamentalsPeriod = (typeof FUNDAMENTALS_PERIODS)[number];
+
+/** The kinds stock_events filters on. */
+export const STOCK_EVENT_KINDS = [
+  "listed",
+  "delisted",
+  "multiplier_scheduled",
+  "multiplier_applied",
+  "corporate_action",
+  "feed_stale",
+  "feed_paused",
+  "feed_resumed",
+  "filing",
+] as const;
+export type StockEventKind = (typeof STOCK_EVENT_KINDS)[number];
+
+/**
+ * check_tx input: a transaction (to, data, value, from), an EIP-712 signature request (typedData) or an x402
+ * payment (x402: the PaymentRequired from the 402, or one accepts entry). Robinhood Chain (4663) only.
+ */
+export interface CheckTxRequest {
+  /** 4663 (Robinhood Chain), the only one read; leave it out for 4663. */
+  chainId?: number | string;
+  /** The signer's address: a swap paying out to anyone else is flagged. */
+  from?: string;
+  /** The contract or wallet the transaction is sent to. */
+  to?: string;
+  /** The calldata, hex (0x for a plain send). */
+  data?: string;
+  /** Wei sent with it, decimal or 0x hex (default 0). */
+  value?: number | string;
+  /** An EIP-712 signature request: {domain, types, primaryType, message}. */
+  typedData?: Record<string, unknown>;
+  /** An x402 payment: the PaymentRequired the 402 sent (with accepts), or one accepts entry; optional payment and resource. */
+  x402?: Record<string, unknown>;
+  /** The x402 seller's ERC-8004 agent id, when known. */
+  agentId?: number | string;
+  /** The identity registry agentId is in, CAIP-10 (default eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432). */
+  registry?: string;
+  /** Strict payee policy: an x402 payTo not verified as the seller's (ERC-8478) is BLOCK instead of a warning. */
+  strict?: boolean;
+}
+
+/** presign_risk_report input: an ERC draft PresignRequest (ethereum/ERCs PR #2134). */
+export interface PresignRequest {
+  version: "erc-presign/1";
+  /** {type: "calls", chainId: "eip155:4663", from: "eip155:4663:0x<signer>", calls: [{to, value, data}], typedData?} */
+  subject: Record<string, unknown>;
+  /** Optional: {payment: {requirements, resource?, payee?: {registry, agentId}}, texts: [{field, ref?, text}], tokens: [CAIP-10]} */
+  context?: Record<string, unknown>;
+  /** Optional: only these finding kinds. */
+  kinds?: string[];
+}
 
 export interface TollResult {
   /** The markdown text the server answered with. */
@@ -37,6 +117,11 @@ export type SignPayment = (requirements: PaymentRequirements, url: string) => Pr
 export interface TollOptions {
   /** Default https://t0ll.xyz */
   baseUrl?: string;
+  /**
+   * A Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every MCP call: carries the key wallet's daily
+   * tier (more new coins and Markets calls a day, the live stock_events feed).
+   */
+  tollKey?: string;
   /** Plain fetch used for MCP calls. Default: global fetch. */
   fetch?: FetchLike;
   /** Signs the payment pay() sends (see SignPayment). Without it pay() throws before any request. */
@@ -63,11 +148,20 @@ export class TollError extends Error {
 }
 
 const EVM = /^0x[0-9a-fA-F]{40}$/;
-const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+/** A ticker as Robinhood lists it (NVDA, BRK.B, $NVDA) or a Stock Token contract (0x + 40 hex). Same rule as the API. */
+const STOCK_ID = /^(0x[0-9a-fA-F]{40}|\$?[A-Za-z][A-Za-z0-9.\-]{0,11})$/;
 
-/** True for a token address: 0x + 40 hex, or a Solana base58 mint (32-44 chars). */
+/** What Toll answers for any chain but Robinhood Chain. */
+export const RH_ONLY = "Toll reads Robinhood Chain only right now.";
+
+/** True for a token address on Robinhood Chain: 0x + 40 hex. */
 export function isValidAddress(value: unknown): value is string {
-  return typeof value === "string" && (EVM.test(value) || BASE58.test(value));
+  return typeof value === "string" && EVM.test(value);
+}
+
+/** True for a Stock Token id: a ticker (NVDA, BRK.B, $NVDA) or its contract (0x + 40 hex). */
+export function isValidStockId(value: unknown): value is string {
+  return typeof value === "string" && STOCK_ID.test(value.trim());
 }
 
 /** True for a wallet address: 0x + 40 hex. */
@@ -77,7 +171,7 @@ export function isValidWallet(value: unknown): value is string {
 
 function assertAddress(value: unknown, what = "address"): string {
   if (!isValidAddress(value)) {
-    throw new TollError(`Invalid ${what}: expected 0x + 40 hex characters or a Solana base58 mint (32-44 characters).`);
+    throw new TollError(`Invalid ${what}: expected 0x + 40 hex characters (a Robinhood Chain address). ${RH_ONLY}`);
   }
   return value;
 }
@@ -87,10 +181,25 @@ function assertWallet(value: unknown): string {
   return value;
 }
 
-function assertChain(chain: string | undefined, allowed: readonly string[]): void {
-  if (chain !== undefined && !allowed.includes(chain)) {
-    throw new TollError(`Invalid chain "${chain}": use ${allowed.join(", ")}.`);
+function assertChain(chain: string | undefined): void {
+  if (chain !== undefined && chain !== "rh") {
+    throw new TollError(`Invalid chain "${chain}": ${RH_ONLY} Use rh or leave chain out.`);
   }
+}
+
+function assertStockId(value: unknown): string {
+  if (!isValidStockId(value)) throw new TollError("Invalid id: expected a ticker (NVDA, BRK.B) or a Stock Token contract (0x + 40 hex).");
+  return value.trim().replace(/^\$/, "");
+}
+
+function assertLimit(limit: number | undefined, max: number): void {
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > max)) {
+    throw new TollError(`Invalid limit: use a whole number from 1 to ${max}.`);
+  }
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 // Only the upsell line counts: a finished LARP answer also lists Toll's own x402 endpoint as a "working part".
@@ -119,6 +228,7 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 export class Toll {
   private readonly baseUrl: string;
   private readonly fetchFn: FetchLike;
+  private readonly tollKey?: string;
   private readonly signFn?: SignPayment;
   private readonly timeoutMs: number;
   private readonly payTimeoutMs: number;
@@ -128,6 +238,7 @@ export class Toll {
   constructor(opts: TollOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? "https://t0ll.xyz").replace(/\/+$/, "");
     this.fetchFn = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
+    this.tollKey = opts.tollKey?.trim() || undefined;
     this.signFn = opts.sign;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.payTimeoutMs = opts.payTimeoutMs ?? 300_000;
@@ -158,7 +269,11 @@ export class Toll {
   private async rpc(method: string, params: unknown): Promise<any> {
     const { res, raw } = await this.request(`${this.baseUrl}/mcp`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...(this.tollKey ? { "x-toll-pass": this.tollKey } : {}),
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method, params }),
     });
     if (!res.ok) {
@@ -198,7 +313,7 @@ export class Toll {
 
   async checkCoin(address: string, opts: { chain?: Chain } = {}): Promise<TollResult> {
     assertAddress(address);
-    assertChain(opts.chain, ["rh", "sol", "bsc"]);
+    assertChain(opts.chain);
     return this.call("check_coin", { address, ...(opts.chain ? { chain: opts.chain } : {}) });
   }
 
@@ -208,7 +323,7 @@ export class Toll {
    */
   async larpCheck(token: string, opts: { chain?: LarpChain; wait?: boolean } = {}): Promise<TollResult> {
     assertAddress(token, "token");
-    assertChain(opts.chain, ["rh", "sol"]);
+    assertChain(opts.chain);
     const args = { token, ...(opts.chain ? { chain: opts.chain } : {}) };
     if (!opts.wait) return this.call("larp_check", args);
     let waited = 0;
@@ -234,7 +349,7 @@ export class Toll {
 
   async devRecord(wallet: string, opts: { chain?: Chain } = {}): Promise<TollResult> {
     assertWallet(wallet);
-    assertChain(opts.chain, ["rh", "bsc"]);
+    assertChain(opts.chain);
     return this.call("dev_record", { wallet, ...(opts.chain ? { chain: opts.chain } : {}) });
   }
 
@@ -257,6 +372,103 @@ export class Toll {
 
   async chainPulse(): Promise<TollResult> {
     return this.call("chain_pulse", {});
+  }
+
+  /** One ERC-8004 agent registered on Robinhood Chain, by its agent id (for example 20030). */
+  async checkAgent(id: number | string): Promise<TollResult> {
+    const ok =
+      (typeof id === "number" && Number.isInteger(id) && id >= 0 && id <= 1_000_000_000) ||
+      (typeof id === "string" && /^[0-9]{1,10}$/.test(id));
+    if (!ok) throw new TollError("Invalid agent id: expected a whole number (its ERC-8004 token id on Robinhood Chain).");
+    return this.call("check_agent", { id });
+  }
+
+  /**
+   * Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment), for a
+   * transaction (to, data, value, from), an EIP-712 signature (typedData) or an x402 payment (x402).
+   */
+  async checkTx(req: CheckTxRequest): Promise<TollResult> {
+    if (!isObject(req) || (req.to === undefined && req.typedData === undefined && req.x402 === undefined)) {
+      throw new TollError("checkTx needs a transaction (to, data, value, from), typedData or x402.");
+    }
+    if (req.chainId !== undefined && String(req.chainId) !== "4663" && String(req.chainId).toLowerCase() !== "0x1237") {
+      throw new TollError(`Invalid chainId "${req.chainId}": ${RH_ONLY} (chain id 4663)`);
+    }
+    return this.call("check_tx", { ...req });
+  }
+
+  /** Agent Pre-Sign Risk Report (ERC draft, PR #2134): typed facts about an unsigned request, EIP-712 signed by Toll. No verdict. */
+  async presignRiskReport(req: PresignRequest): Promise<TollResult> {
+    if (!isObject(req) || req.version !== "erc-presign/1" || !isObject(req.subject)) {
+      throw new TollError('presignRiskReport needs {version: "erc-presign/1", subject: {type: "calls", ...}}.');
+    }
+    return this.call("presign_risk_report", { ...req });
+  }
+
+  /** One Robinhood Stock Token by ticker (NVDA) or contract: reference price, pool price, supply, corporate actions, SEC facts. */
+  async stockToken(id: string): Promise<TollResult> {
+    return this.call("stock_token", { id: assertStockId(id) });
+  }
+
+  /** The Stock Tokens Robinhood lists on Robinhood Chain; query filters by ticker or company. */
+  async stockTokens(opts: { query?: string; limit?: number } = {}): Promise<TollResult> {
+    assertLimit(opts.limit, 250);
+    const q = typeof opts.query === "string" ? opts.query.trim().slice(0, 60) : "";
+    return this.call("stock_tokens", { ...(q ? { query: q } : {}), ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
+  }
+
+  /** A Stock Token company's numbers from SEC filings (period: ttm, annual or quarterly). */
+  async fundamentals(id: string, opts: { period?: FundamentalsPeriod } = {}): Promise<TollResult> {
+    const clean = assertStockId(id);
+    if (opts.period !== undefined && !(FUNDAMENTALS_PERIODS as readonly string[]).includes(opts.period)) {
+      throw new TollError("Invalid period: use ttm, annual or quarterly.");
+    }
+    return this.call("fundamentals", { id: clean, ...(opts.period ? { period: opts.period } : {}) });
+  }
+
+  /** Form 4 insider trades of the last 90 days and Schedule 13D/G filings (limit: 1 to 100 rows). */
+  async insiderTrades(id: string, opts: { limit?: number } = {}): Promise<TollResult> {
+    const clean = assertStockId(id);
+    assertLimit(opts.limit, 100);
+    return this.call("insider_trades", { id: clean, ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
+  }
+
+  /** 13F institutional holders for the latest quarter (limit: 1 to 20 holders). */
+  async institutions(id: string, opts: { limit?: number } = {}): Promise<TollResult> {
+    const clean = assertStockId(id);
+    assertLimit(opts.limit, 20);
+    return this.call("institutions", { id: clean, ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
+  }
+
+  /** Guidance, KPIs and non-GAAP from the last 4 earnings releases, AI-extracted from cited filings (limit: 1 to 60 per release). */
+  async guidance(id: string, opts: { limit?: number } = {}): Promise<TollResult> {
+    const clean = assertStockId(id);
+    assertLimit(opts.limit, 60);
+    return this.call("guidance", { id: clean, ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
+  }
+
+  /** US macro: the Treasury curve, the EFFR, CPI, unemployment and payrolls, each with its date. */
+  async macro(): Promise<TollResult> {
+    return this.call("macro", {});
+  }
+
+  /**
+   * What changed on Robinhood's Stock Tokens, oldest first; since = the last answer's next. Without a Toll key: the last
+   * 10 events found an hour ago or more; Team holders read it live, Pro 15 minutes late.
+   */
+  async stockEvents(opts: { since?: number; kind?: StockEventKind; limit?: number } = {}): Promise<TollResult> {
+    if (opts.since !== undefined && (!Number.isInteger(opts.since) || opts.since < 0)) {
+      throw new TollError("Invalid since: use the next of the last answer (a whole number).");
+    }
+    if (opts.kind !== undefined && !(STOCK_EVENT_KINDS as readonly string[]).includes(opts.kind)) {
+      throw new TollError(`Invalid kind: use ${STOCK_EVENT_KINDS.join(", ")}.`);
+    }
+    assertLimit(opts.limit, 100);
+    return this.call("stock_events", {
+      ...(opts.since !== undefined ? { since: opts.since } : {}),
+      ...(opts.kind ? { kind: opts.kind } : {}),
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
   }
 
   /**

@@ -23,10 +23,10 @@ test("parseTally tolerates missing words and falls back to bullets", () => {
 
 test("parseProductLabel reads the four labels", () => {
   assert.equal(parseProductLabel(LARP), "found");
-  assert.equal(parseProductLabel("LARP check of $X on Solana: product partly found.\nrest"), "partly found");
-  assert.equal(parseProductLabel("LARP check of $X on Solana: product not found."), "not found");
-  assert.equal(parseProductLabel("LARP check of $X on Solana: product not read."), "not read");
-  assert.equal(parseProductLabel("LARP check of $X on Solana: not found."), "not found");
+  assert.equal(parseProductLabel("LARP check of $X on Robinhood Chain: product partly found.\nrest"), "partly found");
+  assert.equal(parseProductLabel("LARP check of $X on Robinhood Chain: product not found."), "not found");
+  assert.equal(parseProductLabel("LARP check of $X on Robinhood Chain: product not read."), "not read");
+  assert.equal(parseProductLabel("LARP check of $X on Robinhood Chain: not found."), "not found");
   assert.equal(parseProductLabel("Still reading 0xabc on Robinhood Chain"), null);
 });
 
@@ -49,9 +49,9 @@ test("would proceed on a clean tally and a found product", () => {
 });
 
 test("partly found and not read do not refuse on their own", () => {
-  assert.equal(decide(CLEAN, "LARP check of $X on Solana: product partly found.").outcome, "would proceed");
-  assert.equal(decide(CLEAN, "LARP check of $X on Solana: product not read.").outcome, "would proceed");
-  assert.equal(decide(CLEAN, null).outcome, "would proceed"); // BSC: LARP not run
+  assert.equal(decide(CLEAN, "LARP check of $X on Robinhood Chain: product partly found.").outcome, "would proceed");
+  assert.equal(decide(CLEAN, "LARP check of $X on Robinhood Chain: product not read.").outcome, "would proceed");
+  assert.equal(decide(CLEAN, null).outcome, "would proceed"); // LARP not run
 });
 
 test("an unreadable answer is not a pass", () => {
@@ -60,8 +60,9 @@ test("an unreadable answer is not a pass", () => {
 });
 
 test("parseArgs", () => {
-  assert.deepEqual(parseArgs(["0xabc", "--chain", "bsc"]), { token: "0xabc", chain: "bsc" });
-  assert.deepEqual(parseArgs(["--chain", "sol", "So111"]), { token: "So111", chain: "sol" });
+  assert.deepEqual(parseArgs(["0xabc", "--chain", "rh"]), { token: "0xabc", chain: "rh" });
+  assert.ok("error" in parseArgs(["0xabc", "--chain", "bsc"]));
+  assert.ok("error" in parseArgs(["--chain", "sol", "So111"]));
   assert.deepEqual(parseArgs(["0xabc"]), { token: "0xabc" });
   assert.ok("error" in parseArgs(["0xabc", "--chain", "arc"]));
   assert.ok("error" in parseArgs([]));

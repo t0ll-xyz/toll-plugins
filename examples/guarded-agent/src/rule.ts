@@ -53,7 +53,7 @@ export interface Decision {
 export function decide(checkText: string, larpText: string | null): Decision {
   const reasons: string[] = [];
   const tally = parseTally(checkText);
-  // larpText null = the LARP check was not run (it does not cover BSC): the label counts as not read.
+  // larpText null = the LARP check was not run: the label counts as not read.
   const label = larpText === null ? "not read" : parseProductLabel(larpText);
   let refuse = false;
 

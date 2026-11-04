@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/x402-seller",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sell over x402 on Robinhood Chain in one line: a paywall for any Web-standard handler (Next.js, Hono, Bun, Workers) that takes USDG through Toll's keyless facilitator (x402.t0ll.xyz), with ERC-8478 payee verification and a signed receipt for every payment. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",

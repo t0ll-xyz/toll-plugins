@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { Toll, TollError, isValidAddress, isValidWallet, parsePaidUrl, parsePending } from "../src/index.js";
+import { TOOL_NAMES, Toll, TollError, isValidAddress, isValidStockId, isValidWallet, parsePaidUrl, parsePending } from "../src/index.js";
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8");
 const TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
@@ -24,7 +24,7 @@ const noSleep = () => { const slept: number[] = []; return { slept, sleep: async
 
 test("address validators", () => {
   assert.ok(isValidAddress(TOKEN));
-  assert.ok(isValidAddress(SOL));
+  assert.ok(!isValidAddress(SOL)); // Robinhood Chain only: a Solana mint is not an address Toll reads
   assert.ok(!isValidAddress("0x123"));
   assert.ok(!isValidAddress("0OIl" + "1".repeat(30)));
   assert.ok(!isValidAddress(`${TOKEN}\n`));
@@ -35,7 +35,8 @@ test("address validators", () => {
 test("tools() parses the real tools/list", async () => {
   const m = mockFetch([fx("tools_list")]);
   const tools = await new Toll({ fetch: m.f }).tools();
-  assert.deepEqual(tools.map((t) => t.name), ["check_coin", "larp_check", "dev_record", "wallet_privacy", "fresh_launches", "chain_pulse", "launch_record"]);
+  assert.deepEqual(tools.map((t) => t.name), [...TOOL_NAMES]);
+  assert.equal(tools.length, 18);
   assert.equal(body(m.calls[0]).method, "tools/list");
   assert.equal(m.calls[0].url, "https://t0ll.xyz/mcp");
 });
@@ -157,7 +158,70 @@ test("bad input never reaches the network", async () => {
   await assert.rejects(async () => t.devRecord(SOL), TollError);
   await assert.rejects(async () => t.walletPrivacy("0x1"), TollError);
   await assert.rejects(async () => t.freshLaunches(21), TollError);
+  await assert.rejects(async () => t.checkCoin(SOL), (e: unknown) => e instanceof TollError && /Robinhood Chain only/.test(e.message));
+  await assert.rejects(async () => t.checkCoin(TOKEN, { chain: "sol" as never }), (e: unknown) => e instanceof TollError && /Robinhood Chain only/.test(e.message));
+  await assert.rejects(async () => t.devRecord(TOKEN, { chain: "bsc" as never }), TollError);
+  await assert.rejects(async () => t.larpCheck(TOKEN, { chain: "sol" as never }), TollError);
+  await assert.rejects(async () => t.checkAgent(-1), TollError);
+  await assert.rejects(async () => t.checkAgent("12a"), TollError);
+  await assert.rejects(async () => t.checkTx({} as never), TollError);
+  await assert.rejects(async () => t.checkTx({ to: TOKEN, chainId: 8453 }), TollError);
+  await assert.rejects(async () => t.presignRiskReport({ version: "erc-presign/0", subject: {} } as never), TollError);
+  await assert.rejects(async () => t.stockToken("not a ticker!"), TollError);
+  await assert.rejects(async () => t.fundamentals("NVDA", { period: "weekly" as never }), TollError);
+  await assert.rejects(async () => t.institutions("NVDA", { limit: 21 }), TollError);
+  await assert.rejects(async () => t.guidance("NVDA", { limit: 61 }), TollError);
+  await assert.rejects(async () => t.insiderTrades("NVDA", { limit: 0 }), TollError);
+  await assert.rejects(async () => t.stockTokens({ limit: 251 }), TollError);
+  await assert.rejects(async () => t.stockEvents({ kind: "ipo" as never }), TollError);
+  await assert.rejects(async () => t.stockEvents({ since: -1 }), TollError);
   assert.equal(m.calls.length, 0);
+});
+
+const ok = (text = "ok") => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
+
+test("the agent, pre-sign and Markets tools send the live argument names", async () => {
+  const m = mockFetch(Array.from({ length: 13 }, () => ok()));
+  const t = new Toll({ fetch: m.f });
+  const tx = { to: TOKEN, data: "0x095ea7b3", value: "0", from: TOKEN, strict: true };
+  const presign = { version: "erc-presign/1" as const, subject: { type: "calls", chainId: "eip155:4663", from: `eip155:4663:${TOKEN}`, calls: [] } };
+  await t.checkAgent(20030);
+  await t.checkTx(tx);
+  await t.checkTx({ x402: { accepts: [] }, agentId: "20030" });
+  await t.presignRiskReport(presign);
+  await t.stockToken("$NVDA");
+  await t.stockTokens({ query: " nvid ", limit: 5 });
+  await t.fundamentals("AAPL", { period: "annual" });
+  await t.insiderTrades("AAPL", { limit: 10 });
+  await t.institutions("NVDA", { limit: 3 });
+  await t.guidance("NVDA", { limit: 25 });
+  await t.macro();
+  await t.stockEvents({ since: 120, kind: "filing", limit: 10 });
+  await t.stockEvents();
+  assert.deepEqual(m.calls.map((c) => body(c).params), [
+    { name: "check_agent", arguments: { id: 20030 } },
+    { name: "check_tx", arguments: tx },
+    { name: "check_tx", arguments: { x402: { accepts: [] }, agentId: "20030" } },
+    { name: "presign_risk_report", arguments: presign },
+    { name: "stock_token", arguments: { id: "NVDA" } },
+    { name: "stock_tokens", arguments: { query: "nvid", limit: 5 } },
+    { name: "fundamentals", arguments: { id: "AAPL", period: "annual" } },
+    { name: "insider_trades", arguments: { id: "AAPL", limit: 10 } },
+    { name: "institutions", arguments: { id: "NVDA", limit: 3 } },
+    { name: "guidance", arguments: { id: "NVDA", limit: 25 } },
+    { name: "macro", arguments: {} },
+    { name: "stock_events", arguments: { since: 120, kind: "filing", limit: 10 } },
+    { name: "stock_events", arguments: {} },
+  ]);
+  assert.ok(isValidStockId("BRK.B"));
+});
+
+test("tollKey is sent as x-toll-pass on MCP calls; no key, no header", async () => {
+  const m = mockFetch([ok(), ok()]);
+  await new Toll({ fetch: m.f, tollKey: " tk_123 " }).macro();
+  await new Toll({ fetch: m.f }).macro();
+  assert.equal((m.calls[0].init.headers as Record<string, string>)["x-toll-pass"], "tk_123");
+  assert.equal((m.calls[1].init.headers as Record<string, string>)["x-toll-pass"], undefined);
 });
 
 test("timeout aborts the request", async () => {

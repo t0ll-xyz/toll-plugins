@@ -1,5 +1,6 @@
-// Refreshes src/snapshot.ts from Toll's live tools/list. Usage: npm run snapshot -w @tollxyz/mcp
+// Refreshes src/snapshot.ts from Toll's live tools/list (Robinhood Chain only). Usage: npm run snapshot -w @tollxyz/mcp
 import { writeFileSync } from "node:fs";
+import { rhOnlyTools } from "./rh-only.mjs";
 
 const res = await fetch("https://t0ll.xyz/mcp", {
   method: "POST",
@@ -8,7 +9,7 @@ const res = await fetch("https://t0ll.xyz/mcp", {
 });
 const raw = await res.text();
 const body = JSON.parse(raw.trim().startsWith("{") ? raw : raw.split("\n").find((l) => l.startsWith("data:")).slice(5));
-const tools = body.result.tools.map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations }));
+const tools = rhOnlyTools(body.result.tools).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations }));
 const day = new Date().toISOString().slice(0, 10);
 writeFileSync(
   new URL("../src/snapshot.ts", import.meta.url),
