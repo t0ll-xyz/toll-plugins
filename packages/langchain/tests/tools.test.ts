@@ -24,11 +24,11 @@ function setup(responses: string[]) {
   return { tools, by, bodies };
 }
 
-test("all 18 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 19 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools, by } = setup([]);
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
   assert.deepEqual(TOOL_NAMES, [...SDK_TOOL_NAMES]);
-  assert.equal(tools.length, 18);
+  assert.equal(tools.length, 19);
   assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(by.check_agent.description, /^Before paying or trusting an ERC-8004 agent/);
   assert.match(by.larp_check.description, /^Is there a real product behind this coin on Robinhood Chain\?/);
@@ -168,4 +168,12 @@ test("re-exports Toll and TollError", async () => {
   const mod = await import("../src/index.js");
   assert.equal(mod.Toll, Toll);
   assert.equal(typeof mod.TollError, "function");
+});
+
+const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";
+test("check_hook (11-05): one call with { address }", async () => {
+  const { by, bodies } = setup([ok("h")]);
+  assert.match(by.check_hook.description, /Uniswap v4 hook/);
+  assert.equal(await by.check_hook.invoke({ address: HOOK }), "h");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
 });

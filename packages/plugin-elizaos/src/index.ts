@@ -105,6 +105,8 @@ const LAUNCH_RECORD_WORDS = /\b(launch record|call at launch|at launch|frozen ca
 const FRESH_WORDS = /\b(new(?:est)? (?:coins|launches|tokens)|fresh launches|latest (?:coins|launches)|just launched)\b/i;
 /** Words that ask how busy the chain is. */
 const PULSE_WORDS = /\b(chain pulse|pulse|how busy|activity on (?:the )?chain|launches (?:today|right now))\b/i;
+/** Words that name a Uniswap v4 hook (check_hook, 11-05). */
+const HOOK_WORDS = /\bhooks?\b/i;
 
 /** Words that ask for US macro. */
 const MACRO_WORDS =
@@ -247,6 +249,15 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       run: ({ client: c }, t) => c.checkAgent(extractAgentId(t)!),
       example: ["check agent #20030 before I pay it", "Here is what Toll's agent census read for agent #20030."],
       missing: "No agent id in the message for TOLL_CHECK_AGENT: write agent 20030 or agent #20030.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_CHECK_HOOK",
+      similes: ["CHECK_HOOK", "UNISWAP_HOOK", "HOOK_CHECK"],
+      description: `${LIVE_DESCRIPTIONS.check_hook} Needs the word hook and the hook's 0x address in the message.`,
+      canRun: (t) => HOOK_WORDS.test(t) && extractAddress(t) !== null,
+      run: ({ client: c }, t) => c.checkHook(extractAddress(t)!.address),
+      example: ["what does the hook 0x4eb1976978756bd56802d8162f2271844924e0cc do?", "Here is what Toll read of that Uniswap v4 hook."],
+      missing: "TOLL_CHECK_HOOK runs when the message says hook and gives the hook's 0x address.",
     }),
     makeAction(resolve, {
       name: "TOLL_CHECK_TX",

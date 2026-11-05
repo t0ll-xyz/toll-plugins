@@ -33,6 +33,7 @@ test("plugin shape", () => {
     "TOLL_FRESH_LAUNCHES",
     "TOLL_CHAIN_PULSE",
     "TOLL_CHECK_AGENT",
+    "TOLL_CHECK_HOOK",
     "TOLL_CHECK_TX",
     "TOLL_PRESIGN_RISK_REPORT",
     "TOLL_STOCK_TOKEN",
@@ -253,4 +254,15 @@ test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async 
 test("re-exports Toll and TollError from @tollxyz/sdk", () => {
   assert.equal(Reexported.Toll, Toll);
   assert.equal(Reexported.TollError, TollError);
+});
+
+const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";
+test("TOLL_CHECK_HOOK (11-05): a message naming a hook and its address calls check_hook", async () => {
+  const { toll, bodies } = client([ok("h")]);
+  const p = createTollPlugin({ client: toll });
+  const a = act(p, "TOLL_CHECK_HOOK");
+  assert.equal(await a.validate({}, msg(`what does the hook ${HOOK} do?`)), true);
+  assert.equal(await a.validate({}, msg(`check ${HOOK}`)), false);
+  assert.equal((await a.handler({}, msg(`what does the hook ${HOOK} do?`))).success, true);
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
 });

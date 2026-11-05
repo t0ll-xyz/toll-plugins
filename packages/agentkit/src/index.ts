@@ -23,6 +23,7 @@ import {
 import {
   ChainPulseSchema,
   CheckAgentSchema,
+  CheckHookSchema,
   CheckCoinSchema,
   CheckTxSchema,
   DevRecordSchema,
@@ -171,6 +172,11 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({ name: "check_agent", description: LIVE_DESCRIPTIONS.check_agent, schema: CheckAgentSchema })
   async checkAgent(args: z.infer<typeof CheckAgentSchema>): Promise<string> {
     return run(() => this.client.checkAgent(args.id));
+  }
+
+  @CreateAction({ name: "check_hook", description: LIVE_DESCRIPTIONS.check_hook, schema: CheckHookSchema })
+  async checkHook(args: z.infer<typeof CheckHookSchema>): Promise<string> {
+    return run(() => this.client.checkHook(args.address));
   }
 
   @CreateAction({ name: "check_tx", description: LIVE_DESCRIPTIONS.check_tx, schema: CheckTxSchema })

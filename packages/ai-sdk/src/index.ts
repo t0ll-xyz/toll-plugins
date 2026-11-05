@@ -66,6 +66,7 @@ export type TollToolName =
   | "fresh_launches"
   | "chain_pulse"
   | "check_agent"
+  | "check_hook"
   | "check_tx"
   | "presign_risk_report"
   | "stock_token"
@@ -137,6 +138,11 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: LIVE_DESCRIPTIONS.check_agent,
       inputSchema: SCHEMAS.check_agent,
       execute: async ({ id }) => run(() => toll.checkAgent(id)),
+    }),
+    check_hook: tool({
+      description: LIVE_DESCRIPTIONS.check_hook,
+      inputSchema: SCHEMAS.check_hook,
+      execute: async ({ address }) => run(() => toll.checkHook(address)),
     }),
     check_tx: tool({
       description: LIVE_DESCRIPTIONS.check_tx,

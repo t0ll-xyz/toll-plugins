@@ -91,3 +91,12 @@ test("check_tx on another chain is answered as text, never sent", async () => {
   assert.match(out, /Robinhood Chain only/);
   assert.equal(calls.length, 0);
 });
+
+const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";
+test("check_hook (11-05): the live description, calls the MCP tool with the key", async () => {
+  const { p, calls } = provider([{ body: ok("h") }], "tk_9");
+  assert.equal(getAction(p, "check_hook").description, LIVE_DESCRIPTIONS.check_hook);
+  assert.equal(await getAction(p, "check_hook").invoke({ address: HOOK }), "h");
+  assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [["check_hook", { address: HOOK }]]);
+  assert.equal(calls[0].headers.get("x-toll-pass"), "tk_9");
+});
