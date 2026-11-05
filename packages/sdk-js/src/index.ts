@@ -119,7 +119,7 @@ const CLIENT_ID_RE = /^[A-Za-z0-9_-]{22,64}$/;
 /** The slice of node:fs the install id needs (injectable for tests). */
 export interface ClientIdFs {
   readFileSync(path: string, enc: "utf8"): string;
-  writeFileSync(path: string, data: string, opts?: { mode?: number }): void;
+  writeFileSync(path: string, data: string, opts?: { mode?: number; flag?: string }): void;
   mkdirSync(path: string, opts?: { recursive?: boolean }): unknown;
 }
 
@@ -167,7 +167,15 @@ export function resolveClientId(
       } catch {}
       const fresh = randomId();
       env.fs.mkdirSync(dir, { recursive: true });
-      env.fs.writeFileSync(file, `${fresh}\n`, { mode: 0o600 });
+      const line = `${fresh}\n`;
+      try {
+        env.fs.writeFileSync(file, line, { mode: 0o600, flag: "wx" });
+      } catch {
+        // the file exists: another process won the race (use its id) or it holds junk (replace it)
+        const have = env.fs.readFileSync(file, "utf8").trim();
+        if (CLIENT_ID_RE.test(have)) return have;
+        env.fs.writeFileSync(file, line, { mode: 0o600 });
+      }
       return fresh;
     }
   } catch {}

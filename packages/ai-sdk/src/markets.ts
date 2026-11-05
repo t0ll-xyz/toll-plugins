@@ -3,6 +3,8 @@
  * Facts with their sources, not advice.
  */
 
+import { resolveClientId } from "@tollxyz/sdk";
+
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** Said in every Markets description, so the model never reads the data as advice. */
@@ -50,14 +52,15 @@ export function paidMarketsUrl(kind: PaidMarketsKind, id?: string, baseUrl = "ht
   return kind === "macro" ? base : `${base}/${encodeURIComponent((id ?? "{ticker}").replace(/^\$/, ""))}`;
 }
 
-/** Wraps fetch so every call carries the Toll key as x-toll-pass (no key: fetch unchanged). */
+/** Wraps fetch so every call carries the Toll key as x-toll-pass and the stable install id as x-toll-client. */
 export function withTollKey(f: FetchLike | undefined, tollKey: string | undefined): FetchLike {
   const base: FetchLike = f ?? ((input, init) => globalThis.fetch(input, init));
   const key = tollKey?.trim();
-  if (!key) return base;
+  const clientId = resolveClientId();
   return (input, init) => {
     const headers = new Headers(init?.headers);
-    headers.set("x-toll-pass", key);
+    if (key) headers.set("x-toll-pass", key);
+    headers.set("x-toll-client", clientId);
     return base(input, { ...init, headers });
   };
 }

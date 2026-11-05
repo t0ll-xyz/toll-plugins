@@ -162,3 +162,17 @@ test("Robinhood Chain only: snapshot schemas and instructions name no other chai
   assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(INSTRUCTIONS));
   assert.match(INSTRUCTIONS, /check_tx/);
 });
+
+test("the transport to Toll carries a valid x-toll-client on every request", async () => {
+  const seen: string[] = [];
+  const f = (u: any, init?: any) => {
+    seen.push(new Headers(init?.headers).get("x-toll-client") ?? "");
+    return fetch(u, init);
+  };
+  const { client, close } = await connect(mock.url, { fetch: f });
+  await client.callTool({ name: "chain_pulse", arguments: {} });
+  assert.ok(seen.length >= 2);
+  for (const id of seen) assert.match(id, /^[A-Za-z0-9_-]{22,64}$/);
+  assert.equal(new Set(seen).size, 1);
+  await close();
+});
