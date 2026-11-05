@@ -243,7 +243,7 @@ git checkout main && git merge --ff-only check-hook-1105 && git push origin main
 
 # 5. MCP registry (packages/mcp/server.json is 0.2.2; @tollxyz/mcp 0.2.2 must be on npm first)
 cd packages/mcp && mcp-publisher login github && mcp-publisher publish && cd ../..
-# and the registry copy in ~/toll-mcp-repo (server.json 0.2.2, branch check-hook-1105):
+# and the registry listing in ~/toll-mcp-repo (server.json 1.0.4, branch check-hook-1105):
 cd ~/toll-mcp-repo && git push origin check-hook-1105 && mcp-publisher login github && mcp-publisher publish && cd -
 ```
 
