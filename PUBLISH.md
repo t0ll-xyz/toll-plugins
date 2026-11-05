@@ -1,6 +1,6 @@
 # Publishing the Robinhood Chain only release (branch `rh-only-1105`)
 
-Every package now matches the live service: Robinhood Chain (4663) only, all 18 tools of https://t0ll.xyz/mcp.
+Every package now matches the live service: Robinhood Chain (4663) only, all 19 tools of https://t0ll.xyz/mcp.
 Nothing below has been run. Run it in Git Bash, in this order. `npm whoami` must say `tollxyz`.
 
 | Package | Old | New |
