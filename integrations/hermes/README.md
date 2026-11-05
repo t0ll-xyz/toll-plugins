@@ -20,7 +20,7 @@ hermes plugins install toll       # once listed in Hermes's plugin catalog
 hermes plugins enable toll        # portable packages install disabled
 ```
 
-The tools arrive as `mcp__toll__check_coin`, `mcp__toll__larp_check`, `mcp__toll__check_tx`, `mcp__toll__check_agent`
+The tools arrive as `mcp__toll__check_coin`, `mcp__toll__larp_check`, `mcp__toll__check_tx`, `mcp__toll__check_agent`, `mcp__toll__check_hook`
 and the rest (18 tools, all annotated `readOnlyHint`). If your `~/.hermes/config.yaml` already has an `mcp_servers.toll`
 entry (Toll's older setup), that entry wins over the plugin's server; remove it to use the plugin's.
 
@@ -36,6 +36,7 @@ entry (Toll's older setup), that entry wins over the plugin's server; remove it 
 | The call Toll froze at launch and how it ended 24 hours later | `launch_record` |
 | ALLOW / WARN / BLOCK before signing a transaction, an EIP-712 message or an x402 payment (ERC-8265 RiskAssessment) | `check_tx`, `presign_risk_report` |
 | An ERC-8004 agent's card, whether it answers over MCP or x402, whether x402 pays its registered wallet | `check_agent` |
+| A Uniswap v4 hook: its name, what it can do, whether its owner can change it, whether sells through it fail | `check_hook` |
 | Robinhood Stock Tokens: reference and pool price, supply, corporate actions, SEC facts | `stock_token`, `stock_tokens` |
 | The company behind a Stock Token: SEC fundamentals, Form 4 insider trades | `fundamentals`, `insider_trades` |
 | 13F institutional holders; earnings-release guidance and KPIs (AI-extracted from cited filings) | `institutions`, `guidance` |
@@ -48,7 +49,7 @@ newyorkfed.org; Toll is not affiliated with the New York Fed.
 
 ## Free limit and the Toll key
 
-Free, with no key: 10 new coins a day per caller (coins already read stay free; `check_agent` uses no coin), and 50
+Free, with no key: 10 new coins a day per caller (coins already read stay free; `check_agent` and `check_hook` use no coin), and 50
 Markets calls a day (Stock Tokens, fundamentals, insider trades, institutions, guidance, macro). Past that, the answer gives a paid x402 URL on
 Robinhood Chain; this plugin cannot pay it, and the skill tells the agent never to pay without the user's consent.
 

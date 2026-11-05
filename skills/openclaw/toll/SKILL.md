@@ -38,7 +38,7 @@ or in the OpenClaw config (JSON5): `mcp: { servers: { toll: { transport: "stream
 The same tools run locally over stdio with `npx -y @tollxyz/mcp`.
 
 Tools (18, all Robinhood Chain): `check_coin` (address: 0x token), `larp_check` (token), `dev_record` (wallet),
-`wallet_privacy` (wallet), `fresh_launches` (limit?), `chain_pulse`, `launch_record` (address), `check_agent` (id),
+`wallet_privacy` (wallet), `fresh_launches` (limit?), `chain_pulse`, `launch_record` (address), `check_agent` (id), `check_hook` (address),
 before signing `check_tx` (to, data, value, from; or typedData; or x402) and `presign_risk_report` (version:
 erc-presign/1, subject), for Robinhood Stock Tokens `stock_token` (id: ticker or contract), `stock_tokens` (query?,
 limit?) and `stock_events` (since?, kind?, limit?), for the companies behind them `fundamentals` (id, period?: ttm |
@@ -63,6 +63,9 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
   address gets "Toll reads Robinhood Chain only right now."
 - `larp_check`: the label is product found / partly found / not found / not read, a fact about what Toll could check.
   A coin nobody asked about yet is queued: call again after the seconds it gives.
+- `check_hook` (address): one Uniswap v4 hook on Robinhood Chain: its name, what its address lets it do, whether its
+  owner can change its code, how many pools use it, and whether a test sell through it reverted (sells fail). A $TOLL
+  holder's key adds the measured cut and how its latest coins ended.
 - `check_agent`: whether its card loads, whether it answers over MCP or x402, its payment terms, and whether x402 pays
   its registered agentWallet. If it does not, stop and tell the owner.
 - `check_tx`: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment). Calldata it cannot read is WARN,
@@ -71,7 +74,7 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
 
 ## Free limit
 
-10 new coins a day per caller are free; coins already read stay free; `check_agent` uses no coin. Markets calls
+10 new coins a day per caller are free; coins already read stay free; `check_agent` and `check_hook` use no coin. Markets calls
 (Stock Tokens, fundamentals, insider trades, institutions, guidance, macro) have their own count: 50 a day free. Holding $TOLL lifts both: new coins a day 1M $TOLL 100 / 5M 500 /
 20M 2,000, Markets calls 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys sent as `x-toll-pass`
 or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.05 USDG a check, 0.02 USDG a stock, and

@@ -137,6 +137,12 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
 
 ## 5. Other reads
 
+- `check_hook` (address): one Uniswap v4 hook on Robinhood Chain (a pool's hook named in `check_coin`, or one you are
+  about to trade through): its name and where it was read, what its address lets it do (runs on every trade, can take
+  a fee or tax, can act when liquidity is removed), whether its owner can change its code, how many pools use it, and
+  whether a test sell through it reverted (sells fail). A $TOLL holder's Toll key adds the measured cut and how its
+  latest coins ended; paid with those parts at https://t0ll.xyz/api/x402/hook/{hook} (0.01 USDG). If sells fail or
+  its code can be changed, tell your owner before you trade through it.
 - `fresh_launches` (limit 1 to 20): the newest coins on Robinhood Chain.
 - `chain_pulse`: launches, graduations and trades on Robinhood Chain right now.
 - `wallet_privacy` (wallet): what anyone can learn about a wallet. The grade measures exposure, not whether the wallet
@@ -163,7 +169,7 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
 
 ## 6. Free limit and the paid path
 
-10 new coins a day per caller are free; coins already read stay free; `check_agent` uses no coin. Past that,
+10 new coins a day per caller are free; coins already read stay free; `check_agent` and `check_hook` use no coin. Past that,
 `check_coin` and `larp_check` answer with the paid x402 URL for that coin: 0.05 USDG on Robinhood Chain per check,
 charged only for a whole answer (https://t0ll.xyz/api/x402/check/{token}?chain=rh and
 https://t0ll.xyz/api/x402/larp/{token}?chain=rh). Pay it only with your owner's consent. How to pay:

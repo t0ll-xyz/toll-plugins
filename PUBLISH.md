@@ -193,3 +193,59 @@ cd packages/mcp && mcp-publisher login github && mcp-publisher publish && cd ../
 
 Check: `for p in sdk agentkit ai-sdk goat-plugin plugin-elizaos langchain mastra mcp; do npm view @tollxyz/$p version; done`
 (all 0.2.1) and `pip index versions toll-sdk` (0.2.1).
+
+## check_hook release (11-05)
+
+What changed: `check_hook(address)` (one Uniswap v4 hook on Robinhood Chain) in `@tollxyz/sdk` (`checkHook`) and
+`toll-sdk` (`check_hook`), and as a tool/action in every wrapper (agentkit, ai-sdk, goat, langchain, mastra,
+plugin-elizaos `TOLL_CHECK_HOOK`); `@tollxyz/mcp` snapshot + instructions name it (the live list is proxied as is).
+Every package goes 0.2.1 -> 0.2.2; the wrappers need `@tollxyz/sdk ^0.2.2`. Branch `check-hook-1105`.
+Publish only after the site with `check_hook` is live (`curl -s https://t0ll.xyz/mcp` tools/list has check_hook),
+else the wrappers call a tool the server does not have.
+
+```bash
+cd ~/toll-plugins
+git checkout check-hook-1105
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                              # tollxyz
+
+# build + test, one at a time (the SDK first: the wrappers import its dist)
+for d in sdk-js agentkit ai-sdk goat plugin-elizaos langchain mastra mcp; do
+  (cd packages/$d && npm run build && npm test) || { echo "STOP: $d"; break; }
+done
+(cd packages/sdk-py && uv run --with pytest pytest -q)
+node scripts/check-skills.mjs
+
+# 1. the SDK first (the plugins need ^0.2.2)
+(cd packages/sdk-js && npm publish --access public)
+npm view @tollxyz/sdk@0.2.2 version     # wait until it prints 0.2.2
+
+# 2. the plugins and the MCP server
+(cd packages/agentkit       && npm publish --access public)
+(cd packages/ai-sdk         && npm publish --access public)
+(cd packages/goat           && npm publish --access public)
+(cd packages/plugin-elizaos && npm publish --access public)
+(cd packages/langchain      && npm publish --access public)
+(cd packages/mastra         && npm publish --access public)
+(cd packages/mcp            && npm publish --access public)
+
+# 3. PyPI
+cd packages/sdk-py
+rm -rf dist
+uv build                                # dist/toll_sdk-0.2.2-py3-none-any.whl and .tar.gz
+uvx twine check dist/*
+uvx twine upload dist/*
+cd ../..
+
+# 4. GitHub
+git push origin check-hook-1105
+git checkout main && git merge --ff-only check-hook-1105 && git push origin main
+
+# 5. MCP registry (packages/mcp/server.json is 0.2.2; @tollxyz/mcp 0.2.2 must be on npm first)
+cd packages/mcp && mcp-publisher login github && mcp-publisher publish && cd ../..
+# and the registry copy in ~/toll-mcp-repo (server.json 0.2.2, branch check-hook-1105):
+cd ~/toll-mcp-repo && git push origin check-hook-1105 && mcp-publisher login github && mcp-publisher publish && cd -
+```
+
+Check: `for p in sdk agentkit ai-sdk goat-plugin plugin-elizaos langchain mastra mcp; do npm view @tollxyz/$p version; done`
+(all 0.2.2) and `pip index versions toll-sdk` (0.2.2).
