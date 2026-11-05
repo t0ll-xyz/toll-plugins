@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import socket
 import time
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 __all__ = [
+    "resolve_client_id",
     "FUNDAMENTALS_PERIODS",
     "RH_ONLY",
     "STOCK_EVENT_KINDS",
@@ -77,6 +79,45 @@ STOCK_EVENT_KINDS = (
 _PAID_URL = re.compile(r"paid (?:LARP )?check of this coin \(x402\):\s*(https://t0ll\.xyz/api/x402/[^\s)\"'<>]+)", re.I)
 _AGAIN = re.compile(r"again in (?:about )?(\d+)\s*(?:s\b|sec)", re.I)
 _PAID_PREFIX = "https://t0ll.xyz/api/x402/"
+_CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
+_PROCESS_ID: Optional[str] = None
+
+
+def _random_id() -> str:
+    return base64.urlsafe_b64encode(os.urandom(16)).decode().rstrip("=")
+
+
+def resolve_client_id(explicit: Optional[str] = None, home: Optional[str] = None) -> str:
+    """The stable install id sent as x-toll-client so Toll can count returning agents (no wallet, no personal data):
+    `explicit` when it matches [A-Za-z0-9_-]{22,64}, else the one kept in ~/.toll/client-id (created once), else a
+    random id for this process. Never raises."""
+    global _PROCESS_ID
+    given = (explicit or "").strip() if isinstance(explicit, str) else ""
+    if _CLIENT_ID_RE.match(given):
+        return given
+    try:
+        base = home if home is not None else os.path.expanduser("~")
+        folder = os.path.join(base, ".toll")
+        path = os.path.join(folder, "client-id")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                have = fh.read().strip()
+            if _CLIENT_ID_RE.match(have):
+                return have
+        except OSError:
+            pass
+        fresh = _random_id()
+        os.makedirs(folder, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(fresh + "\n")
+        return fresh
+    except Exception:
+        pass
+    if _PROCESS_ID is None:
+        _PROCESS_ID = _random_id()
+    return _PROCESS_ID
+
+
 _TIMEOUTS = (TimeoutError, socket.timeout)
 _SETTLE_NOTE = (
     " The payment may have settled: do not retry this call with a new signature;"
@@ -213,9 +254,12 @@ class Toll:
         sign: Optional[SignPayment] = None,
         pay_timeout: float = 300.0,
         toll_key: Optional[str] = None,
+        client_id: Optional[str] = None,
     ) -> None:
         """toll_key: a Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every MCP call: carries the key
-        wallet's daily tier (more new coins and Markets calls a day, the live stock_events feed)."""
+        wallet's daily tier (more new coins and Markets calls a day, the live stock_events feed).
+        client_id: a stable install id sent as x-toll-client so Toll can count returning agents (22-64 chars of
+        A-Z a-z 0-9 _ -; anything else is ignored). Default: a random id kept in ~/.toll/client-id, else per process."""
         self.base_url = base_url.rstrip("/")
         self._opener = opener or urllib.request.build_opener()
         self.timeout = timeout
@@ -224,6 +268,7 @@ class Toll:
         self._sleep = sleep
         self._next_id = 1
         self._toll_key = (toll_key or "").strip() or None
+        self._client_id = resolve_client_id(client_id)
 
     # -- transport ---------------------------------------------------------
     def _http(self, req: urllib.request.Request, timeout: float, note: str = "") -> tuple:
@@ -258,6 +303,7 @@ class Toll:
                 "content-type": "application/json",
                 "accept": "application/json, text/event-stream",
                 **({"x-toll-pass": self._toll_key} if self._toll_key else {}),
+                "x-toll-client": self._client_id,
             },
         )
         status, _headers, raw = self._http(req, self.timeout)
