@@ -108,8 +108,18 @@ def resolve_client_id(explicit: Optional[str] = None, home: Optional[str] = None
             pass
         fresh = _random_id()
         os.makedirs(folder, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(fresh + "\n")
+        line = fresh + "\n"
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # the file exists: another process won the race (use its id) or it holds junk (replace it)
+            with open(path, "r", encoding="utf-8") as fh:
+                have = fh.read().strip()
+            if _CLIENT_ID_RE.match(have):
+                return have
+            fd = os.open(path, os.O_WRONLY | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(line)
         return fresh
     except Exception:
         pass

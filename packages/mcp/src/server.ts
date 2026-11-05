@@ -13,7 +13,7 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { parsePaidUrl } from "@tollxyz/sdk";
+import { parsePaidUrl, resolveClientId } from "@tollxyz/sdk";
 import { SNAPSHOT_TOOLS } from "./snapshot.js";
 
 export const VERSION = "0.2.1";
@@ -53,6 +53,7 @@ export class TollProxy {
   private readonly url: URL;
   private readonly fetchFn?: FetchLike;
   private readonly timeoutMs: number;
+  private readonly clientId = resolveClientId();
   private client: Client | null = null;
   private connecting: Promise<Client> | null = null;
 
@@ -69,7 +70,7 @@ export class TollProxy {
       this.connecting = (async () => {
         const transport = new StreamableHTTPClientTransport(this.url, {
           ...(this.fetchFn ? { fetch: this.fetchFn as any } : {}),
-          requestInit: { headers: { "user-agent": `toll-mcp/${VERSION}` } },
+          requestInit: { headers: { "user-agent": `toll-mcp/${VERSION}`, "x-toll-client": this.clientId } },
         });
         const c = new Client({ name: "toll-mcp", version: VERSION });
         await c.connect(transport, { timeout: 30_000 });

@@ -62,3 +62,23 @@ test("existing invalid file content is replaced", () => {
   assert.match(id, ID_RE);
   assert.equal(readFileSync(join(home, ".toll", "client-id"), "utf8").trim(), id);
 });
+
+test("a valid file written between the failed read and the write wins (exclusive create)", () => {
+  const home = mkdtempSync(join(tmpdir(), "toll-cid-"));
+  const winner = "winner-written-by-a-racer-0123";
+  let reads = 0;
+  const racing = {
+    readFileSync: (p: string, e: "utf8") => {
+      if (reads++ === 0) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return nodeFs.readFileSync(p, e);
+    },
+    mkdirSync: (p: string, o?: { recursive?: boolean }) => {
+      const r = nodeFs.mkdirSync(p, o);
+      nodeFs.writeFileSync(join(p, "client-id"), winner + "\n"); // the other process wins here
+      return r;
+    },
+    writeFileSync: nodeFs.writeFileSync as any,
+  };
+  assert.equal(resolveClientId(undefined, { fs: racing, home }), winner);
+  assert.equal(readFileSync(join(home, ".toll", "client-id"), "utf8").trim(), winner);
+});

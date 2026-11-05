@@ -97,3 +97,13 @@ test("TOLL_STOCK_TOKEN without a ticker says so and sends nothing", async () => 
   assert.match(res.text, /No Stock Token in the message/);
   assert.equal(calls.length, 0);
 });
+
+test("Markets calls send the stable install id as x-toll-client (with and without a key)", async () => {
+  const a = setup([{ body: NVDA }]);
+  await act(a.p, "TOLL_STOCK_TOKEN").handler({}, msg("NVDA stock token"));
+  const b = setup([{ body: NVDA }], "tk_1");
+  await act(b.p, "TOLL_STOCK_TOKEN").handler({}, msg("NVDA stock token"));
+  const id = a.calls[0].headers.get("x-toll-client")!;
+  assert.match(id, /^[A-Za-z0-9_-]{22,64}$/);
+  assert.equal(b.calls[0].headers.get("x-toll-client"), id);
+});

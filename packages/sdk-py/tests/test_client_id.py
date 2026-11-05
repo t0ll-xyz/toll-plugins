@@ -47,3 +47,18 @@ def test_default_client_sends_header():
     op = FakeOpener(OK)
     Toll(opener=op).chain_pulse()
     assert ID_RE.match(header(op))
+
+
+def test_valid_file_written_between_read_and_write_wins(tmp_path, monkeypatch):
+    import toll_sdk
+
+    winner = "winner-written-by-a-racer-0123"
+    real_makedirs = toll_sdk.os.makedirs
+
+    def racing_makedirs(path, **kw):
+        real_makedirs(path, **kw)
+        (tmp_path / ".toll" / "client-id").write_text(winner + "\n")  # the other process wins here
+
+    monkeypatch.setattr(toll_sdk.os, "makedirs", racing_makedirs)
+    assert resolve_client_id(None, home=str(tmp_path)) == winner
+    assert (tmp_path / ".toll" / "client-id").read_text().strip() == winner

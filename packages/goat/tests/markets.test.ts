@@ -62,3 +62,13 @@ test("tollKey also goes on the coin checks (MCP)", async () => {
   assert.equal(calls[0].url, "https://t0ll.xyz/mcp");
   assert.equal(calls[0].headers.get("x-toll-pass"), "tk_9");
 });
+
+test("Markets calls send the stable install id as x-toll-client (with and without a key)", async () => {
+  const a = await setup([{ body: NVDA }]);
+  await a.get("stock_token").execute({ id: "NVDA" });
+  const b = await setup([{ body: NVDA }], "tk_1");
+  await b.get("stock_token").execute({ id: "NVDA" });
+  const id = a.calls[0].headers.get("x-toll-client")!;
+  assert.match(id, /^[A-Za-z0-9_-]{22,64}$/);
+  assert.equal(b.calls[0].headers.get("x-toll-client"), id);
+});
