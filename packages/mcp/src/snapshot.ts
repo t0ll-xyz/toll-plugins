@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-04). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-05). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -231,6 +231,33 @@ export const SNAPSHOT_TOOLS: Tool[] = [
     },
     "annotations": {
       "title": "Check an agent",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "check_hook",
+    "title": "Check a hook",
+    "description": "One Uniswap v4 hook on Robinhood Chain, by its contract address: its name and where the name was read (the contract's own getter, Blockscout or Sourcify), whether it is a launchpad's shared hook, its 14 permission bits in plain words (runs on every trade, can take a fee or tax, can act when liquidity is removed...), whether its code can be changed by its owner (EIP-1967 proxy) or is a fixed clone, how many pools use it in Toll's chain data, and whether a test sell through its newest pool reverted (sells fail). With a $TOLL holder's Toll key: also the measured buy and sell cut in % and its latest coins with how each ended (the launch record, scored 24 h after launch). Facts, never a verdict. Robinhood Chain only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "The hook contract's address on Robinhood Chain: 0x followed by 40 hex characters"
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Check a hook",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,

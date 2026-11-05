@@ -55,6 +55,7 @@ export class LaunchRecordParams extends createToolParameters(SCHEMAS.launch_reco
 export class FreshLaunchesParams extends createToolParameters(SCHEMAS.fresh_launches) {}
 export class ChainPulseParams extends createToolParameters(SCHEMAS.chain_pulse) {}
 export class CheckAgentParams extends createToolParameters(SCHEMAS.check_agent) {}
+export class CheckHookParams extends createToolParameters(SCHEMAS.check_hook) {}
 export class CheckTxParams extends createToolParameters(SCHEMAS.check_tx) {}
 export class PresignRiskReportParams extends createToolParameters(SCHEMAS.presign_risk_report) {}
 export class StockTokenParams extends createToolParameters(SCHEMAS.stock_token) {}
@@ -143,6 +144,11 @@ export class TollService {
   @Tool({ name: "check_agent", description: LIVE_DESCRIPTIONS.check_agent })
   async checkAgent(parameters: CheckAgentParams): Promise<string> {
     return run(() => this.client.checkAgent(parameters.id));
+  }
+
+  @Tool({ name: "check_hook", description: LIVE_DESCRIPTIONS.check_hook })
+  async checkHook(parameters: CheckHookParams): Promise<string> {
+    return run(() => this.client.checkHook(parameters.address));
   }
 
   @Tool({ name: "check_tx", description: LIVE_DESCRIPTIONS.check_tx })

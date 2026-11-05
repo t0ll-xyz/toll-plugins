@@ -1,7 +1,7 @@
 {
   "name": "@tollxyz/mcp",
   "mcpName": "io.github.t0ll-xyz/toll",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Local stdio MCP server for Toll on Robinhood Chain: before an agent buys a coin, pays an agent or signs, check it (18 tools: coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Proxies t0ll.xyz/mcp. Free tier, read-only, no key. Information only.",
   "license": "MIT",
   "author": "Toll",
@@ -56,7 +56,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@tollxyz/sdk": "^0.2.1",
+    "@tollxyz/sdk": "^0.2.2",
     "zod": "^3.25.76 || ^4.1.8"
   },
   "devDependencies": {

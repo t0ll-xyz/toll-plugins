@@ -25,7 +25,7 @@ async function setup(responses: string[]) {
   return { plugin, tools, get, bodies };
 }
 
-test("all 18 live tools with sharp descriptions and any-chain support", async () => {
+test("all 19 live tools with sharp descriptions and any-chain support", async () => {
   const { plugin, tools } = await setup([]);
   assert.equal(plugin.name, "toll");
   assert.deepEqual(tools.map((t) => t.name).sort(), [...TOOL_NAMES].sort());
@@ -127,4 +127,13 @@ test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async 
 test("re-exports Toll and TollError from @tollxyz/sdk", () => {
   assert.equal(Reexported.Toll, Toll);
   assert.equal(Reexported.TollError, TollError);
+});
+
+const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";
+test("check_hook (11-05): the live description, one call with { address }", async () => {
+  const { get, bodies } = await setup([ok("h")]);
+  assert.equal(get("check_hook").description, LIVE_DESCRIPTIONS.check_hook);
+  assert.ok(get("check_hook").parameters.safeParse({ address: HOOK }).success);
+  assert.equal(await get("check_hook").execute({ address: HOOK }), "h");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
 });

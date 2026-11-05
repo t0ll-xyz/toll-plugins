@@ -260,6 +260,36 @@
         }
       },
       {
+        "name": "check_hook",
+        "title": "Check a hook",
+        "description": "One Uniswap v4 hook on Robinhood Chain, by its contract address: its name and where the name was read (the contract's own getter, Blockscout or Sourcify), whether it is a launchpad's shared hook, its 14 permission bits in plain words (runs on every trade, can take a fee or tax, can act when liquidity is removed...), whether its code can be changed by its owner (EIP-1967 proxy) or is a fixed clone, how many pools use it in Toll's chain data, and whether a test sell through its newest pool reverted (sells fail). With a $TOLL holder's Toll key: also the measured buy and sell cut in % and its latest coins with how each ended (the launch record, scored 24 h after launch). Facts, never a verdict. Robinhood Chain only.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "maxLength": 80,
+              "description": "The hook contract's address on Robinhood Chain: 0x followed by 40 hex characters"
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "annotations": {
+          "title": "Check a hook",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "execution": {
+          "taskSupport": "forbidden"
+        }
+      },
+      {
         "name": "check_tx",
         "title": "Check before signing",
         "description": "Pre-sign check, before an agent signs anything on Robinhood Chain (chain id 4663): send the transaction (to, data, value, and from), an EIP-712 signature request (typedData: Permit, Permit2, TransferWithAuthorization) or an x402 payment (x402: the PaymentRequired from the 402, or one accepts entry; agentId optional), and Toll answers ALLOW / WARN / BLOCK with the reasons, as an ERC-8265 RiskAssessment. It reads approvals (unlimited, to a plain wallet, to a contract we do not know, to a wallet the coin's own check names), transfers (to a burn address, the token itself, a router, a flagged wallet, an unknown contract), swaps (the router, who it pays out to, and the coin bought, through Toll's coin check: BLOCK only for findings whose coins rugged at 40% or more in our calibration), and x402 payments (ERC-8478 payee verification: payTo against the seller's ERC-8004 agent wallet or a payee delegation it signed, read live from the Robinhood Chain or Base identity registry, with the outcome in x-toll; the seller's last delivery spot-check, the asset and amount). Calldata it cannot read is WARN, never ALLOW; a coin still being read is WARN with the seconds to wait. Robinhood Chain only. Facts, not advice.",
