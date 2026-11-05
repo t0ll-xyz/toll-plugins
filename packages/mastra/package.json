@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/mastra",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mastra tools: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",
@@ -48,7 +48,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@tollxyz/sdk": "^0.2.0"
+    "@tollxyz/sdk": "^0.2.1"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0 <2",

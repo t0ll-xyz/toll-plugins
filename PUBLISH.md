@@ -134,3 +134,62 @@ Chain, Solana, BSC and Arc". After step 4, open a follow-up PR (or update the op
   next site deploy so the two match.
 
 Information only, not financial advice.
+
+---
+
+## client-id release (11-05)
+
+Branch `client-id-1105`. Nothing below has been run. The SDKs now send a stable install id (`x-toll-client`, read from
+`~/.toll/client-id` or random) on every MCP call so t0ll.xyz can count returning agents. `npm whoami` must say `tollxyz`.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/sdk` (packages/sdk-js) | 0.2.0 | 0.2.1 |
+| `@tollxyz/agentkit`, `ai-sdk`, `goat-plugin`, `plugin-elizaos`, `langchain`, `mastra`, `mcp` | 0.2.0 | 0.2.1 (depend on `@tollxyz/sdk ^0.2.1`) |
+| `toll-sdk` (PyPI, packages/sdk-py) | 0.2.0 | 0.2.1 |
+| `@tollxyz/x402-seller`, `@tollxyz/guard` | unchanged, do not publish | |
+
+```sh
+cd ~/toll-plugins
+git checkout client-id-1105
+git status --short                      # only packages/sdk-py/uv.lock may show (leave it)
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                              # tollxyz
+
+# build + test, one at a time
+for d in sdk-js agentkit ai-sdk goat plugin-elizaos langchain mastra mcp; do
+  (cd packages/$d && npm run build && npm test) || { echo "STOP: $d"; break; }
+done
+(cd packages/sdk-py && uv run --with pytest pytest -q)
+
+# 1. the SDK first (the plugins need ^0.2.1)
+(cd packages/sdk-js && npm publish --access public)
+npm view @tollxyz/sdk@0.2.1 version     # wait until it prints 0.2.1
+
+# 2. the plugins and the MCP server
+(cd packages/agentkit       && npm publish --access public)
+(cd packages/ai-sdk         && npm publish --access public)
+(cd packages/goat           && npm publish --access public)
+(cd packages/plugin-elizaos && npm publish --access public)
+(cd packages/langchain      && npm publish --access public)
+(cd packages/mastra         && npm publish --access public)
+(cd packages/mcp            && npm publish --access public)
+
+# 3. PyPI
+cd packages/sdk-py
+rm -rf dist
+uv build                                # dist/toll_sdk-0.2.1-py3-none-any.whl and .tar.gz
+uvx twine check dist/*
+uvx twine upload dist/*
+cd ../..
+
+# 4. GitHub
+git push origin client-id-1105
+git checkout main && git merge --ff-only client-id-1105 && git push origin main
+
+# 5. MCP registry (packages/mcp/server.json is 0.2.1; @tollxyz/mcp 0.2.1 must be on npm first)
+cd packages/mcp && mcp-publisher login github && mcp-publisher publish && cd ../..
+```
+
+Check: `for p in sdk agentkit ai-sdk goat-plugin plugin-elizaos langchain mastra mcp; do npm view @tollxyz/$p version; done`
+(all 0.2.1) and `pip index versions toll-sdk` (0.2.1).

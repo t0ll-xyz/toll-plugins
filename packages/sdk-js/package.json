@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Client for Toll's checks on Robinhood Chain over MCP: coins, dev records, LARP, ERC-8004 agents, pre-sign checks (check_tx, ERC-8265) and Robinhood Stock Token data. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",

@@ -114,6 +114,66 @@ export interface PaymentRequirements {
  */
 export type SignPayment = (requirements: PaymentRequirements, url: string) => Promise<string> | string;
 
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{22,64}$/;
+
+/** The slice of node:fs the install id needs (injectable for tests). */
+export interface ClientIdFs {
+  readFileSync(path: string, enc: "utf8"): string;
+  writeFileSync(path: string, data: string, opts?: { mode?: number }): void;
+  mkdirSync(path: string, opts?: { recursive?: boolean }): unknown;
+}
+
+function randomId(): string {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+let processId: string | undefined;
+
+/** Node's fs and home directory, looked up lazily so browser and edge bundles never import them. */
+function nodeEnv(): { fs: ClientIdFs | null; home: string | null } {
+  try {
+    const get = (globalThis as any).process?.getBuiltinModule;
+    if (typeof get !== "function") return { fs: null, home: null };
+    const fs = get.call((globalThis as any).process, "node:fs") as ClientIdFs | undefined;
+    const os = get.call((globalThis as any).process, "node:os") as { homedir(): string } | undefined;
+    return { fs: fs ?? null, home: os?.homedir() || null };
+  } catch {
+    return { fs: null, home: null };
+  }
+}
+
+/**
+ * The stable install id sent as x-toll-client so Toll can count returning agents (no wallet, no personal data):
+ * `explicit` when it matches [A-Za-z0-9_-]{22,64}, else the one kept in ~/.toll/client-id (created once), else a random
+ * id for this process. Never throws.
+ */
+export function resolveClientId(
+  explicit?: string,
+  env: { fs?: ClientIdFs | null; home?: string | null } = nodeEnv(),
+): string {
+  const given = typeof explicit === "string" ? explicit.trim() : "";
+  if (CLIENT_ID_RE.test(given)) return given;
+  try {
+    if (env.fs && env.home) {
+      const dir = `${env.home.replace(/[\\/]+$/, "")}/.toll`;
+      const file = `${dir}/client-id`;
+      try {
+        const have = env.fs.readFileSync(file, "utf8").trim();
+        if (CLIENT_ID_RE.test(have)) return have;
+      } catch {}
+      const fresh = randomId();
+      env.fs.mkdirSync(dir, { recursive: true });
+      env.fs.writeFileSync(file, `${fresh}\n`, { mode: 0o600 });
+      return fresh;
+    }
+  } catch {}
+  return (processId ??= randomId());
+}
+
 export interface TollOptions {
   /** Default https://t0ll.xyz */
   baseUrl?: string;
@@ -122,6 +182,12 @@ export interface TollOptions {
    * tier (more new coins and Markets calls a day, the live stock_events feed).
    */
   tollKey?: string;
+  /**
+   * A stable install id sent as x-toll-client on every MCP call so Toll can count returning agents (22-64 chars of
+   * A-Z a-z 0-9 _ -; anything else is ignored). Default: a random id kept in ~/.toll/client-id when the filesystem is
+   * there, else random per process.
+   */
+  clientId?: string;
   /** Plain fetch used for MCP calls. Default: global fetch. */
   fetch?: FetchLike;
   /** Signs the payment pay() sends (see SignPayment). Without it pay() throws before any request. */
@@ -229,6 +295,7 @@ export class Toll {
   private readonly baseUrl: string;
   private readonly fetchFn: FetchLike;
   private readonly tollKey?: string;
+  private readonly clientId: string;
   private readonly signFn?: SignPayment;
   private readonly timeoutMs: number;
   private readonly payTimeoutMs: number;
@@ -239,6 +306,7 @@ export class Toll {
     this.baseUrl = (opts.baseUrl ?? "https://t0ll.xyz").replace(/\/+$/, "");
     this.fetchFn = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.tollKey = opts.tollKey?.trim() || undefined;
+    this.clientId = resolveClientId(opts.clientId);
     this.signFn = opts.sign;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.payTimeoutMs = opts.payTimeoutMs ?? 300_000;
@@ -273,6 +341,7 @@ export class Toll {
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         ...(this.tollKey ? { "x-toll-pass": this.tollKey } : {}),
+        "x-toll-client": this.clientId,
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method, params }),
     });
