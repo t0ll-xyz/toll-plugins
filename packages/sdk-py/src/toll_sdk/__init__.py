@@ -50,6 +50,7 @@ TOOL_NAMES = (
     "chain_pulse",
     "launch_record",
     "check_agent",
+    "check_hook",
     "check_tx",
     "presign_risk_report",
     "stock_token",
@@ -437,6 +438,13 @@ class Toll:
         if not ok:
             raise TollError("Invalid agent id: expected a whole number (its ERC-8004 token id on Robinhood Chain).")
         return self.call("check_agent", {"id": agent_id})
+
+    def check_hook(self, address: str) -> TollResult:
+        """One Uniswap v4 hook on Robinhood Chain, by its contract address: its name, what its address lets it do,
+        whether its owner can change its code, how many pools use it, and whether sells through it fail. A $TOLL
+        holder's key (api_key) adds the measured cut and how its latest coins ended."""
+        _check_address(address, "hook address")
+        return self.call("check_hook", {"address": address})
 
     def check_tx(
         self,

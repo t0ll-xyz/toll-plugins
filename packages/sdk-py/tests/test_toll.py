@@ -78,7 +78,7 @@ def test_validators():
 def test_tools_from_real_list():
     op = FakeOpener(fx("tools_list"))
     tools = Toll(opener=op).tools()
-    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 18
+    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 19 and "check_hook" in TOOL_NAMES
     req, timeout = op.requests[0]
     assert req.full_url == "https://t0ll.xyz/mcp" and timeout == 30.0
     assert req.get_header("Accept") == "application/json, text/event-stream"
@@ -206,6 +206,7 @@ def test_bad_input_never_reaches_network():
         lambda: t.check_agent(-1),
         lambda: t.check_agent("12a"),
         lambda: t.check_agent(True),
+        lambda: t.check_hook("0x123"),
         lambda: t.check_tx(),
         lambda: t.check_tx(to=TOKEN, chain_id=8453),
         lambda: t.presign_risk_report({}, version="erc-presign/0"),
@@ -227,11 +228,15 @@ def _ok(text="ok"):
     return json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": text}]}})
 
 
+HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc"
+
+
 def test_agent_presign_and_markets_tools_send_live_argument_names():
-    op = FakeOpener(*[_ok() for _ in range(13)])
+    op = FakeOpener(*[_ok() for _ in range(14)])
     t = Toll(opener=op)
     subject = {"type": "calls", "chainId": "eip155:4663", "from": f"eip155:4663:{TOKEN}", "calls": []}
     t.check_agent(20030)
+    t.check_hook(HOOK)
     t.check_tx(to=TOKEN, data="0x095ea7b3", value="0", from_=TOKEN, strict=True)
     t.check_tx(x402={"accepts": []}, agent_id="20030")
     t.presign_risk_report(subject)
@@ -244,8 +249,9 @@ def test_agent_presign_and_markets_tools_send_live_argument_names():
     t.macro()
     t.stock_events(since=120, kind="filing", limit=10)
     t.stock_events()
-    assert [op.body(i)["params"] for i in range(13)] == [
+    assert [op.body(i)["params"] for i in range(14)] == [
         {"name": "check_agent", "arguments": {"id": 20030}},
+        {"name": "check_hook", "arguments": {"address": HOOK}},
         {"name": "check_tx", "arguments": {"to": TOKEN, "data": "0x095ea7b3", "value": "0", "strict": True, "from": TOKEN}},
         {"name": "check_tx", "arguments": {"x402": {"accepts": []}, "agentId": "20030"}},
         {"name": "presign_risk_report", "arguments": {"version": "erc-presign/1", "subject": subject}},

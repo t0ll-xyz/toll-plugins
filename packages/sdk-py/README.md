@@ -32,6 +32,7 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `larp_check(token, chain=None, wait=False)` - `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
 - `check_agent(agent_id)` - an ERC-8004 agent on Robinhood Chain by its agent id
+- `check_hook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `check_tx(to=, data=, value=, from_=, typed_data=, x402=, agent_id=, registry=, strict=, chain_id=)` - the pre-sign check for a transaction, an EIP-712 signature (`typed_data`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chain_id` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presign_risk_report(subject, context=None, kinds=None)` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134, version `erc-presign/1`): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
 - `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
