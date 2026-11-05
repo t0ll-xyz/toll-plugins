@@ -53,7 +53,7 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all eighteen. */
+  /** Which tools to return. Default: all nineteen. */
   only?: TollToolName[];
 }
 
