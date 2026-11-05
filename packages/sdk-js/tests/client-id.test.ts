@@ -82,3 +82,34 @@ test("a valid file written between the failed read and the write wins (exclusive
   assert.equal(resolveClientId(undefined, { fs: racing, home }), winner);
   assert.equal(readFileSync(join(home, ".toll", "client-id"), "utf8").trim(), winner);
 });
+
+test("two resolvers racing on a junk file end with the same id", () => {
+  const home = mkdtempSync(join(tmpdir(), "toll-cid-"));
+  nodeFs.mkdirSync(join(home, ".toll"));
+  nodeFs.writeFileSync(join(home, ".toll", "client-id"), ""); // empty/junk
+  const noSleep = () => {};
+  let b = "";
+  let reads = 0;
+  const fsA = {
+    ...nodeFs,
+    readFileSync: (p: string, e: "utf8") => {
+      if (++reads === 3) b = resolveClientId(undefined, { fs: nodeFs, home, sleep: noSleep }); // B runs during A's retries
+      return nodeFs.readFileSync(p, e);
+    },
+  } as any;
+  const a = resolveClientId(undefined, { fs: fsA, home, sleep: noSleep });
+  assert.match(a, ID_RE);
+  assert.equal(a, b);
+  assert.equal(readFileSync(join(home, ".toll", "client-id"), "utf8").trim(), a);
+  assert.deepEqual(nodeFs.readdirSync(join(home, ".toll")), ["client-id"]); // no temp file left
+});
+
+test("an empty file that gets filled during the retries is used, not replaced", () => {
+  const home = mkdtempSync(join(tmpdir(), "toll-cid-"));
+  nodeFs.mkdirSync(join(home, ".toll"));
+  const file = join(home, ".toll", "client-id");
+  nodeFs.writeFileSync(file, "");
+  const winner = "winner-written-by-a-racer-0123";
+  const id = resolveClientId(undefined, { fs: nodeFs, home, sleep: () => nodeFs.writeFileSync(file, winner + "\n") });
+  assert.equal(id, winner);
+});
