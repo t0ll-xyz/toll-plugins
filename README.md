@@ -3,9 +3,9 @@
 SDKs, agent plugins and skills for [Toll](https://t0ll.xyz/agents/plugins), the safety check for agents on Robinhood
 Chain (chain id 4663, the only chain Toll reads): who is behind a coin, the dev's record, whether there is a real
 product behind it, what a transaction, signature or x402 payment does before it is signed (`check_tx`, ALLOW / WARN /
-BLOCK), what an ERC-8004 agent's registration and payment terms say, and Robinhood Stock Token data (SEC fundamentals,
+BLOCK), what an ERC-8004 agent's registration and payment terms say, what a Uniswap v4 hook can do (`check_hook`), and Robinhood Stock Token data (SEC fundamentals,
 insider trades, 13F holders, earnings guidance, the event feed, US macro), read over Toll's MCP server. Every package
-exposes all 18 of the server's tools.
+exposes all 19 of the server's tools.
 
 ## The line to add it
 

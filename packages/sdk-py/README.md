@@ -1,6 +1,6 @@
 # toll-sdk
 
-Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 18 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
+Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 19 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
 
 Information only, not financial advice.
 
@@ -38,7 +38,7 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, period=None)` (`ttm`, `annual`, `quarterly`), `insider_trades(id, limit=None)` (1 to 100), `institutions(id, limit=None)` (13F holders, 1 to 20), `guidance(id, limit=None)` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stock_events(since=None, kind=None, limit=None)` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 18
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 19
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.

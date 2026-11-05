@@ -21,7 +21,7 @@ hermes plugins enable toll        # portable packages install disabled
 ```
 
 The tools arrive as `mcp__toll__check_coin`, `mcp__toll__larp_check`, `mcp__toll__check_tx`, `mcp__toll__check_agent`, `mcp__toll__check_hook`
-and the rest (18 tools, all annotated `readOnlyHint`). If your `~/.hermes/config.yaml` already has an `mcp_servers.toll`
+and the rest (19 tools, all annotated `readOnlyHint`). If your `~/.hermes/config.yaml` already has an `mcp_servers.toll`
 entry (Toll's older setup), that entry wins over the plugin's server; remove it to use the plugin's.
 
 ## What it does
@@ -80,7 +80,7 @@ mcp_servers:
   day the list of coins counted, keyed by a code made from the IP address with a secret key that changes every day; the
   IP itself is not stored and the lists are deleted after 3 days ([privacy](https://t0ll.xyz/privacy)).
 - **Not covered by the pin:** the tool set is served by Toll's hosted server at runtime, and the server's code is not
-  public. A snapshot of its tool list (18 tools, all read-only, Robinhood Chain only) is in this repository at
+  public. A snapshot of its tool list (19 tools, all read-only, Robinhood Chain only) is in this repository at
   [`packages/mcp/tests/fixture_tools_list.json`](../../packages/mcp/tests/fixture_tools_list.json).
 
 ## Without the plugin
