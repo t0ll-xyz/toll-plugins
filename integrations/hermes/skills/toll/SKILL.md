@@ -44,6 +44,7 @@ Hermes names the tools `mcp__toll__<tool>`.
 | The call Toll froze at launch and how it ended | `launch_record(address)` |
 | ALLOW / WARN / BLOCK before signing | `check_tx(...)`, `presign_risk_report(...)` |
 | An ERC-8004 agent's card, MCP/x402 and wallet | `check_agent(id)` |
+| A Uniswap v4 hook: name, what it can do, upgradeable, sells fail | `check_hook(address)` |
 | A Robinhood Stock Token, the list | `stock_token(id)`, `stock_tokens(query?, limit?)` |
 | The company's SEC numbers, insider trades | `fundamentals(id, period?)`, `insider_trades(id, limit?)` |
 | 13F institutional holders, earnings-release guidance and KPIs | `institutions(id, limit?)`, `guidance(id, limit?)` |
@@ -74,7 +75,7 @@ Hermes names the tools `mcp__toll__<tool>`.
 
 ## Free limit
 
-10 new coins a day per caller are free (coins already read stay free; `check_agent` uses no coin). Markets calls
+10 new coins a day per caller are free (coins already read stay free; `check_agent` and `check_hook` use no coin). Markets calls
 (Stock Tokens, fundamentals, insider trades, institutions, guidance, macro) have their own count: 50 a day free. Past that, the answer gives a
 paid x402 URL on Robinhood Chain. Never pay it without the user's consent; this plugin cannot pay it by itself.
 
