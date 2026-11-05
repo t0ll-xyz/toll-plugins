@@ -62,3 +62,39 @@ def test_valid_file_written_between_read_and_write_wins(tmp_path, monkeypatch):
     monkeypatch.setattr(toll_sdk.os, "makedirs", racing_makedirs)
     assert resolve_client_id(None, home=str(tmp_path)) == winner
     assert (tmp_path / ".toll" / "client-id").read_text().strip() == winner
+
+
+def test_two_resolvers_racing_on_a_junk_file_end_with_same_id(tmp_path, monkeypatch):
+    import toll_sdk
+
+    (tmp_path / ".toll").mkdir()
+    path = tmp_path / ".toll" / "client-id"
+    path.write_text("")  # empty/junk
+    monkeypatch.setattr(toll_sdk.time, "sleep", lambda s: None)
+    out = {}
+    calls = {"n": 0}
+    real_open = open
+
+    def racing_open(file, *a, **kw):
+        if str(file) == str(path) and (not a or a[0] == "r"):
+            calls["n"] += 1
+            if calls["n"] == 3 and "b" not in out:
+                out["b"] = resolve_client_id(None, home=str(tmp_path))  # B runs during A's retries
+        return real_open(file, *a, **kw)
+
+    monkeypatch.setattr("builtins.open", racing_open)
+    a = resolve_client_id(None, home=str(tmp_path))
+    assert ID_RE.match(a) and a == out["b"]
+    assert path.read_text().strip() == a
+    assert [p.name for p in (tmp_path / ".toll").iterdir()] == ["client-id"]
+
+
+def test_empty_file_filled_during_retries_is_used(tmp_path, monkeypatch):
+    import toll_sdk
+
+    (tmp_path / ".toll").mkdir()
+    path = tmp_path / ".toll" / "client-id"
+    path.write_text("")
+    winner = "winner-written-by-a-racer-0123"
+    monkeypatch.setattr(toll_sdk.time, "sleep", lambda s: path.write_text(winner + "\n"))
+    assert resolve_client_id(None, home=str(tmp_path)) == winner

@@ -109,18 +109,39 @@ def resolve_client_id(explicit: Optional[str] = None, home: Optional[str] = None
         fresh = _random_id()
         os.makedirs(folder, exist_ok=True)
         line = fresh + "\n"
+        def read_valid() -> Optional[str]:
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    have = fh.read().strip()
+                return have if _CLIENT_ID_RE.match(have) else None
+            except OSError:
+                return None
+
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
-            # the file exists: another process won the race (use its id) or it holds junk (replace it)
-            with open(path, "r", encoding="utf-8") as fh:
-                have = fh.read().strip()
-            if _CLIENT_ID_RE.match(have):
-                return have
-            fd = os.open(path, os.O_WRONLY | os.O_TRUNC, 0o600)
+            # the file exists: its writer may not have finished (retry the read briefly), else it holds junk
+            for _ in range(3):
+                have = read_valid()
+                if have:
+                    return have
+                time.sleep(0.02)
+            # junk or empty: replace it atomically, then trust whatever valid id is on disk
+            tmp = f"{path}.{_random_id()}.tmp"
+            try:
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    fh.write(line)
+                os.replace(tmp, path)
+            except OSError:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+            return read_valid() or fresh
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(line)
-        return fresh
+        return read_valid() or fresh
+
     except Exception:
         pass
     if _PROCESS_ID is None:

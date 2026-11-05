@@ -121,6 +121,17 @@ export interface ClientIdFs {
   readFileSync(path: string, enc: "utf8"): string;
   writeFileSync(path: string, data: string, opts?: { mode?: number; flag?: string }): void;
   mkdirSync(path: string, opts?: { recursive?: boolean }): unknown;
+  renameSync(from: string, to: string): void;
+  unlinkSync?(path: string): void;
+}
+
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {}
+  }
 }
 
 function randomId(): string {
@@ -153,7 +164,7 @@ function nodeEnv(): { fs: ClientIdFs | null; home: string | null } {
  */
 export function resolveClientId(
   explicit?: string,
-  env: { fs?: ClientIdFs | null; home?: string | null } = nodeEnv(),
+  env: { fs?: ClientIdFs | null; home?: string | null; sleep?: (ms: number) => void } = nodeEnv(),
 ): string {
   const given = typeof explicit === "string" ? explicit.trim() : "";
   if (CLIENT_ID_RE.test(given)) return given;
@@ -168,15 +179,37 @@ export function resolveClientId(
       const fresh = randomId();
       env.fs.mkdirSync(dir, { recursive: true });
       const line = `${fresh}\n`;
+      const readValid = (): string | null => {
+        try {
+          const have = env.fs!.readFileSync(file, "utf8").trim();
+          return CLIENT_ID_RE.test(have) ? have : null;
+        } catch {
+          return null;
+        }
+      };
       try {
         env.fs.writeFileSync(file, line, { mode: 0o600, flag: "wx" });
+        return readValid() ?? fresh;
       } catch {
-        // the file exists: another process won the race (use its id) or it holds junk (replace it)
-        const have = env.fs.readFileSync(file, "utf8").trim();
-        if (CLIENT_ID_RE.test(have)) return have;
-        env.fs.writeFileSync(file, line, { mode: 0o600 });
+        // the file exists: its writer may not have finished (retry the read briefly), else it holds junk
+        for (let i = 0; i < 3; i++) {
+          const have = readValid();
+          if (have) return have;
+          (env.sleep ?? sleepSync)(20);
+        }
       }
-      return fresh;
+      // junk or empty: replace it atomically, then trust whatever valid id is on disk
+      const tmp = `${file}.${randomId()}.tmp`;
+      try {
+        env.fs.writeFileSync(tmp, line, { mode: 0o600 });
+        env.fs.renameSync(tmp, file);
+      } catch {
+        try {
+          env.fs.unlinkSync?.(tmp);
+        } catch {}
+      }
+      return readValid() ?? fresh;
+
     }
   } catch {}
   return (processId ??= randomId());
