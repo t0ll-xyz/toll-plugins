@@ -34,6 +34,7 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `larpCheck(token, { chain?: "rh", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
 - `checkAgent(id)` - an ERC-8004 agent on Robinhood Chain by its agent id
+- `checkHook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `checkTx({ chainId?, from?, to?, data?, value?, typedData?, x402?, agentId?, registry?, strict? })` - the pre-sign check for a transaction (`to`, `data`, `value`, `from`), an EIP-712 signature (`typedData`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chainId` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presignRiskReport({ version: "erc-presign/1", subject, context?, kinds? })` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
 - `stockToken(id)`, `stockTokens({ query?, limit? })` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract

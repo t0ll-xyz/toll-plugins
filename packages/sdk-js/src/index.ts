@@ -17,6 +17,7 @@ export const TOOL_NAMES = [
   "chain_pulse",
   "launch_record",
   "check_agent",
+  "check_hook",
   "check_tx",
   "presign_risk_report",
   "stock_token",
@@ -491,6 +492,16 @@ export class Toll {
       (typeof id === "string" && /^[0-9]{1,10}$/.test(id));
     if (!ok) throw new TollError("Invalid agent id: expected a whole number (its ERC-8004 token id on Robinhood Chain).");
     return this.call("check_agent", { id });
+  }
+
+  /**
+   * One Uniswap v4 hook on Robinhood Chain, by its contract address: its name, what its address lets it do, whether
+   * its owner can change its code, how many pools use it, and whether sells through it fail. A $TOLL holder's key
+   * (apiKey) adds the measured cut and how its latest coins ended.
+   */
+  async checkHook(address: string): Promise<TollResult> {
+    assertAddress(address, "hook address");
+    return this.call("check_hook", { address });
   }
 
   /**

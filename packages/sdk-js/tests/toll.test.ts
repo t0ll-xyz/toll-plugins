@@ -36,7 +36,8 @@ test("tools() parses the real tools/list", async () => {
   const m = mockFetch([fx("tools_list")]);
   const tools = await new Toll({ fetch: m.f }).tools();
   assert.deepEqual(tools.map((t) => t.name), [...TOOL_NAMES]);
-  assert.equal(tools.length, 18);
+  assert.equal(tools.length, 19);
+  assert.ok(TOOL_NAMES.includes("check_hook"));
   assert.equal(body(m.calls[0]).method, "tools/list");
   assert.equal(m.calls[0].url, "https://t0ll.xyz/mcp");
 });
@@ -164,6 +165,7 @@ test("bad input never reaches the network", async () => {
   await assert.rejects(async () => t.larpCheck(TOKEN, { chain: "sol" as never }), TollError);
   await assert.rejects(async () => t.checkAgent(-1), TollError);
   await assert.rejects(async () => t.checkAgent("12a"), TollError);
+  await assert.rejects(async () => t.checkHook("0x123"), TollError);
   await assert.rejects(async () => t.checkTx({} as never), TollError);
   await assert.rejects(async () => t.checkTx({ to: TOKEN, chainId: 8453 }), TollError);
   await assert.rejects(async () => t.presignRiskReport({ version: "erc-presign/0", subject: {} } as never), TollError);
@@ -178,14 +180,16 @@ test("bad input never reaches the network", async () => {
   assert.equal(m.calls.length, 0);
 });
 
+const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";
 const ok = (text = "ok") => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
 
 test("the agent, pre-sign and Markets tools send the live argument names", async () => {
-  const m = mockFetch(Array.from({ length: 13 }, () => ok()));
+  const m = mockFetch(Array.from({ length: 14 }, () => ok()));
   const t = new Toll({ fetch: m.f });
   const tx = { to: TOKEN, data: "0x095ea7b3", value: "0", from: TOKEN, strict: true };
   const presign = { version: "erc-presign/1" as const, subject: { type: "calls", chainId: "eip155:4663", from: `eip155:4663:${TOKEN}`, calls: [] } };
   await t.checkAgent(20030);
+  await t.checkHook(HOOK);
   await t.checkTx(tx);
   await t.checkTx({ x402: { accepts: [] }, agentId: "20030" });
   await t.presignRiskReport(presign);
@@ -200,6 +204,7 @@ test("the agent, pre-sign and Markets tools send the live argument names", async
   await t.stockEvents();
   assert.deepEqual(m.calls.map((c) => body(c).params), [
     { name: "check_agent", arguments: { id: 20030 } },
+    { name: "check_hook", arguments: { address: HOOK } },
     { name: "check_tx", arguments: tx },
     { name: "check_tx", arguments: { x402: { accepts: [] }, agentId: "20030" } },
     { name: "presign_risk_report", arguments: presign },
