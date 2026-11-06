@@ -78,7 +78,8 @@ def test_validators():
 def test_tools_from_real_list():
     op = FakeOpener(fx("tools_list"))
     tools = Toll(opener=op).tools()
-    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 19 and "check_hook" in TOOL_NAMES
+    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 21 and "check_hook" in TOOL_NAMES
+    assert list(TOOL_NAMES[:3]) == ["check_coin", "pre_buy_check", "check_coins"]
     req, timeout = op.requests[0]
     assert req.full_url == "https://t0ll.xyz/mcp" and timeout == 30.0
     assert req.get_header("Accept") == "application/json, text/event-stream"
@@ -91,6 +92,28 @@ def test_check_coin_real_answer():
     assert r.text.startswith("$TOLL (Toll)")
     assert r.paid_url is None
     assert r.pending == {"retry_after_s": 20}  # "Still reading who holds it now: ask again in 20 s."
+
+
+def test_pre_buy_check_decision_and_wait():
+    op = FakeOpener(fx("pre_buy_check"))
+    r = Toll(opener=op).pre_buy_check(TOKEN)
+    assert op.body()["params"] == {"name": "pre_buy_check", "arguments": {"address": TOKEN}}
+    assert r.decision == "WAIT"
+    assert r.pending == {"retry_after_s": 180}  # live: "Call pre_buy_check again in 180 s"
+
+
+def test_check_coins_list_and_limits():
+    op = FakeOpener(fx("check_coins"))
+    t = Toll(opener=op)
+    r = t.check_coins([TOKEN, "0x1111111111111111111111111111111111111111"])
+    assert op.body()["params"] == {"name": "check_coins", "arguments": {"addresses": [TOKEN, "0x1111111111111111111111111111111111111111"]}}
+    assert r.text.startswith("2 coins: 1 answered")
+    for bad in ([], [TOKEN] * 21):
+        try:
+            t.check_coins(bad)
+            assert False, "should refuse"
+        except TollError:
+            pass
 
 
 def test_larp_check_uses_token_argument():

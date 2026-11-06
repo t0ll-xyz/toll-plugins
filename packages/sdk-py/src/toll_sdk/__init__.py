@@ -21,6 +21,7 @@ __all__ = [
     "RH_ONLY",
     "STOCK_EVENT_KINDS",
     "TOOL_NAMES",
+    "CHECK_COINS_MAX",
     "PaymentRequirements",
     "SignPayment",
     "Toll",
@@ -43,6 +44,8 @@ RH_ONLY = "Toll reads Robinhood Chain only right now."
 
 TOOL_NAMES = (
     "check_coin",
+    "pre_buy_check",
+    "check_coins",
     "larp_check",
     "dev_record",
     "wallet_privacy",
@@ -63,6 +66,9 @@ TOOL_NAMES = (
     "stock_events",
 )
 """Every tool of https://t0ll.xyz/mcp, in the server's order."""
+
+CHECK_COINS_MAX = 20
+"""check_coins takes 1 to 20 addresses."""
 
 FUNDAMENTALS_PERIODS = ("ttm", "annual", "quarterly")
 STOCK_EVENT_KINDS = (
@@ -178,6 +184,7 @@ class TollResult:
     text: str
     paid_url: Optional[str]
     pending: Optional[Dict[str, int]]  # {"retry_after_s": n}: part of the answer is still being read, ask again then
+    decision: Optional[str] = None  # pre_buy_check only: BLOCK / WARN / ALLOW / WAIT (None when the answer has none)
 
 
 @dataclass
@@ -370,6 +377,22 @@ class Toll:
         _check_address(address)
         _check_chain(chain)
         return self.call("check_coin", {"address": address, **({"chain": chain} if chain else {})})
+
+    def pre_buy_check(self, address: str) -> TollResult:
+        """One call before a buy: decision BLOCK / WARN / ALLOW / WAIT with up to 3 reasons (the same calibrated
+        rules as check_tx). On WAIT, pending says when to ask again. ALLOW is never a promise."""
+        _check_address(address)
+        r = self.call("pre_buy_check", {"address": address})
+        m = re.search(r"^Decision: (BLOCK|WARN|ALLOW|WAIT)$", r.text, re.M)
+        decision = m.group(1) if m else None
+        pending = (r.pending or parse_pending(r.text)) if decision == "WAIT" else r.pending
+        return TollResult(text=r.text, paid_url=r.paid_url, pending=pending, decision=decision)
+
+    def check_coins(self, addresses: List[str]) -> TollResult:
+        """Up to 20 coins from the checks Toll already holds: a verdict word each, or "not read yet". Free, reads nothing new."""
+        if not isinstance(addresses, (list, tuple)) or not 1 <= len(addresses) <= CHECK_COINS_MAX:
+            raise TollError(f"check_coins takes 1 to {CHECK_COINS_MAX} addresses.")
+        return self.call("check_coins", {"addresses": [str(a) for a in addresses]})
 
     def larp_check(self, token: str, chain: Optional[str] = None, wait: bool = False) -> TollResult:
         """LARP check.
