@@ -10,6 +10,8 @@ export type LarpChain = "rh";
 /** Every tool of https://t0ll.xyz/mcp, in the server's order. */
 export const TOOL_NAMES = [
   "check_coin",
+  "pre_buy_check",
+  "check_coins",
   "larp_check",
   "dev_record",
   "wallet_privacy",
@@ -86,6 +88,15 @@ export interface PresignRequest {
   /** Optional: only these finding kinds. */
   kinds?: string[];
 }
+
+/** pre_buy_check's one word (https://t0ll.xyz/mcp, 2026-11-06): BLOCK / WARN / ALLOW / WAIT; null when the answer has none. */
+export type PreBuyDecision = "BLOCK" | "WARN" | "ALLOW" | "WAIT";
+export interface PreBuyResult extends TollResult {
+  /** The first line's word; null on an error-free answer without one (for example past the free coins). */
+  decision: PreBuyDecision | null;
+}
+/** check_coins takes 1 to 20 addresses. */
+export const CHECK_COINS_MAX = 20;
 
 export interface TollResult {
   /** The markdown text the server answered with. */
@@ -426,6 +437,26 @@ export class Toll {
     assertAddress(address);
     assertChain(opts.chain);
     return this.call("check_coin", { address, ...(opts.chain ? { chain: opts.chain } : {}) });
+  }
+
+  /**
+   * One call before a buy: Decision BLOCK / WARN / ALLOW / WAIT with up to 3 reasons, on the same calibrated rules as
+   * checkTx. On WAIT, `pending.retryAfterS` says when to ask again. ALLOW is never a promise.
+   */
+  async preBuyCheck(address: string): Promise<PreBuyResult> {
+    assertAddress(address);
+    const r = await this.call("pre_buy_check", { address });
+    const m = /^Decision: (BLOCK|WARN|ALLOW|WAIT)$/m.exec(r.text);
+    const decision = (m?.[1] ?? null) as PreBuyDecision | null;
+    return { ...r, decision, pending: decision === "WAIT" ? (r.pending ?? parsePending(r.text)) : r.pending };
+  }
+
+  /** Up to 20 coins from the checks Toll already holds: a verdict word each, or "not read yet". Reads nothing new, free. */
+  async checkCoins(addresses: string[]): Promise<TollResult> {
+    if (!Array.isArray(addresses) || addresses.length < 1 || addresses.length > CHECK_COINS_MAX) {
+      throw new TollError(`checkCoins takes 1 to ${CHECK_COINS_MAX} addresses.`);
+    }
+    return this.call("check_coins", { addresses: addresses.map(String) });
   }
 
   /**

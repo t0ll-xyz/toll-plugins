@@ -36,7 +36,8 @@ test("tools() parses the real tools/list", async () => {
   const m = mockFetch([fx("tools_list")]);
   const tools = await new Toll({ fetch: m.f }).tools();
   assert.deepEqual(tools.map((t) => t.name), [...TOOL_NAMES]);
-  assert.equal(tools.length, 19);
+  assert.equal(tools.length, 21);
+  assert.deepEqual(TOOL_NAMES.slice(0, 3), ["check_coin", "pre_buy_check", "check_coins"]);
   assert.ok(TOOL_NAMES.includes("check_hook"));
   assert.equal(body(m.calls[0]).method, "tools/list");
   assert.equal(m.calls[0].url, "https://t0ll.xyz/mcp");
@@ -49,6 +50,26 @@ test("checkCoin sends the real argument names and parses the live answer", async
   assert.match(r.text, /^\$TOLL \(Toll\)/);
   assert.equal(r.paidUrl, null);
   assert.deepEqual(r.pending, { retryAfterS: 20 }); // "Still reading who holds it now: ask again in 20 s."
+});
+
+test("preBuyCheck sends address, parses the decision word and the WAIT seconds", async () => {
+  const m = mockFetch([fx("pre_buy_check")]);
+  const r = await new Toll({ fetch: m.f }).preBuyCheck(TOKEN);
+  assert.deepEqual(body(m.calls[0]).params, { name: "pre_buy_check", arguments: { address: TOKEN } });
+  assert.equal(r.decision, "WAIT");
+  assert.deepEqual(r.pending, { retryAfterS: 180 }); // live: "Call pre_buy_check again in 180 s" (the funder read is held after a failure)
+  await assert.rejects(async () => new Toll({ fetch: m.f }).preBuyCheck("nope"), TollError);
+});
+
+test("checkCoins sends the list as addresses; empty or more than 20 is refused before any call", async () => {
+  const m = mockFetch([fx("check_coins")]);
+  const t = new Toll({ fetch: m.f });
+  const r = await t.checkCoins([TOKEN, "0x1111111111111111111111111111111111111111"]);
+  assert.deepEqual(body(m.calls[0]).params, { name: "check_coins", arguments: { addresses: [TOKEN, "0x1111111111111111111111111111111111111111"] } });
+  assert.match(r.text, /^2 coins: 1 answered/);
+  await assert.rejects(async () => t.checkCoins([]), TollError);
+  await assert.rejects(async () => t.checkCoins(Array.from({ length: 21 }, () => TOKEN)), TollError);
+  assert.equal(m.calls.length, 1);
 });
 
 test("larpCheck uses token (not address) and parses a finished answer", async () => {
