@@ -53,12 +53,14 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all nineteen. */
+  /** Which tools to return. Default: all twenty-one. */
   only?: TollToolName[];
 }
 
 export type TollToolName =
   | "check_coin"
+  | "pre_buy_check"
+  | "check_coins"
   | "larp_check"
   | "dev_record"
   | "wallet_privacy"
@@ -100,6 +102,16 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
         "Before buying a token on Robinhood Chain, check who is behind it: snipers, bundles, the dev's record, whether liquidity can be pulled. Robinhood Chain (4663) only. Information only, not advice.",
       inputSchema: SCHEMAS.check_coin,
       execute: async ({ address, chain }) => run(() => toll.checkCoin(address, chain ? { chain } : {})),
+    }),
+    pre_buy_check: tool({
+      description: LIVE_DESCRIPTIONS.pre_buy_check,
+      inputSchema: SCHEMAS.pre_buy_check,
+      execute: async ({ address }) => run(() => toll.preBuyCheck(address)),
+    }),
+    check_coins: tool({
+      description: LIVE_DESCRIPTIONS.check_coins,
+      inputSchema: SCHEMAS.check_coins,
+      execute: async ({ addresses }) => run(() => toll.checkCoins(addresses)),
     }),
     larp_check: tool({
       description:

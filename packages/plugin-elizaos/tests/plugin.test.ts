@@ -26,6 +26,8 @@ test("plugin shape", () => {
   assert.equal(tollPlugin.name, "toll");
   assert.deepEqual(tollPlugin.actions!.map((a) => a.name), [
     "TOLL_CHECK_COIN",
+    "TOLL_PRE_BUY_CHECK",
+    "TOLL_CHECK_COINS",
     "TOLL_LARP_CHECK",
     "TOLL_DEV_RECORD",
     "TOLL_WALLET_PRIVACY",
@@ -254,6 +256,20 @@ test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async 
 test("re-exports Toll and TollError from @tollxyz/sdk", () => {
   assert.equal(Reexported.Toll, Toll);
   assert.equal(Reexported.TollError, TollError);
+});
+
+test("TOLL_PRE_BUY_CHECK and TOLL_CHECK_COINS (11-06): buy questions and lists call their tools", async () => {
+  const T = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3", U = "0x1111111111111111111111111111111111111111";
+  const { toll, bodies } = client([ok("Decision: WAIT"), ok("2 coins")]);
+  const p = createTollPlugin({ client: toll });
+  const g = act(p, "TOLL_PRE_BUY_CHECK"), l = act(p, "TOLL_CHECK_COINS");
+  assert.equal(await g.validate({}, msg(`should I buy ${T}?`)), true);
+  assert.equal(await g.validate({}, msg(`what is ${T}?`)), false);
+  assert.equal(await l.validate({}, msg(`check ${T}`)), false);
+  assert.equal(await l.validate({}, msg(`check ${T} and ${U} and ${T.toUpperCase().replace("0X", "0x")}`)), true);
+  assert.equal((await g.handler({}, msg(`should I buy ${T}?`))).success, true);
+  assert.equal((await l.handler({}, msg(`check ${T} and ${U}`))).success, true);
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["pre_buy_check", { address: T }], ["check_coins", { addresses: [T, U] }]]);
 });
 
 const HOOK = "0x4eb1976978756bd56802d8162f2271844924e0cc";

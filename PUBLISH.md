@@ -1,3 +1,19 @@
+# Release 0.3.0 (2026-11-06): pre_buy_check + check_coins
+
+Server first: both tools live on https://t0ll.xyz/mcp since 2026-11-06 (21 tools). Every package exposes them.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/sdk` | 0.2.2 | 0.3.0 (`preBuyCheck` with `decision`, `checkCoins`) |
+| `@tollxyz/agentkit`, `@tollxyz/ai-sdk`, `@tollxyz/goat-plugin`, `@tollxyz/plugin-elizaos`, `@tollxyz/langchain`, `@tollxyz/mastra` | 0.2.2 | 0.3.0 |
+| `@tollxyz/mcp` | 0.2.2 | 0.3.0 (snapshot 21 tools; server.json 0.3.0) |
+| `@tollxyz/guard` | 0.1.0 | 0.1.1 (README: gate a buy in one call) |
+| `toll-sdk` (PyPI) | 0.2.2 | 0.3.0 (`pre_buy_check`, `check_coins`) |
+
+Order: SDK, then the wrappers, guard, PyPI, then `mcp-publisher publish` in packages/mcp. Same commands as below.
+
+---
+
 # Publishing the Robinhood Chain only release (branch `rh-only-1105`)
 
 Every package now matches the live service: Robinhood Chain (4663) only, all 19 tools of https://t0ll.xyz/mcp.

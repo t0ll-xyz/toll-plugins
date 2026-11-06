@@ -4,21 +4,20 @@
       {
         "name": "check_coin",
         "title": "Check a coin",
-        "description": "Check one token on Robinhood Chain from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. Toll's findings are tallied as against / careful / clear. The answer's first line names the chain. Reads Robinhood Chain (4663).",
+        "description": "Check one token on Robinhood Chain from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. Toll's findings are tallied as against / careful / clear. On Robinhood Chain a Verdict line (AGAINST / CAREFUL / CLEAR / INCOMPLETE) sits above the tally: INCOMPLETE means some part was not read yet (never read it as clear) and says when to call again. The answer's first line names the chain. Reads Robinhood Chain (4663).",
         "inputSchema": {
           "type": "object",
           "properties": {
             "address": {
               "type": "string",
-              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "minLength": 1,
+              "maxLength": 100,
               "description": "The token contract address: 0x followed by 40 hex characters"
             },
             "chain": {
               "type": "string",
-              "enum": [
-                "rh"
-              ],
-              "description": "Which chain: rh = Robinhood Chain (4663). Leave it out for Robinhood Chain."
+              "maxLength": 16,
+              "description": "Which chain: rh = Robinhood Chain (4663). Leave it out and Toll finds which chain the token is on."
             }
           },
           "required": [
@@ -39,6 +38,71 @@
         }
       },
       {
+        "name": "pre_buy_check",
+        "title": "Gate before a buy",
+        "description": "One call before buying a coin on Robinhood Chain: Toll reads the coin (the same read as check_coin, counted in the same free coins) and answers Decision: BLOCK / WARN / ALLOW / WAIT with up to 3 reasons, most severe first, on the calibrated rules check_tx uses (BLOCK = a finding whose coins rugged at 40% or more within 24 h in Toll's calibration, or sells that fail). WAIT means part of the coin is still being read: call again after the seconds given. Facts, not advice; ALLOW means nothing against was found in what was read, never a promise. Robinhood Chain only.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "description": "The token contract address you are about to buy on Robinhood Chain: 0x followed by 40 hex characters"
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "annotations": {
+          "title": "Gate before a buy",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "execution": {
+          "taskSupport": "forbidden"
+        }
+      },
+      {
+        "name": "check_coins",
+        "title": "Many coins at once",
+        "description": "Up to 20 Robinhood Chain coins in one call, answered only from checks Toll already holds (read in the last 24 h): for each coin the verdict word (AGAINST / CAREFUL / CLEAR / INCOMPLETE) with its tally and how old the read is, or \"not read yet\". Reads nothing new and uses no free coin. For a coin not read yet, call check_coin or pre_buy_check.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "addresses": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "minItems": 1,
+              "maxItems": 100,
+              "description": "Token contract addresses on Robinhood Chain, 1 to 20 (0x followed by 40 hex characters each)"
+            }
+          },
+          "required": [
+            "addresses"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "annotations": {
+          "title": "Many coins at once",
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": true
+        },
+        "execution": {
+          "taskSupport": "forbidden"
+        }
+      },
+      {
         "name": "larp_check",
         "title": "LARP check",
         "description": "LARP check: is there a real product behind a coin on Robinhood Chain? Toll reads the coin's own site, launch post and code README, lists each thing it says it offers, and checks every claim against the chain and against its working parts that Toll tries itself (app page, API, MCP server, x402 payments, Chrome extension, Telegram bot, public code). Answers the label (product found / partly found / not found / not read: what we could check, never a verdict), each claim with found / partly / not found and the line that shows it, and the working parts that answered. A coin nobody asked about yet is queued and read within minutes: the answer says how many seconds to wait before calling again. Free: 10 new coins a day per caller, coins already read are always free.",
@@ -47,14 +111,13 @@
           "properties": {
             "token": {
               "type": "string",
-              "pattern": "^0x[0-9a-fA-F]{40}$",
+              "minLength": 1,
+              "maxLength": 100,
               "description": "The coin: its token contract on Robinhood Chain: 0x followed by 40 hex characters"
             },
             "chain": {
               "type": "string",
-              "enum": [
-                "rh"
-              ],
+              "maxLength": 16,
               "description": "Which chain: rh = Robinhood Chain. Leave it out for Robinhood Chain."
             }
           },
@@ -89,9 +152,7 @@
             },
             "chain": {
               "type": "string",
-              "enum": [
-                "rh"
-              ],
+              "maxLength": 16,
               "description": "Which chain: rh = Robinhood Chain (4663). Leave it out for Robinhood Chain."
             }
           },
@@ -230,16 +291,14 @@
             "id": {
               "anyOf": [
                 {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 1000000000
+                  "type": "integer"
                 },
                 {
                   "type": "string",
-                  "pattern": "^[0-9]{1,10}$"
+                  "maxLength": 40
                 }
               ],
-              "description": "The agent id: its ERC-8004 token id in the Robinhood Chain identity registry (for example 20030)"
+              "description": "The agent id: its ERC-8004 token id in the Robinhood Chain identity registry, a whole number from 0 to 1000000000 (for example 20030)"
             }
           },
           "required": [
@@ -661,7 +720,7 @@
             "since": {
               "type": "integer",
               "minimum": 0,
-              "description": "The next of the last answer (an event id): only newer events. Leave out for the newest."
+              "description": "The next of the last answer (an event id): only newer events. Leave out for the newest. Applied with a Toll key (the keyless preview is always the last 10)"
             },
             "kind": {
               "type": "string",
@@ -700,7 +759,5 @@
         }
       }
     ]
-  },
-  "jsonrpc": "2.0",
-  "id": 1
+  }
 }

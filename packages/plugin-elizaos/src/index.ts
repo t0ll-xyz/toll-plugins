@@ -4,7 +4,7 @@
  */
 import type { Action, HandlerCallback, IAgentRuntime, Memory, Plugin, Provider, State } from "@elizaos/core";
 import { RH_ONLY, STOCK_EVENT_KINDS, Toll, TollError, type StockEventKind, type TollResult } from "@tollxyz/sdk";
-import { extractAddress, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
+import { extractAddress, extractAddresses, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
 import { LIVE_DESCRIPTIONS } from "./live.js";
 import {
   MACRO_NOTE,
@@ -22,7 +22,7 @@ import {
   type MarketsOptions,
 } from "./markets.js";
 
-export { extractAddress, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
+export { extractAddress, extractAddresses, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
 export { LIVE_DESCRIPTIONS } from "./live.js";
 export {
   FACTS_NOTE,
@@ -108,6 +108,9 @@ const PULSE_WORDS = /\b(chain pulse|pulse|how busy|activity on (?:the )?chain|la
 /** Words that name a Uniswap v4 hook (check_hook, 11-05). */
 const HOOK_WORDS = /\bhooks?\b/i;
 
+/** Words that ask for one decision before a buy (pre_buy_check, 11-06). */
+const PRE_BUY_WORDS = /\b(should (?:i|we) buy|before (?:i|we) buy|about to buy|pre[- ]?buy|buy gate|gate (?:it|this|the buy)|safe to (?:buy|ape)|ape (?:it|in|this))\b/i;
+
 /** Words that ask for US macro. */
 const MACRO_WORDS =
   /\b(macro|interest rates?|rates|inflation|cpi|yield curve|yields|treasur(?:y|ies)|fed funds|federal funds|effr|jobs|payrolls|nonfarm|unemployment)\b/i;
@@ -181,6 +184,24 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       canRun: (t) => extractAddress(t) !== null,
       run: ({ client: c }, t) => c.checkCoin(extractAddress(t)!.address),
       example: [`check this coin before I buy ${CA}`, "Here is what Toll read from the chain for that token."],
+    }),
+    makeAction(resolve, {
+      name: "TOLL_PRE_BUY_CHECK",
+      similes: ["PRE_BUY_CHECK", "BUY_GATE", "SHOULD_I_BUY"],
+      description: `${LIVE_DESCRIPTIONS.pre_buy_check} Needs words like should I buy or about to buy and the token's 0x address in the message.`,
+      canRun: (t) => PRE_BUY_WORDS.test(t) && extractAddress(t) !== null,
+      run: ({ client: c }, t) => c.preBuyCheck(extractAddress(t)!.address),
+      example: [`should I buy ${CA}?`, "Here is Toll's one-word decision for that coin, with the reasons."],
+      missing: "TOLL_PRE_BUY_CHECK runs when the message asks whether to buy and gives the token's 0x address.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_CHECK_COINS",
+      similes: ["CHECK_COINS", "CHECK_LIST", "MANY_COINS"],
+      description: `${LIVE_DESCRIPTIONS.check_coins} Runs when the message has two or more 0x token addresses.`,
+      canRun: (t) => extractAddresses(t).length >= 2,
+      run: ({ client: c }, t) => c.checkCoins(extractAddresses(t)),
+      example: [`check these: ${CA} 0x1111111111111111111111111111111111111111`, "Here is what Toll already read for each coin."],
+      missing: "TOLL_CHECK_COINS runs when the message has two or more 0x token addresses.",
     }),
     makeAction(resolve, {
       name: "TOLL_LARP_CHECK",

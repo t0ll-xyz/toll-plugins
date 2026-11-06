@@ -48,6 +48,8 @@ export { Toll, TollError } from "@tollxyz/sdk";
 export type { TollResult } from "@tollxyz/sdk";
 
 export class CheckCoinParams extends createToolParameters(SCHEMAS.check_coin) {}
+export class PreBuyCheckParams extends createToolParameters(SCHEMAS.pre_buy_check) {}
+export class CheckCoinsParams extends createToolParameters(SCHEMAS.check_coins) {}
 export class LarpCheckParams extends createToolParameters(SCHEMAS.larp_check) {}
 export class DevRecordParams extends createToolParameters(SCHEMAS.dev_record) {}
 export class WalletPrivacyParams extends createToolParameters(SCHEMAS.wallet_privacy) {}
@@ -97,6 +99,16 @@ export class TollService {
   })
   async checkCoin(parameters: CheckCoinParams): Promise<string> {
     return run(() => this.client.checkCoin(parameters.address, parameters.chain ? { chain: parameters.chain } : {}));
+  }
+
+  @Tool({ name: "pre_buy_check", description: LIVE_DESCRIPTIONS.pre_buy_check })
+  async preBuyCheck(parameters: PreBuyCheckParams): Promise<string> {
+    return run(() => this.client.preBuyCheck(parameters.address));
+  }
+
+  @Tool({ name: "check_coins", description: LIVE_DESCRIPTIONS.check_coins })
+  async checkCoins(parameters: CheckCoinsParams): Promise<string> {
+    return run(() => this.client.checkCoins(parameters.addresses));
   }
 
   @Tool({

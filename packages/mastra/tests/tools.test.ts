@@ -21,10 +21,10 @@ function setup(responses: string[]) {
   return { tools: tollTools({ client: new Toll({ fetch: f, sleep: async () => {} }) }), bodies };
 }
 
-test("all 19 live tools keyed and id'd by Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 21 live tools keyed and id'd by Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools), TOOL_NAMES);
-  assert.equal(Object.keys(tools).length, 19);
+  assert.equal(Object.keys(tools).length, 21);
   for (const t of Object.values(tools)) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t!.description));
   for (const [k, t] of Object.entries(tools)) {
     assert.equal(t!.id, k);

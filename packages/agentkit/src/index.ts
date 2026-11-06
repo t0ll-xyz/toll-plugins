@@ -25,6 +25,8 @@ import {
   CheckAgentSchema,
   CheckHookSchema,
   CheckCoinSchema,
+  CheckCoinsSchema,
+  PreBuyCheckSchema,
   CheckTxSchema,
   DevRecordSchema,
   FreshLaunchesSchema,
@@ -114,6 +116,16 @@ export class TollActionProvider extends ActionProvider {
   })
   async checkCoin(args: z.infer<typeof CheckCoinSchema>): Promise<string> {
     return run(() => this.client.checkCoin(args.address, args.chain ? { chain: args.chain } : {}));
+  }
+
+  @CreateAction({ name: "pre_buy_check", description: LIVE_DESCRIPTIONS.pre_buy_check, schema: PreBuyCheckSchema })
+  async preBuyCheck(args: z.infer<typeof PreBuyCheckSchema>): Promise<string> {
+    return run(() => this.client.preBuyCheck(args.address));
+  }
+
+  @CreateAction({ name: "check_coins", description: LIVE_DESCRIPTIONS.check_coins, schema: CheckCoinsSchema })
+  async checkCoins(args: z.infer<typeof CheckCoinsSchema>): Promise<string> {
+    return run(() => this.client.checkCoins(args.addresses));
   }
 
   @CreateAction({

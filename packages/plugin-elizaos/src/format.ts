@@ -27,6 +27,17 @@ export function extractAddress(text: string): { address: string } | null {
   return evm ? { address: evm[0] } : null;
 }
 
+/** Every distinct token address in a message (lower-cased, first 20), for TOLL_CHECK_COINS. */
+export function extractAddresses(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(new RegExp(EVM.source, "g"))) {
+    const a = m[0].toLowerCase();
+    if (!out.includes(a)) out.push(a);
+    if (out.length === 20) break;
+  }
+  return out;
+}
+
 /** First wallet (0x + 40 hex) in a message. */
 export function extractWallet(text: string): { wallet: string } | null {
   const evm = EVM.exec(text);

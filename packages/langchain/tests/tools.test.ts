@@ -24,11 +24,11 @@ function setup(responses: string[]) {
   return { tools, by, bodies };
 }
 
-test("all 19 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 21 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools, by } = setup([]);
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
   assert.deepEqual(TOOL_NAMES, [...SDK_TOOL_NAMES]);
-  assert.equal(tools.length, 19);
+  assert.equal(tools.length, 21);
   assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(by.check_agent.description, /^Before paying or trusting an ERC-8004 agent/);
   assert.match(by.larp_check.description, /^Is there a real product behind this coin on Robinhood Chain\?/);
