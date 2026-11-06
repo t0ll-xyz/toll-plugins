@@ -36,7 +36,7 @@ test("tools() parses the real tools/list", async () => {
   const m = mockFetch([fx("tools_list")]);
   const tools = await new Toll({ fetch: m.f }).tools();
   assert.deepEqual(tools.map((t) => t.name), [...TOOL_NAMES]);
-  assert.equal(tools.length, 21);
+  assert.equal(tools.length, 24);
   assert.deepEqual(TOOL_NAMES.slice(0, 3), ["check_coin", "pre_buy_check", "check_coins"]);
   assert.ok(TOOL_NAMES.includes("check_hook"));
   assert.equal(body(m.calls[0]).method, "tools/list");
@@ -418,4 +418,18 @@ test("Retry-After style waits are at least 1 s", () => {
 test("live smoke (TOLL_LIVE=1)", { skip: process.env.TOLL_LIVE !== "1" }, async () => {
   const r = await new Toll().chainPulse();
   assert.match(r.text, /Robinhood Chain/);
+});
+
+test("watchCoin / myWatches / unwatchCoin (11-07): need a Toll key, send it, parse the JSON answer", async () => {
+  await assert.rejects(async () => new Toll({ fetch: mockFetch([]).f }).myWatches(), (e: unknown) => e instanceof TollError && /Toll key/.test(e.message));
+  const ans = (o: unknown) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: `${JSON.stringify(o, null, 2)}\n\nDocs: https://t0ll.xyz/llms.txt` }] } });
+  const m = mockFetch([ans({ id: "w1", secret: "s", cap: 3 }), ans({ watches: [], cap: 3 }), ans({ deleted: "w1" })]);
+  const t = new Toll({ fetch: m.f, tollKey: "k1" });
+  const a = await t.watchCoin(TOKEN, "https://a.example/h");
+  assert.deepEqual(body(m.calls[0]).params, { name: "watch_coin", arguments: { address: TOKEN, url: "https://a.example/h" } });
+  assert.equal((m.calls[0].init.headers as Record<string, string>)["x-toll-pass"], "k1");
+  assert.deepEqual(a.data, { id: "w1", secret: "s", cap: 3 });
+  assert.deepEqual((await t.myWatches()).data, { watches: [], cap: 3 });
+  assert.deepEqual((await t.unwatchCoin("w1")).data, { deleted: "w1" });
+  assert.deepEqual(body(m.calls[2]).params, { name: "unwatch_coin", arguments: { id: "w1" } });
 });

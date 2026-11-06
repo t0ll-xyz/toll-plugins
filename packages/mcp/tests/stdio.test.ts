@@ -33,7 +33,7 @@ test("stdio smoke: initialize, tools/list, tools/call (Toll mocked)", async () =
   try {
     assert.equal(client.getServerVersion()?.name, "toll");
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 21);
+    assert.equal(tools.length, 24);
     assert.ok(tools.some((t) => t.name === "check_agent"));
     const r: any = await client.callTool({ name: "check_coin", arguments: { address: OVER } });
     assert.match(r.content.at(-1).text, /This server does not pay/);
@@ -45,7 +45,7 @@ test("stdio smoke: initialize, tools/list, tools/call (Toll mocked)", async () =
 });
 
 test("--version and --help print and exit", () => {
-  assert.equal(execFileSync(process.execPath, [CLI, "--version"], { encoding: "utf8" }).trim(), "0.3.0");
+  assert.equal(execFileSync(process.execPath, [CLI, "--version"], { encoding: "utf8" }).trim(), "0.4.0");
   assert.match(execFileSync(process.execPath, [CLI, "--help"], { encoding: "utf8" }), /npx -y @tollxyz\/mcp/);
 });
 

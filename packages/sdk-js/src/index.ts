@@ -30,6 +30,9 @@ export const TOOL_NAMES = [
   "guidance",
   "macro",
   "stock_events",
+  "watch_coin",
+  "my_watches",
+  "unwatch_coin",
 ] as const;
 export type TollToolName = (typeof TOOL_NAMES)[number];
 
@@ -457,6 +460,41 @@ export class Toll {
       throw new TollError(`checkCoins takes 1 to ${CHECK_COINS_MAX} addresses.`);
     }
     return this.call("check_coins", { addresses: addresses.map(String) });
+  }
+
+  /** The JSON a watch tool answered (the text before its Docs line), or null. */
+  private watchData(r: TollResult): Record<string, unknown> | null {
+    try { return JSON.parse(r.text.split("\n\nDocs:")[0]) as Record<string, unknown>; } catch { return null; }
+  }
+
+  private needKey(what: string): void {
+    if (!this.tollKey) throw new TollError(`${what} needs a Toll key: new Toll({ tollKey }) with a key from https://t0ll.xyz/toll#keys.`);
+  }
+
+  /**
+   * Watch a coin: Toll re-reads it about every 10 minutes and POSTs a signed JSON event to `url` (public https) when
+   * its verdict word changes or a new finding against appears. `data.secret` (first time only) signs every event:
+   * x-toll-signature = sha256=<hex HMAC-SHA256(secret, raw body)>. Needs a Toll key; the cap is the key's tier.
+   */
+  async watchCoin(address: string, url: string): Promise<TollResult & { data: Record<string, unknown> | null }> {
+    assertAddress(address);
+    this.needKey("watchCoin");
+    const r = await this.call("watch_coin", { address, url: String(url) });
+    return { ...r, data: this.watchData(r) };
+  }
+
+  /** The coins this Toll key's wallet watches (never the secret). */
+  async myWatches(): Promise<TollResult & { data: Record<string, unknown> | null }> {
+    this.needKey("myWatches");
+    const r = await this.call("my_watches", {});
+    return { ...r, data: this.watchData(r) };
+  }
+
+  /** Remove one watch by its id (from myWatches). */
+  async unwatchCoin(id: string): Promise<TollResult & { data: Record<string, unknown> | null }> {
+    this.needKey("unwatchCoin");
+    const r = await this.call("unwatch_coin", { id: String(id) });
+    return { ...r, data: this.watchData(r) };
   }
 
   /**
