@@ -64,6 +64,9 @@ TOOL_NAMES = (
     "guidance",
     "macro",
     "stock_events",
+    "watch_coin",
+    "my_watches",
+    "unwatch_coin",
 )
 """Every tool of https://t0ll.xyz/mcp, in the server's order."""
 
@@ -393,6 +396,35 @@ class Toll:
         if not isinstance(addresses, (list, tuple)) or not 1 <= len(addresses) <= CHECK_COINS_MAX:
             raise TollError(f"check_coins takes 1 to {CHECK_COINS_MAX} addresses.")
         return self.call("check_coins", {"addresses": [str(a) for a in addresses]})
+
+    def _need_key(self, what: str) -> None:
+        if not self._toll_key:
+            raise TollError(f"{what} needs a Toll key: Toll(toll_key=...) with a key from https://t0ll.xyz/toll#keys.")
+
+    @staticmethod
+    def _watch_data(r: TollResult) -> Optional[Dict[str, Any]]:
+        try:
+            return json.loads(r.text.split("\n\nDocs:")[0])
+        except ValueError:
+            return None
+
+    def watch_coin(self, address: str, url: str) -> Dict[str, Any]:
+        """Watch a coin: Toll POSTs a signed JSON event to url (public https) when its verdict word changes or a new
+        finding against appears. Returns the JSON answer; "secret" (first time only) signs every event
+        (x-toll-signature = sha256=<hex HMAC-SHA256(secret, raw body)>). Needs a Toll key."""
+        _check_address(address)
+        self._need_key("watch_coin")
+        return self._watch_data(self.call("watch_coin", {"address": address, "url": str(url)})) or {}
+
+    def my_watches(self) -> Dict[str, Any]:
+        """The coins this Toll key's wallet watches (never the secret)."""
+        self._need_key("my_watches")
+        return self._watch_data(self.call("my_watches", {})) or {}
+
+    def unwatch_coin(self, watch_id: str) -> Dict[str, Any]:
+        """Remove one watch by its id (from my_watches)."""
+        self._need_key("unwatch_coin")
+        return self._watch_data(self.call("unwatch_coin", {"id": str(watch_id)})) or {}
 
     def larp_check(self, token: str, chain: Optional[str] = None, wait: bool = False) -> TollResult:
         """LARP check.

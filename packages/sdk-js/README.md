@@ -96,3 +96,18 @@ if (r.paidUrl) console.log(await toll.pay(r.paidUrl));
 Without a `sign`, `pay()` throws before any request. Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
 MIT.
+
+## Watch a coin (webhook)
+
+With a Toll key, Toll re-reads a coin about every 10 minutes and POSTs a signed JSON event to your https URL when its
+verdict word changes or a new finding against appears (dev sold, liquidity pulled, wallets dumping together):
+
+```ts
+const toll = new Toll({ tollKey: process.env.TOLL_KEY });
+const { data } = await toll.watchCoin(token, "https://your-agent.example/toll");   // data.secret, shown once
+// verify each event: x-toll-signature === "sha256=" + hmacSha256Hex(data.secret, rawBody)
+await toll.myWatches();
+await toll.unwatchCoin(data.id);
+```
+
+Cap by $TOLL held: 3 / 20 / 50 / 100. The first read sends nothing; 5 failed deliveries pause a watch.

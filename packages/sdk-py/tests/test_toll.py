@@ -78,7 +78,7 @@ def test_validators():
 def test_tools_from_real_list():
     op = FakeOpener(fx("tools_list"))
     tools = Toll(opener=op).tools()
-    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 21 and "check_hook" in TOOL_NAMES
+    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 24 and "check_hook" in TOOL_NAMES
     assert list(TOOL_NAMES[:3]) == ["check_coin", "pre_buy_check", "check_coins"]
     req, timeout = op.requests[0]
     assert req.full_url == "https://t0ll.xyz/mcp" and timeout == 30.0
@@ -476,3 +476,18 @@ def test_retry_after_clamped():
 @pytest.mark.skipif(os.environ.get("TOLL_LIVE") != "1", reason="set TOLL_LIVE=1 for the live smoke test")
 def test_live_smoke():
     assert "Robinhood Chain" in Toll().chain_pulse().text
+
+
+def test_watch_methods_need_a_key_send_it_and_parse_the_json():
+    try:
+        Toll(opener=FakeOpener()).my_watches()
+        assert False, "should need a key"
+    except TollError as e:
+        assert "Toll key" in str(e)
+    ans = lambda o: json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": json.dumps(o, indent=2) + "\n\nDocs: https://t0ll.xyz/llms.txt"}]}})
+    op = FakeOpener(ans({"id": "w1", "secret": "s"}), ans({"watches": [], "cap": 3}), ans({"deleted": "w1"}))
+    t = Toll(opener=op, toll_key="k1")
+    assert t.watch_coin(TOKEN, "https://a.example/h") == {"id": "w1", "secret": "s"}
+    assert op.body()["params"] == {"name": "watch_coin", "arguments": {"address": TOKEN, "url": "https://a.example/h"}}
+    assert t.my_watches() == {"watches": [], "cap": 3}
+    assert t.unwatch_coin("w1") == {"deleted": "w1"}
