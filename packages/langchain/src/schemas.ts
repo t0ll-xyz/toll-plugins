@@ -1,5 +1,5 @@
 /**
- * Input schemas for Toll's 19 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-04). Robinhood Chain only.
+ * Input schemas for Toll's 21 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-06). Robinhood Chain only.
  * The same file ships in every @tollxyz plugin package (only the zod import differs).
  */
 import { z } from "zod/v4";
@@ -17,6 +17,10 @@ const intOrString = z.union([z.number().int().min(0), z.string().max(80)]);
 const object = z.record(z.string(), z.unknown());
 
 export const CheckCoinSchema = z.object({ address, chain });
+export const PreBuyCheckSchema = z.object({ address: z.string().describe("The token contract address you are about to buy on Robinhood Chain: 0x followed by 40 hex characters.") });
+export const CheckCoinsSchema = z.object({
+  addresses: z.array(z.string()).min(1).max(20).describe("Token contract addresses on Robinhood Chain, 1 to 20 (0x followed by 40 hex characters each)."),
+});
 export const LarpCheckSchema = z.object({ token: address, chain });
 export const DevRecordSchema = z.object({
   wallet: z.string().describe("The deployer (dev) wallet address: 0x followed by 40 hex characters."),
@@ -105,6 +109,8 @@ export const StockEventsSchema = z.object({
 /** Every schema, keyed by Toll's tool name. */
 export const SCHEMAS = {
   check_coin: CheckCoinSchema,
+  pre_buy_check: PreBuyCheckSchema,
+  check_coins: CheckCoinsSchema,
   larp_check: LarpCheckSchema,
   dev_record: DevRecordSchema,
   wallet_privacy: WalletPrivacySchema,

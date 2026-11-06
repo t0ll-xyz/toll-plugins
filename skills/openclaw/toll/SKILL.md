@@ -37,7 +37,8 @@ openclaw mcp add toll --url https://t0ll.xyz/mcp --transport streamable-http
 or in the OpenClaw config (JSON5): `mcp: { servers: { toll: { transport: "streamable-http", url: "https://t0ll.xyz/mcp" } } }`.
 The same tools run locally over stdio with `npx -y @tollxyz/mcp`.
 
-Tools (18, all Robinhood Chain): `check_coin` (address: 0x token), `larp_check` (token), `dev_record` (wallet),
+Tools (21, all Robinhood Chain): `check_coin` (address: 0x token), `pre_buy_check` (address: one word before a buy,
+BLOCK / WARN / ALLOW / WAIT, up to 3 reasons), `check_coins` (addresses: up to 20, from checks Toll already holds), `larp_check` (token), `dev_record` (wallet),
 `wallet_privacy` (wallet), `fresh_launches` (limit?), `chain_pulse`, `launch_record` (address), `check_agent` (id), `check_hook` (address),
 before signing `check_tx` (to, data, value, from; or typedData; or x402) and `presign_risk_report` (version:
 erc-presign/1, subject), for Robinhood Stock Tokens `stock_token` (id: ticker or contract), `stock_tokens` (query?,

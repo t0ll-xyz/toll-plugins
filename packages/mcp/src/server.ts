@@ -16,7 +16,7 @@ import {
 import { parsePaidUrl, resolveClientId } from "@tollxyz/sdk";
 import { SNAPSHOT_TOOLS } from "./snapshot.js";
 
-export const VERSION = "0.2.2";
+export const VERSION = "0.3.0";
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -30,7 +30,7 @@ export interface TollMcpOptions {
 }
 
 export const INSTRUCTIONS = [
-  "Toll is the safety check for agents on Robinhood Chain (chain id 4663), the only chain it reads: who is behind a coin (check_coin), whether there is a real product behind it (larp_check), a launcher wallet's record (dev_record), what anyone can learn about a wallet (wallet_privacy), the newest coins (fresh_launches), how busy Robinhood Chain is (chain_pulse), the call Toll froze at launch (launch_record), an ERC-8004 agent's registration and payment facts (check_agent) and what a Uniswap v4 hook can do, whether its owner can change it and whether sells through it fail (check_hook).",
+  "Toll is the safety check for agents on Robinhood Chain (chain id 4663), the only chain it reads: who is behind a coin (check_coin), one decision right before a buy, BLOCK / WARN / ALLOW / WAIT with up to 3 reasons (pre_buy_check), up to 20 coins at once from the checks Toll already holds (check_coins), whether there is a real product behind it (larp_check), a launcher wallet's record (dev_record), what anyone can learn about a wallet (wallet_privacy), the newest coins (fresh_launches), how busy Robinhood Chain is (chain_pulse), the call Toll froze at launch (launch_record), an ERC-8004 agent's registration and payment facts (check_agent) and what a Uniswap v4 hook can do, whether its owner can change it and whether sells through it fail (check_hook).",
   "Before signing: check_tx answers ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment) for a transaction, an EIP-712 signature or an x402 payment; presign_risk_report returns the signed facts (ERC draft PresignReport) with no verdict.",
   "Robinhood Stock Tokens and their companies: stock_token, stock_tokens, fundamentals, insider_trades, institutions (13F), guidance (earnings releases), stock_events (the event feed) and macro, every number with its source.",
   "Call check_coin (and larp_check when a product is claimed) before buying a coin, check_agent before paying or trusting an ERC-8004 agent, and check_tx before signing anything. Pass on every warning; on BLOCK do not sign without the owner's say.",

@@ -49,7 +49,8 @@ mcp_servers:
     args: ["-y", "@tollxyz/mcp"]
 ```
 
-Hermes names them `mcp_toll_<tool>` (19 tools, all Robinhood Chain): `mcp_toll_check_coin` (address: 0x token),
+Hermes names them `mcp_toll_<tool>` (21 tools, all Robinhood Chain): `mcp_toll_check_coin` (address: 0x token),
+`mcp_toll_pre_buy_check` (address: BLOCK / WARN / ALLOW / WAIT before a buy), `mcp_toll_check_coins` (addresses: up to 20),
 `mcp_toll_larp_check` (token), `mcp_toll_dev_record` (wallet), `mcp_toll_wallet_privacy` (wallet),
 `mcp_toll_fresh_launches` (limit?), `mcp_toll_chain_pulse`, `mcp_toll_launch_record` (address),
 `mcp_toll_check_agent` (id), `mcp_toll_check_hook` (address), before signing `mcp_toll_check_tx` (to, data, value, from; or typedData; or x402) and

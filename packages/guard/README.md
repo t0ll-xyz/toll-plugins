@@ -29,6 +29,22 @@ Run it as an ES module (an `.mjs`/`.mts` file, or `"type": "module"` in package.
 Toll states facts, never says safe: ALLOW means none of the checks Toll runs found a reason to stop, nothing more.
 Information only, not financial advice.
 
+## Gate a buy in one call
+
+Before your agent even builds the swap, ask for one word with `@tollxyz/sdk`:
+
+```ts
+import { Toll } from "@tollxyz/sdk";
+const toll = new Toll();
+const r = await toll.preBuyCheck(token);          // Decision: BLOCK / WARN / ALLOW / WAIT, up to 3 reasons
+if (r.decision === "BLOCK") throw new Error(r.text);           // the owner decides, never the agent
+if (r.decision === "WAIT") await sleep(r.pending!.retryAfterS * 1000); // part of the coin is still being read
+```
+
+It runs the same calibrated rules as the guard's swap check (BLOCK = a finding whose coins rugged at 40% or more
+within 24 h, or sells that fail), so the gate and the guard never disagree. Then let `guardViem` / `guardEthers`
+check the transaction itself when it is signed.
+
 ## What is checked
 
 Every check runs on Toll's server (`POST https://t0ll.xyz/api/tx/check`), so new checks reach you without a package
