@@ -3,7 +3,7 @@
  * The wrapper is a Proxy: every other method and field of the client passes through unchanged.
  */
 import { isAddress, type CheckInput, type Hex, type TypedDataLike } from "./check.js";
-import { enforce, type GuardOptions } from "./policy.js";
+import { enforce, gateAuthorization, type GuardOptions } from "./policy.js";
 
 type AnyFn = (...args: any[]) => any;
 type Obj = Record<string | symbol, any>;
@@ -27,6 +27,12 @@ function proxy<T extends object>(target: T, wrapped: Record<string, AnyFn>): T {
   });
 }
 
+/** a transaction that carries an EIP-7702 authorizationList (any entry at all) */
+const hasAuthorizations = (tx: Obj | null | undefined): boolean => {
+  const l = tx?.authorizationList;
+  return l !== undefined && l !== null && (!Array.isArray(l) || l.length > 0);
+};
+
 const addrOf = (account: unknown): string | undefined => {
   if (isAddress(account)) return account;
   const a = (account as { address?: unknown } | null | undefined)?.address;
@@ -46,8 +52,10 @@ async function loadViemEncode(): Promise<NonNullable<ViemGuardOptions["encodeFun
 }
 
 /**
- * Wraps a viem WalletClient: sendTransaction, writeContract, signTransaction and signTypedData ask Toll first.
- * Wrap last: `client.extend(...)` on the wrapped client returns an unguarded client.
+ * Wraps a viem WalletClient: sendTransaction, writeContract, signTransaction and signTypedData ask Toll first. An
+ * EIP-7702 authorization (an authorizationList on any of them, or signAuthorization) goes to onAuthorization
+ * (default: blocked). Wrap last: `client.extend(...)` on the wrapped client returns an unguarded client, and the
+ * account's own sign methods (client.account.sign*) are not wrapped.
  */
 export function guardViem<T extends object>(client: T, opts: ViemGuardOptions = {}): T {
   const c = client as Obj;
@@ -64,18 +72,21 @@ export function guardViem<T extends object>(client: T, opts: ViemGuardOptions = 
   if (typeof c.sendTransaction === "function") {
     wrapped.sendTransaction = async (args: Obj, ...rest: unknown[]) => {
       // a deployment (no `to`) goes to the unsupported policy
+      if (hasAuthorizations(args)) await gateAuthorization("transaction", "sendTransaction", txInput(args, args?.data), opts);
       await enforce("transaction", () => txInput(args, args?.data), opts);
       return c.sendTransaction(args, ...rest);
     };
   }
   if (typeof c.signTransaction === "function") {
     wrapped.signTransaction = async (args: Obj, ...rest: unknown[]) => {
+      if (hasAuthorizations(args)) await gateAuthorization("transaction", "signTransaction", txInput(args, args?.data), opts);
       await enforce("transaction", () => txInput(args, args?.data), opts);
       return c.signTransaction(args, ...rest);
     };
   }
   if (typeof c.writeContract === "function") {
     wrapped.writeContract = async (args: Obj, ...rest: unknown[]) => {
+      if (hasAuthorizations(args)) await gateAuthorization("transaction", "writeContract", null, opts);
       await enforce("transaction", async () => {
         const enc = opts.encodeFunctionData ?? (await loadViemEncode());
         let data = String(enc({ abi: args.abi, functionName: args.functionName, args: args.args }));
@@ -90,6 +101,12 @@ export function guardViem<T extends object>(client: T, opts: ViemGuardOptions = 
       const td: TypedDataLike = { domain: args?.domain ?? {}, types: args?.types ?? {}, primaryType: args?.primaryType, message: args?.message ?? {} };
       await enforce("typedData", () => ({ typedData: td }), opts);
       return c.signTypedData(args, ...rest);
+    };
+  }
+  if (typeof c.signAuthorization === "function") {
+    wrapped.signAuthorization = async (...args: unknown[]) => {
+      await gateAuthorization("transaction", "signAuthorization", null, opts);
+      return c.signAuthorization(...args);
     };
   }
   return proxy(client, wrapped);
@@ -134,7 +151,8 @@ async function ethersTx(signer: Obj, tx: Obj): Promise<CheckInput> {
 }
 
 /**
- * Wraps an ethers v6 Signer: sendTransaction, signTransaction and signTypedData ask Toll first.
+ * Wraps an ethers v6 Signer: sendTransaction, signTransaction and signTypedData ask Toll first. An EIP-7702
+ * authorization (a transaction's authorizationList, or authorize()) goes to onAuthorization (default: blocked).
  * `signer.connect(provider)` returns an unguarded signer: wrap the connected one.
  */
 export function guardEthers<T extends object>(signer: T, opts: GuardOptions = {}): T {
@@ -142,12 +160,14 @@ export function guardEthers<T extends object>(signer: T, opts: GuardOptions = {}
   const wrapped: Record<string, AnyFn> = {};
   if (typeof s.sendTransaction === "function") {
     wrapped.sendTransaction = async (tx: Obj, ...rest: unknown[]) => {
+      if (hasAuthorizations(tx)) await gateAuthorization("transaction", "sendTransaction", null, opts);
       await enforce("transaction", () => ethersTx(s, tx), opts);
       return s.sendTransaction(tx, ...rest);
     };
   }
   if (typeof s.signTransaction === "function") {
     wrapped.signTransaction = async (tx: Obj, ...rest: unknown[]) => {
+      if (hasAuthorizations(tx)) await gateAuthorization("transaction", "signTransaction", null, opts);
       await enforce("transaction", () => ethersTx(s, tx), opts);
       return s.signTransaction(tx, ...rest);
     };
@@ -156,6 +176,12 @@ export function guardEthers<T extends object>(signer: T, opts: GuardOptions = {}
     wrapped.signTypedData = async (domain: Obj, types: Obj, value: Obj, ...rest: unknown[]) => {
       await enforce("typedData", () => ({ typedData: { domain: domain ?? {}, types: types ?? {}, primaryType: primaryTypeOf(types ?? {}), message: value ?? {} } }), opts);
       return s.signTypedData(domain, types, value, ...rest);
+    };
+  }
+  if (typeof s.authorize === "function") {
+    wrapped.authorize = async (...args: unknown[]) => {
+      await gateAuthorization("transaction", "authorize", null, opts);
+      return s.authorize(...args);
     };
   }
   return proxy(signer, wrapped);

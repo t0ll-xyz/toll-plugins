@@ -70,6 +70,11 @@ Returns the same wallet behind a Proxy. Checked first:
   `signTransaction`, `signTypedData`
 - ethers v6 Signer: `sendTransaction`, `signTransaction`, `signTypedData`
 
+An EIP-7702 authorization sets the wallet's code to another contract, which can then move everything it holds. Toll
+does not read one yet, so the guard blocks it itself (TollBlockedError, code `eip7702-authorization`) unless
+`onAuthorization: "allow"`: a transaction with an `authorizationList` on any method above, viem's
+`signAuthorization` and ethers' `authorize`. The account's own sign methods (`client.account.sign*`) are not wrapped.
+
 Everything else passes through unchanged. Wrap last: `client.extend(...)` or `signer.connect(...)` on the wrapped
 wallet returns an unguarded one. viem and ethers are optional peer dependencies, never imported at load time.
 
@@ -78,6 +83,10 @@ wallet returns an unguarded one. viem and ethers are optional peer dependencies,
 Wraps the fetch your x402 client uses. When a 402 arrives, its payment requirement goes to Toll before the client
 pays; on BLOCK the 402 never reaches the payer (TollBlockedError is thrown). The paid retry (a request with a
 `PAYMENT-SIGNATURE` or `X-PAYMENT` header) and every non-402 answer pass through.
+
+A 402 can carry its requirement in the `PAYMENT-REQUIRED` header and in the JSON body, and a client pays from the one
+it reads (`x402-fetch` v1 reads the body). The guard reads both: when they ask for different payments (payee, amount,
+asset or scheme), it blocks without asking Toll (code `x402-forms-differ`).
 
 ```ts
 import { wrapFetchWithPayment } from "x402-fetch";
@@ -102,6 +111,7 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `onBlock` | `"throw"` | `"throw"` (TollBlockedError), or `(assessment) => boolean`, e.g. ask a human; true lets it through |
 | `onUnavailable` | `"allow"` | Toll unreachable, timed out, 5xx, 429, or a request it could not read: `"allow"` (fail-open, logged) or `"block"` (fail-closed, TollUnavailableError) |
 | `onUnsupported` | `"allow"` | another chain, a deployment: `"allow"` or `"block"` |
+| `onAuthorization` | `"block"` | an EIP-7702 authorization: `"block"` (TollBlockedError) or `"allow"` (unchecked, logged) |
 | `onReport` | none | `(report) => void`: every decision, with `assessment`, `decision`, `basis`, `paidUrl` |
 | `logger` | `console.warn` | where WARN and unavailable lines go; `false` = silent |
 | `timeoutMs` | `15000` | one request to Toll |
