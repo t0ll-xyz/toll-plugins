@@ -50,16 +50,24 @@ export interface TollResult {
   link: string | null;
 }
 
+/** the seller's ERC-8004 agent id: one id, a map from the resource's origin to an id, or a function of the origin */
+export type AgentIdOption = number | bigint | string | Record<string, number | bigint | string> | ((origin: string) => number | bigint | string | null | undefined);
+
 export interface TollCheckOptions {
   /** Toll's check endpoint (default https://t0ll.xyz/api/tx/check) */
   url?: string;
-  /** actions that refuse the payment (default ["BLOCK"]; ["BLOCK", "WARN"] pays only sellers Toll verified) */
+  /** BLOCK is always refused; add "WARN" to pay only sellers whose payee Toll could verify */
   refuse?: Array<"BLOCK" | "WARN">;
-  /** the seller's ERC-8004 agent id, when the 402 does not name it */
-  agentId?: number | bigint | string;
+  /**
+   * The seller you mean to pay, per origin. When given, YOURS is the identity Toll checks: a 402 that names another
+   * one (extra.erc8004) comes back WARN x402-identity-differs. A map is keyed by origin ("https://api.seller.xyz").
+   */
+  agentId?: AgentIdOption;
+  /** refuse a payment to an origin you named no agentId for (default false: the 402's own extra.erc8004 is used) */
+  requireAgent?: boolean;
   /** how long Toll may take, the whole answer included (default 8000 ms) */
   timeoutMs?: number;
-  /** pay when Toll gives no answer it can use (default false: PayError TOLL_UNREAD) */
+  /** pay when Toll cannot be reached: a network error, a timeout, HTTP 429 or 5xx (never a 4xx or a bad body) */
   failOpen?: boolean;
   fetchImpl?: typeof fetch;
   /** called with every answer read, before it is acted on */
@@ -76,7 +84,10 @@ export function originAndPath(raw: string): string {
   }
 }
 
-class Unread extends Error {}
+/** an answer that could not be used; `open` = Toll could not be reached (failOpen may pay), else a payee could cause it */
+class Unread extends Error {
+  constructor(msg: string, readonly open = false) { super(msg); }
+}
 
 /** reads at most `max` bytes of a body as text; past it, Unread("answer too large") */
 async function readCapped(r: Response, max: number): Promise<string> {
@@ -103,54 +114,105 @@ async function readCapped(r: Response, max: number): Promise<string> {
   return new TextDecoder().decode(all);
 }
 
+/** the id as a decimal string, or null; throws BAD_TOLL_OPTION on anything that is not a whole, non-negative number */
+function idOf(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const t = typeof v === "bigint" ? v.toString() : typeof v === "number" ? (Number.isSafeInteger(v) ? String(v) : "") : typeof v === "string" ? v.trim() : "";
+  if (!/^(0|[1-9][0-9]{0,77})$/.test(t)) throw new PayError("BAD_TOLL_OPTION", "tollCheck: `agentId` is the seller's ERC-8004 id, a whole number");
+  return t;
+}
+
+function agentFor(o: AgentIdOption | undefined, origin: string): string | null {
+  if (o === undefined || o === null) return null;
+  if (typeof o === "function") return idOf(o(origin));
+  if (typeof o === "object" && typeof o !== "bigint") return idOf((o as Record<string, unknown>)[origin]);
+  return idOf(o);
+}
+
+/** the requirement as Toll needs it, and nothing a payee could pad: the payment fields and extra.erc8004 only */
+export function trimmed(req: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of ["scheme", "network", "asset", "amount", "maxAmountRequired", "payTo", "maxTimeoutSeconds"]) {
+    const v = req[k];
+    if (typeof v === "string" && v.length <= 200) out[k] = v;
+    else if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  const extra = req.extra as { erc8004?: unknown } | undefined;
+  if (extra && typeof extra === "object" && extra.erc8004 && typeof extra.erc8004 === "object") {
+    const j = JSON.stringify(extra.erc8004);
+    if (j.length <= 4096) out.extra = { erc8004: JSON.parse(j) };
+  }
+  return out;
+}
+
 /** A Priors `beforePay` that asks Toll about the payment and refuses what it says to refuse. */
 export function tollCheck(o: TollCheckOptions = {}): (payment: PaymentToCheck) => Promise<void> {
   const url = o.url ?? TOLL_CHECK_URL;
-  const refuse = new Set((o.refuse ?? ["BLOCK"]).map((a) => String(a).toUpperCase()));
-  for (const a of refuse) {
-    if (a !== "BLOCK" && a !== "WARN") throw new PayError("BAD_TOLL_OPTION", 'tollCheck: `refuse` takes "BLOCK" and "WARN" only');
+  const refuse = new Set<string>(["BLOCK"]);                  // BLOCK always (review 2026-11-07)
+  for (const a of o.refuse ?? []) {
+    const u = String(a).toUpperCase();
+    if (u !== "BLOCK" && u !== "WARN") throw new PayError("BAD_TOLL_OPTION", 'tollCheck: `refuse` takes "BLOCK" and "WARN" only');
+    refuse.add(u);
   }
   const timeoutMs = o.timeoutMs ?? TOLL_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new PayError("BAD_TOLL_OPTION", "tollCheck: `timeoutMs` is a positive number of milliseconds");
   const fetchImpl = o.fetchImpl ?? globalThis.fetch;
   if (typeof fetchImpl !== "function") throw new PayError("NO_FETCH", "tollCheck: no fetch implementation");
-  const agentId = o.agentId === undefined || o.agentId === null ? null : Number(o.agentId);
-  if (agentId !== null && (!Number.isSafeInteger(agentId) || agentId < 0)) {
-    throw new PayError("BAD_TOLL_OPTION", "tollCheck: `agentId` is the seller's ERC-8004 id, a whole number");
-  }
+  if (o.agentId !== undefined && typeof o.agentId !== "function" && (typeof o.agentId !== "object" || o.agentId === null)) idOf(o.agentId);
   const secs = `${timeoutMs / 1000} s`;
 
   return async function tollBeforePay({ requirement, x402Version, resource, signal }: PaymentToCheck): Promise<void> {
     const where = originAndPath(resource);
-    const x402 = x402Version === 2 ? { x402Version: 2, resource: { url: where }, accepts: [requirement] } : { ...requirement, resource: where };
+    let origin = "";
+    try { origin = new URL(where).origin; } catch { /* no origin: no per-origin agent */ }
+    const agentId = agentFor(o.agentId, origin);
+    if (o.requireAgent && agentId === null) {
+      throw new PayError("TOLL_NO_AGENT", "pay: no agentId is set for this seller's origin and requireAgent is on; nothing was read, borrowed or signed.", { origin });
+    }
+    const req = trimmed(requirement);
+    const x402 = x402Version === 2 ? { x402Version: 2, resource: { url: where }, accepts: [req] } : { ...req, resource: where };
     const body = JSON.stringify({ x402, ...(agentId !== null ? { agentId } : {}) });
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const stop = signal ? AbortSignal.any([timeout, signal]) : timeout;
+    // A TIMER THAT KEEPS THE PROCESS ALIVE (review: AbortSignal.timeout's timer does not, so a script could exit
+    // mid-check), one controller for the request and the body, and the whole read raced against it
+    const ctl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs);
+    const onAbort = () => ctl.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) ctl.abort();
+    const stopped = new Promise<never>((_, no) => {
+      if (ctl.signal.aborted) no(new Unread(timedOut ? `no answer in ${secs}` : "the payment was aborted", timedOut));
+      ctl.signal.addEventListener("abort", () => no(new Unread(timedOut ? `no answer in ${secs}` : "the payment was aborted", timedOut)), { once: true });
+    });
+    stopped.catch(() => {});
     let a: Record<string, unknown>;
     try {
-      // one signal for the request and the body: the timeout and the caller's abort stop the whole read
-      const r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body, signal: stop });
-      if (!r.ok) {
-        await r.body?.cancel().catch(() => {});
-        throw new Unread(`HTTP ${r.status}`);
-      }
-      const text = await Promise.race([
-        readCapped(r, TOLL_MAX_BODY_BYTES),
-        new Promise<never>((_, no) => {
-          if (stop.aborted) no(stop.reason);
-          stop.addEventListener("abort", () => no(stop.reason), { once: true });
-        }),
-      ]);
-      try {
-        a = JSON.parse(text);
-      } catch {
-        throw new Unread("not JSON");
-      }
-      if (!a || typeof a !== "object" || !ACTIONS.has(a.action as string)) throw new Unread("no action in the answer");
+      const read = (async () => {
+        let r: Response;
+        try {
+          r = await fetchImpl(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body, signal: ctl.signal });
+        } catch {
+          throw new Unread(timedOut ? `no answer in ${secs}` : signal?.aborted ? "the payment was aborted" : "Toll could not be reached", !signal?.aborted || timedOut);
+        }
+        if (!r.ok) {
+          await r.body?.cancel().catch(() => {});
+          throw new Unread(`HTTP ${r.status}`, r.status === 429 || r.status >= 500);
+        }
+        const text = await readCapped(r, TOLL_MAX_BODY_BYTES);
+        let j: unknown;
+        try { j = JSON.parse(text); } catch { throw new Unread("not JSON"); }
+        if (!j || typeof j !== "object" || !ACTIONS.has((j as { action?: string }).action as string)) throw new Unread("no action in the answer");
+        return j as Record<string, unknown>;
+      })();
+      read.catch(() => {});
+      a = await Promise.race([read, stopped]);
     } catch (e) {
-      if (o.failOpen) return;
-      const why = e instanceof Unread ? e.message : signal?.aborted && !timeout.aborted ? "the payment was aborted" : `no answer in ${secs}`;
-      throw new PayError("TOLL_UNREAD", `pay: Toll's check gave no answer to use (${why}); nothing was read, borrowed or signed. failOpen: true pays without it.`);
+      const u = e instanceof Unread ? e : new Unread(timedOut ? `no answer in ${secs}` : "the answer could not be read");
+      if (o.failOpen && u.open) return;
+      throw new PayError("TOLL_UNREAD", `pay: Toll's check gave no answer to use (${u.message}); nothing was read, borrowed or signed.${u.open ? " failOpen: true pays without it." : ""}`);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
     const warnings = Array.isArray(a.warnings) ? (a.warnings as Array<{ code?: unknown }>) : [];
     const codes = warnings.map((w) => w?.code).filter((c): c is string => typeof c === "string" && CODE.test(c)).slice(0, 10);
@@ -162,4 +224,28 @@ export function tollCheck(o: TollCheckOptions = {}): (payment: PaymentToCheck) =
       throw new PayError("TOLL_REFUSED", `pay: Toll's check answered ${action}${codes.length ? ` (${codes.join(", ")})` : ""}; nothing was read, borrowed or signed.`, { action, codes, link });
     }
   };
+}
+
+/** a signer that is enough for createPayer to reach its option checks; it never signs anything */
+const PROBE_SIGNER = { getAddress: async () => "0x0000000000000000000000000000000000000001", signTypedData: async () => { throw new Error("probe"); } };
+
+/**
+ * DOES THIS @priors/x402 RUN beforePay? (review 2026-11-07: on 0.8.8 and older, createPayer ignores the option and
+ * every payment goes through unchecked, with no error.) The release with the hook refuses `beforePay: 1` with
+ * BAD_BEFORE_PAY; an older one accepts it. Throws PayError TOLL_GUARD_UNSUPPORTED when the hook is not there.
+ */
+export function requireBeforePay(createPayer: (opts: Record<string, unknown>) => unknown): void {
+  try {
+    createPayer({ signer: PROBE_SIGNER, beforePay: 1 });
+  } catch (e) {
+    if ((e as { code?: unknown })?.code === "BAD_BEFORE_PAY") return;
+    throw e;
+  }
+  throw new PayError("TOLL_GUARD_UNSUPPORTED", "this @priors/x402 does not run beforePay, so Toll's check would never be asked: upgrade @priors/x402 to the release with beforePay.");
+}
+
+/** createPayer with Toll's check as its beforePay, after requireBeforePay: the one call to use */
+export function tollPayer<P>(createPayer: (opts: Record<string, unknown>) => P, payerOpts: Record<string, unknown>, tollOpts: TollCheckOptions = {}): P {
+  requireBeforePay(createPayer);
+  return createPayer({ ...payerOpts, beforePay: tollCheck(tollOpts) });
 }

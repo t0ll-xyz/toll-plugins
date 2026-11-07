@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/priors-guard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Toll's free pre-sign check as a Priors payer's beforePay: before an agent pays an x402 seller on Robinhood Chain (and before it borrows for it), Toll checks the payee against the seller's registered ERC-8004 agent wallet and refuses BLOCK. One line: createPayer({ beforePay: tollCheck() }).",
   "license": "MIT",
   "author": "Toll",
@@ -48,7 +48,7 @@
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@priors/x402": ">=0.8.9"
+    "@priors/x402": ">0.8.8"
   },
   "devDependencies": {
     "@priors/x402": "0.8.8",
