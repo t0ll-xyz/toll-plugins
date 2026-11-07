@@ -1,0 +1,59 @@
+{
+  "name": "@tollxyz/priors-guard",
+  "version": "0.1.0",
+  "description": "Toll's free pre-sign check as a Priors payer's beforePay: before an agent pays an x402 seller on Robinhood Chain (and before it borrows for it), Toll checks the payee against the seller's registered ERC-8004 agent wallet and refuses BLOCK. One line: createPayer({ beforePay: tollCheck() }).",
+  "license": "MIT",
+  "author": "Toll",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t0ll-xyz/toll-plugins.git",
+    "directory": "packages/priors-guard"
+  },
+  "homepage": "https://t0ll.xyz/agents/plugins",
+  "keywords": [
+    "priors",
+    "x402",
+    "beforePay",
+    "pre-sign",
+    "erc-8004",
+    "erc-8478",
+    "erc-8265",
+    "robinhood-chain",
+    "ai-agent",
+    "agent-payments",
+    "toll"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json --noEmit && tsx --test tests/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@priors/x402": ">=0.8.9"
+  },
+  "devDependencies": {
+    "@priors/x402": "0.8.8",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
