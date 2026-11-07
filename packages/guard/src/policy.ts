@@ -48,6 +48,12 @@ export interface GuardOptions extends CheckOptions {
   logger?: ((message: string) => void) | false;
   /** the seller's ERC-8004 agent id for x402 payments (or a function of the URL) */
   agentId?: number | string | ((url: string) => number | string | undefined | null);
+  /**
+   * An EIP-7702 authorization (a transaction's authorizationList, signAuthorization / authorize): it sets the
+   * wallet's code to another contract, which can then move everything the wallet holds. Toll does not read one yet.
+   * "block" (default): TollBlockedError, nothing is signed. "allow": let it through unchecked (logged, reported).
+   */
+  onAuthorization?: "block" | "allow";
 }
 
 const say = (o: GuardOptions, msg: string) => {
@@ -148,4 +154,24 @@ async function unavailable(kind: GuardKind, input: CheckInput | null, err: TollU
   if (blocked) throw err;
   say(o, `Toll unavailable, NOT checked, going ahead (onUnavailable "allow"): ${err.message}`);
   return r;
+}
+
+/**
+ * A request the guard refuses itself, without asking Toll (EIP-7702 authorizations, an x402 402 whose header and body
+ * disagree): reported as a BLOCK with one critical warning, then TollBlockedError. Nothing is sent to Toll.
+ */
+export async function refuse(kind: GuardKind, input: CheckInput | null, code: string, message: string, o: GuardOptions = {}): Promise<never> {
+  const a: RiskAssessment = { action: "BLOCK", warnings: [{ code, severity: "critical", message }] };
+  await report(o, { kind, input, assessment: a, decision: "blocked", basis: "BLOCK", paidUrl: null });
+  throw new TollBlockedError(a, "BLOCK");
+}
+
+/** the onAuthorization policy for an EIP-7702 authorization: resolves when it may go ahead, else throws */
+export async function gateAuthorization(kind: GuardKind, where: string, input: CheckInput | null, o: GuardOptions = {}): Promise<void> {
+  if (o.onAuthorization === "allow") {
+    say(o, `EIP-7702 authorization (${where}) NOT checked, going ahead (onAuthorization "allow")`);
+    await report(o, { kind, input, assessment: null, decision: "allowed", basis: "unsupported", paidUrl: null });
+    return;
+  }
+  await refuse(kind, input, "eip7702-authorization", `${where} carries an EIP-7702 authorization, which sets this wallet's code to another contract that can then move everything it holds. Toll does not read authorizations yet; onAuthorization: "allow" lets it through unchecked.`, o);
 }

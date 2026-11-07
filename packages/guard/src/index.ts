@@ -27,11 +27,11 @@ export type {
   Numberish,
   UnavailableReason,
 } from "./check.js";
-export { enforce, unsupportedWhy } from "./policy.js";
+export { enforce, unsupportedWhy, refuse, gateAuthorization } from "./policy.js";
 export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy } from "./policy.js";
 export { guard, guardViem, guardEthers, isViemClient, primaryTypeOf } from "./wallets.js";
 export type { ViemGuardOptions } from "./wallets.js";
-export { guardX402Fetch, readPaymentRequired } from "./x402.js";
+export { guardX402Fetch, readPaymentRequired, readPaymentForms, paymentFormsDiffer } from "./x402.js";
 export type { X402GuardOptions } from "./x402.js";
 export {
   read8470,

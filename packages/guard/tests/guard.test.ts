@@ -411,6 +411,74 @@ test("x402: Toll unavailable is fail-open by default, fail-closed when asked", a
   await assert.rejects(guardX402Fetch(mockFetch([res402()]).f, closed.o)("https://seller.test/a"), TollUnavailableError);
 });
 
+test("x402: a harmless header and another payTo in the body is BLOCKED without asking Toll (a v1 client pays the body)", async () => {
+  const t = opts([]);
+  const evil = { x402Version: 1, accepts: [{ ...PR.accepts[0], amount: undefined, maxAmountRequired: "10000", payTo: TO }] };
+  const inner = mockFetch([new Response(JSON.stringify(evil), { status: 402, headers: { "content-type": "application/json", "payment-required": b64(PR) } })]);
+  const e = await assert.rejects(guardX402Fetch(inner.f, t.o)("https://seller.test/a"), (err: unknown) => err instanceof TollBlockedError && err.codes[0] === "x402-forms-differ");
+  void e;
+  assert.equal(t.m.calls.length, 0);
+  assert.equal(t.reports[0].decision, "blocked");
+  // a different amount alone is refused the same way
+  const more = { x402Version: 1, accepts: [{ ...PR.accepts[0], amount: "99999999" }] };
+  const t2 = opts([]);
+  await assert.rejects(guardX402Fetch(mockFetch([new Response(JSON.stringify(more), { status: 402, headers: { "payment-required": b64(PR) } })]).f, t2.o)("https://seller.test/a"), TollBlockedError);
+});
+
+test("x402: header and body that ask the same payment (v2 amount vs v1 maxAmountRequired, address case) are checked once", async () => {
+  const t = opts([json(fx("allow"))]);
+  const same = { x402Version: 1, accepts: [{ scheme: "exact", network: "robinhood", asset: PR.accepts[0].asset.toUpperCase().replace("0X", "0x"), maxAmountRequired: "10000", payTo: FROM.toLowerCase() }] };
+  const inner = mockFetch([new Response(JSON.stringify(same), { status: 402, headers: { "payment-required": b64(PR) } })]);
+  assert.equal((await guardX402Fetch(inner.f, t.o)("https://seller.test/a")).status, 402);
+  assert.equal(t.m.calls.length, 1);
+  assert.deepEqual(body(t.m.calls[0]).x402.accepts, PR.accepts); // the header's form is the one sent
+});
+
+/* ------------------------------------------------------------------ EIP-7702 authorizations */
+
+const AUTH = [{ address: "0x000000000000000000000000000000000000bEEF", chainId: RH, nonce: 0, r: "0x1", s: "0x2", yParity: 0 }];
+
+test("7702 viem: an authorizationList on sendTransaction / signTransaction / writeContract is blocked before Toll and the wallet", async () => {
+  const { client, sent } = fakeViem();
+  const c = { ...client, signTransaction: async () => (sent.push("signTx"), "0xraw"), signAuthorization: async () => (sent.push("auth"), AUTH[0]) };
+  const t = opts([], { encodeFunctionData: () => "0x095ea7b3" });
+  const g = guardViem(c, t.o);
+  for (const call of [
+    () => g.sendTransaction({ to: TO, authorizationList: AUTH }),
+    () => g.signTransaction({ to: TO, authorizationList: AUTH }),
+    () => g.writeContract({ address: TOKEN, abi: ERC20, functionName: "approve", args: [FROM, 1n], authorizationList: AUTH }),
+    () => g.signAuthorization({ contractAddress: AUTH[0].address }),
+  ]) {
+    await assert.rejects(call(), (err: unknown) => err instanceof TollBlockedError && err.codes[0] === "eip7702-authorization");
+  }
+  assert.deepEqual(sent, []);
+  assert.equal(t.m.calls.length, 0);
+  assert.equal(t.reports.length, 4);
+});
+
+test("7702 viem: an empty authorizationList is a plain transaction; onAuthorization allow lets one through to Toll's check", async () => {
+  const { client, sent } = fakeViem();
+  const t = opts([json(fx("allow")), json(fx("allow"))]);
+  await guardViem(client, t.o).sendTransaction({ to: TO, authorizationList: [] });
+  const a = opts([json(fx("allow"))], { onAuthorization: "allow" });
+  await guardViem(client, a.o).sendTransaction({ to: TO, authorizationList: AUTH });
+  assert.equal(sent.length, 2);
+  assert.equal(a.m.calls.length, 1); // the transaction itself is still checked
+  assert.ok(a.logs.some((l) => l.includes("EIP-7702")));
+});
+
+test("7702 ethers: an authorizationList and authorize() are blocked before the signer", async () => {
+  const { signer, sent } = fakeEthers();
+  const s = Object.assign(signer, { authorize: async () => (sent.push("authorize"), AUTH[0]) });
+  const t = opts([]);
+  const g = guardEthers(s, t.o);
+  await assert.rejects(g.sendTransaction({ to: TO, authorizationList: AUTH }), TollBlockedError);
+  await assert.rejects(g.signTransaction({ to: TO, authorizationList: AUTH }), TollBlockedError);
+  await assert.rejects(g.authorize({ address: AUTH[0].address }), TollBlockedError);
+  assert.deepEqual(sent, []);
+  assert.equal(t.m.calls.length, 0);
+});
+
 /* ------------------------------------------------------------------ ERC-8470 */
 
 const OBS = JSON.parse(raw("get_observation_1")).result as string;
