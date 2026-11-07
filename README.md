@@ -20,6 +20,9 @@ exposes all 19 of the server's tools.
 | Vercel AI SDK | `generateText({ model, tools: tollTools(), prompt })` |
 | LangChain JS / LangGraph | `createAgent({ model, tools: tollTools() })` |
 | Mastra | `new Agent({ id, name, instructions, model, tools: tollTools() })` |
+| OpenAI Agents SDK (Python) | `MCPServerStreamableHttp(name="Toll", params={"url": "https://t0ll.xyz/mcp"})` in `mcp_servers` ([example](examples/openai-agents)) |
+| OpenAI Agents SDK (JS) | `new MCPServerStreamableHttp({ url: "https://t0ll.xyz/mcp", name: "Toll" })` in `mcpServers` ([example](examples/openai-agents)) |
+| CrewAI | `MCPServerAdapter({"url": "https://t0ll.xyz/mcp", "transport": "streamable-http"})` as the agent's tools ([example](examples/crewai)) |
 | OpenClaw | `openclaw mcp add toll --url https://t0ll.xyz/mcp --transport streamable-http`, plus the [skill](skills/openclaw) |
 | Hermes agent | `mcp_servers: { toll: { url: "https://t0ll.xyz/mcp" } }` in `~/.hermes/config.yaml`, plus `hermes skills install https://t0ll.xyz/skill.md` |
 | Any agent that reads skills | <https://t0ll.xyz/skill.md> ([source](docs/site/skill.md)) |
