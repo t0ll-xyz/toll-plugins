@@ -106,7 +106,7 @@ test("check_coin executes against the server tool", async () => {
 test("over quota appends the pay line", async () => {
   const { get } = await setup([fx("check_coin_over")]);
   const out = String(await get("check_coin").execute({ address: TOKEN }));
-  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0\.05 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent\)\. Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/s);
+  assert.match(out, /pay per check at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402: 0.005 USDG on Robinhood Chain or USDC on Base; pay only with the owner's consent\)\. Holding \$TOLL lifts the daily limits: new coins a day Free 10 \/ 1M \$TOLL 100 \/ 5M 500 \/ 20M 2,000/s);
 });
 
 test("larp_check waits for a pending read; dev_record works; errors are text", async () => {

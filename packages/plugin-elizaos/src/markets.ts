@@ -22,7 +22,7 @@ export type FundamentalsPeriod = (typeof FUNDAMENTALS_PERIODS)[number];
 
 /** The daily limits a Toll key carries (new coins a day, and Markets calls a day), and the x402 prices past them. */
 export const LIMITS_NOTE =
-  "Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls a day 50 / 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys (the tollKey option, sent as x-toll-pass). Past that, x402 per call: 0.05 USDG a check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, institutions, guidance or macro.";
+  "Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls a day 50 / 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys (the tollKey option, sent as x-toll-pass). Past that, x402 per call: 0.005 USDG a check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, institutions, guidance or macro.";
 
 /** A ticker as Robinhood lists it (NVDA, BRK.B, $NVDA) or a Stock Token contract (0x + 40 hex). Same rule as the API. */
 export const STOCK_ID = /^(0x[0-9a-fA-F]{40}|\$?[A-Za-z][A-Za-z0-9.\-]{0,11})$/;

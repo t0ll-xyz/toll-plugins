@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/agentkit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Coinbase AgentKit action provider: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",

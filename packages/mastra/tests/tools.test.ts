@@ -72,7 +72,7 @@ test("pre-sign and Markets tools call the MCP tools with the live argument names
 test("over quota appends the pay line", async () => {
   const { tools } = setup([fx("check_coin_over")]);
   const out = String(await tools.check_coin!.execute!({ address: TOKEN }, ctx));
-  assert.match(out, /Free coins for today are used up .*With the owner's consent, each check can be paid at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402, 0\.05 USDG on Robinhood Chain\); this tool does not pay\./s);
+  assert.match(out, /Free coins for today are used up .*With the owner's consent, each check can be paid at https:\/\/t0ll\.xyz\/api\/x402\/check\/.*\(x402, 0.005 USDG on Robinhood Chain\); this tool does not pay\./s);
 });
 
 test("larp_check waits for a pending read", async () => {

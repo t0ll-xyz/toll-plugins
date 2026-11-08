@@ -45,7 +45,7 @@ Facts with their sources, not advice. Robinhood Stock Tokens are debt securities
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the tool's answer ends with the x402 URL for that coin and says each check can be paid there (0.05 USDG on Robinhood Chain) with the owner's consent; the tool itself never pays (to pay from code, see `pay()` in [`@tollxyz/sdk`](https://github.com/t0ll-xyz/toll-plugins/tree/main/packages/sdk-js)). A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
+10 new coins a day per caller are free (coins already read stay free). Past that, the tool's answer ends with the x402 URL for that coin and says each check can be paid there (0.005 USDG on Robinhood Chain) with the owner's consent; the tool itself never pays (to pay from code, see `pay()` in [`@tollxyz/sdk`](https://github.com/t0ll-xyz/toll-plugins/tree/main/packages/sdk-js)). A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
 
 Holding $TOLL lifts the daily limits, with a Toll key from <https://t0ll.xyz/toll#keys> sent as `x-toll-pass` or `Authorization: Bearer`:
 
@@ -54,7 +54,7 @@ Holding $TOLL lifts the daily limits, with a Toll key from <https://t0ll.xyz/tol
 | New coins (`check_coin`, `larp_check`) | 10 | 100 | 500 | 2,000 |
 | Markets calls (`stock_token`, `stock_tokens`, `fundamentals`, `insider_trades`, `institutions`, `guidance`, `macro`) | 50 | 1,000 | 5,000 | 20,000 |
 
-Past that, x402 per call: 0.05 USDG a check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`) or macro. Pass your key as `tollKey`; it is sent as `x-toll-pass` on every call:
+Past that, x402 per call: 0.005 USDG a check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`) or macro. Pass your key as `tollKey`; it is sent as `x-toll-pass` on every call:
 
 ```ts
 import { tollTools } from "@tollxyz/mastra";

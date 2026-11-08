@@ -27,7 +27,7 @@ export type {
   Numberish,
   UnavailableReason,
 } from "./check.js";
-export { enforce, unsupportedWhy, refuse, gateAuthorization } from "./policy.js";
+export { enforce, unsupportedWhy, refuse, gateAuthorization, resolvePolicy, hasHighWarning } from "./policy.js";
 export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy } from "./policy.js";
 export { guard, guardViem, guardEthers, isViemClient, primaryTypeOf } from "./wallets.js";
 export type { ViemGuardOptions } from "./wallets.js";

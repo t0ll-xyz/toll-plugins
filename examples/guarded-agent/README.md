@@ -24,6 +24,6 @@ Change the rule to fit your own risk. The tally is parsed from Toll's text, with
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, Toll's answer ends with the x402 URL for that coin (0.05 USDG on Robinhood Chain), or hold 1M $TOLL. The script prints that URL; paying it from code is in the [`@tollxyz/sdk`](../../packages/sdk-js) README (`pay()`).
+10 new coins a day per caller are free (coins already read stay free). Past that, Toll's answer ends with the x402 URL for that coin (0.005 USDG on Robinhood Chain), or hold 1M $TOLL. The script prints that URL; paying it from code is in the [`@tollxyz/sdk`](../../packages/sdk-js) README (`pay()`).
 
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>. MIT.

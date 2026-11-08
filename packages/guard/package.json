@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/guard",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Toll's live pre-sign check in front of an AI agent's wallet: viem, ethers and x402 fetch wrappers that ask Toll (ALLOW / WARN / BLOCK, ERC-8265) before anything is signed on Robinhood Chain. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",

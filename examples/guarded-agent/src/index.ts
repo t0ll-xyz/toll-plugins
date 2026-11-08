@@ -39,7 +39,7 @@ async function main(): Promise<number> {
 
     console.log(check.text);
     if (larp) console.log("\n" + larp.text);
-    for (const r of [check, larp]) if (r?.paidUrl) console.log(`\nFree coins used up. Pay per check at ${r.paidUrl} (x402, 0.05 USDG on Robinhood Chain) or hold 1M $TOLL.`);
+    for (const r of [check, larp]) if (r?.paidUrl) console.log(`\nFree coins used up. Pay per check at ${r.paidUrl} (x402, 0.005 USDG on Robinhood Chain) or hold 1M $TOLL.`);
 
     const d = decide(check.text, larp ? larp.text : null);
     console.log(`\nDecision: ${d.outcome}`);

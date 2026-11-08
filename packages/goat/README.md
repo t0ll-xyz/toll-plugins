@@ -1,5 +1,9 @@
 # @tollxyz/goat-plugin
 
+> **Deprecated.** The GOAT SDK upstream repository was archived on 2026-07-02, so this plugin gets no new tools.
+> It keeps working as it is. For new agents use [`@tollxyz/ai-sdk`](../ai-sdk), [`@tollxyz/langchain`](../langchain),
+> [`@tollxyz/agentkit`](../agentkit), [`@tollxyz/mcp`](../mcp) or Toll's remote MCP server at `https://t0ll.xyz/mcp`.
+
 A [GOAT SDK](https://github.com/goat-sdk/goat) plugin for [Toll](https://t0ll.xyz/agents/plugins). Before your agent buys a coin, pays an agent or signs anything on Robinhood Chain (chain id 4663), it can check who is behind the coin (snipers, bundles, the dev's record, whether liquidity can be pulled), whether there is a real product behind it, and what the transaction or payment does. Facts read from the chain. Information only, not financial advice.
 
 Toll reads Robinhood Chain only right now: `chain` is optional and takes only `rh`; a Solana mint or another chain is answered with "Toll reads Robinhood Chain only right now." and nothing is sent.
@@ -46,7 +50,7 @@ Facts with their sources, not advice. The EFFR is subject to the Terms of Use po
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the plugin tells the agent it can pay per check there (0.05 USDG on Robinhood Chain or USDC on Base), with the owner's consent; the plugin never pays. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
+10 new coins a day per caller are free (coins already read stay free). Past that, the answer ends with the x402 URL for that coin and the plugin tells the agent it can pay per check there (0.005 USDG on Robinhood Chain or USDC on Base), with the owner's consent; the plugin never pays. A LARP check that is still being read, or a busy Toll, is awaited for you (up to 3 asks, 120 s). When part of an answer is still being read, the text says so and gives the seconds to wait.
 
 Holding $TOLL lifts the daily limits. Make a Toll key at <https://t0ll.xyz/toll#keys> and pass it as `tollKey`: it is sent as `x-toll-pass` on every t0ll.xyz call and carries the key wallet's tier.
 
@@ -55,6 +59,6 @@ Holding $TOLL lifts the daily limits. Make a Toll key at <https://t0ll.xyz/toll#
 | New coins (check_coin, larp_check) | 10 | 100 | 500 | 2,000 |
 | Markets calls (stock_token, stock_tokens, fundamentals, insider_trades, institutions, guidance, macro) | 50 | 1,000 | 5,000 | 20,000 |
 
-Past that, x402 per call: 0.05 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base); 0.01 USDG on Robinhood Chain for fundamentals (`https://t0ll.xyz/api/x402/markets/fundamentals/{id}`), insider trades (`https://t0ll.xyz/api/x402/markets/insiders/{id}`), institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`), macro (`https://t0ll.xyz/api/x402/markets/macro`), the Stock Token list (`https://t0ll.xyz/api/x402/markets/stocks`) and the chain pulse (`https://t0ll.xyz/api/x402/pulse`). Over the Markets count, each Markets tool answers with the paid URL for that call and the tiers instead of the JSON; nothing here pays.
+Past that, x402 per call: 0.005 USDG a coin check (`https://t0ll.xyz/api/x402/check/{token}`), 0.02 USDG a Stock Token (`https://t0ll.xyz/api/x402/stock/{id}`), on Robinhood Chain (or USDC on Base); 0.01 USDG on Robinhood Chain for fundamentals (`https://t0ll.xyz/api/x402/markets/fundamentals/{id}`), insider trades (`https://t0ll.xyz/api/x402/markets/insiders/{id}`), institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`), macro (`https://t0ll.xyz/api/x402/markets/macro`), the Stock Token list (`https://t0ll.xyz/api/x402/markets/stocks`) and the chain pulse (`https://t0ll.xyz/api/x402/pulse`). Over the Markets count, each Markets tool answers with the paid URL for that call and the tiers instead of the JSON; nothing here pays.
 
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>. MIT.

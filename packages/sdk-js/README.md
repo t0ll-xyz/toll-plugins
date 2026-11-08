@@ -47,7 +47,7 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 
 ## Free limit and the paid path
 
-10 new coins a day per caller are free (coins already read stay free). Past that, the answer carries `paidUrl`, the x402 endpoint for that coin (0.05 USDG on Robinhood Chain, charged only for a whole answer). Markets calls have their own free count (50 a day; 1,000 / 5,000 / 20,000 with 1M / 5M / 20M $TOLL via `tollKey`); past it, x402 per call: 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`) or macro.
+10 new coins a day per caller are free (coins already read stay free). Past that, the answer carries `paidUrl`, the x402 endpoint for that coin (0.005 USDG on Robinhood Chain, charged only for a whole answer). Markets calls have their own free count (50 a day; 1,000 / 5,000 / 20,000 with 1M / 5M / 20M $TOLL via `tollKey`); past it, x402 per call: 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions (`https://t0ll.xyz/api/x402/markets/institutions/{id}`), guidance (`https://t0ll.xyz/api/x402/markets/guidance/{id}`) or macro.
 
 `pay(paidUrl)` runs the x402 flow itself and asks your `sign` function for one payment:
 

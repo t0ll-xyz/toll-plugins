@@ -10,7 +10,7 @@ import {
   type RiskAssessment,
 } from "./check.js";
 
-export type WarnPolicy = "allow" | "block" | ((assessment: RiskAssessment) => boolean | Promise<boolean>);
+export type WarnPolicy = "allow" | "block" | "block-high" | ((assessment: RiskAssessment) => boolean | Promise<boolean>);
 export type BlockPolicy = "throw" | ((assessment: RiskAssessment) => boolean | Promise<boolean>);
 
 export type GuardKind = "transaction" | "typedData" | "x402";
@@ -31,17 +31,25 @@ export interface GuardReport {
 }
 
 export interface GuardOptions extends CheckOptions {
-  /** WARN: "allow" (default, reported and logged), "block", or a function; true lets it through */
+  /**
+   * WARN: "block-high" (default since 0.2.0: blocked when any warning is high or critical, else allowed and logged),
+   * "allow" (every WARN goes ahead, logged; the 0.1.x default), "block", or a function (true lets it through)
+   */
   onWarn?: WarnPolicy;
   /** BLOCK: "throw" (default, TollBlockedError), or a function (e.g. ask a human); true lets it through */
   onBlock?: BlockPolicy;
   /**
    * Toll unreachable, timed out, 5xx, 429, or a request it could not read: "allow" (default, fail-open, logged) or
-   * "block" (fail-closed, throws TollUnavailableError).
+   * "block" (fail-closed, throws TollUnavailableError). `strict` makes "block" the default.
    */
   onUnavailable?: "allow" | "block";
-  /** a request Toll does not read (another chain, a contract deploy): "allow" (default) or "block" */
+  /** a request Toll does not read (another chain, a contract deploy): "allow" (default) or "block"; `strict`: "block" */
   onUnsupported?: "allow" | "block";
+  /**
+   * The strict preset: the defaults become onWarn "block", onUnavailable "block" and onUnsupported "block".
+   * Any of those three passed explicitly (not undefined) still wins over the preset.
+   */
+  strict?: boolean;
   /** every decision, with Toll's answer; errors thrown here are caught and logged */
   onReport?: (report: GuardReport) => void | Promise<void>;
   /** where WARN / unavailable lines go (default console.warn); false = silent */
@@ -55,6 +63,20 @@ export interface GuardOptions extends CheckOptions {
    */
   onAuthorization?: "block" | "allow";
 }
+
+/** the effective policy: explicit options win, then the strict preset, then the defaults */
+export function resolvePolicy(o: GuardOptions = {}): { onWarn: WarnPolicy; onUnavailable: "allow" | "block"; onUnsupported: "allow" | "block" } {
+  const strict = o.strict === true;
+  return {
+    onWarn: o.onWarn ?? (strict ? "block" : "block-high"),
+    onUnavailable: o.onUnavailable ?? (strict ? "block" : "allow"),
+    onUnsupported: o.onUnsupported ?? (strict ? "block" : "allow"),
+  };
+}
+
+const HIGH = new Set(["high", "critical"]);
+/** true when any warning is high or critical */
+export const hasHighWarning = (a: RiskAssessment): boolean => (a.warnings ?? []).some((w) => HIGH.has(String(w?.severity).toLowerCase()));
 
 const say = (o: GuardOptions, msg: string) => {
   if (o.logger === false) return;
@@ -107,10 +129,10 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
   }
   const why = unsupportedWhy(input);
   if (why) {
-    const blocked = o.onUnsupported === "block";
+    const blocked = resolvePolicy(o).onUnsupported === "block";
     const r: GuardReport = { kind, input, assessment: null, decision: blocked ? "blocked" : "allowed", basis: "unsupported", paidUrl: null };
     await report(o, r);
-    if (blocked) throw new TollUnavailableError(`Not checked by Toll: ${why}. onUnsupported is "block".`, { reason: "unsupported" });
+    if (blocked) throw new TollUnavailableError(`Not checked by Toll: ${why}. onUnsupported is "block"${o.strict === true && o.onUnsupported === undefined ? " (strict)" : ""}.`, { reason: "unsupported" });
     return r;
   }
   let a: RiskAssessment;
@@ -137,8 +159,8 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
     throw new TollBlockedError(a, "BLOCK");
   }
   // WARN, and anything that is not one of the three actions: never treated as an ALLOW
-  const p = o.onWarn ?? "allow";
-  const ok = p === "allow" ? true : p === "block" ? false : (await p(a)) === true;
+  const p = resolvePolicy(o).onWarn;
+  const ok = p === "allow" ? true : p === "block" ? false : p === "block-high" ? !hasHighWarning(a) : (await p(a)) === true;
   if (ok) {
     say(o, `WARN (${kind}), going ahead: ${a.warnings.map((w) => `${w.code}: ${w.message}`).join(" | ")}${paidUrl ? ` Paid, no daily limit: ${paidUrl}` : ""}`);
     return done("allowed", "WARN");
@@ -148,7 +170,7 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
 }
 
 async function unavailable(kind: GuardKind, input: CheckInput | null, err: TollUnavailableError, o: GuardOptions): Promise<GuardReport> {
-  const blocked = o.onUnavailable === "block";
+  const blocked = resolvePolicy(o).onUnavailable === "block";
   const r: GuardReport = { kind, input, assessment: null, decision: blocked ? "blocked" : "allowed", basis: "unavailable", paidUrl: err.paidUrl, error: err };
   await report(o, r);
   if (blocked) throw err;

@@ -1,7 +1,7 @@
 {
   "name": "@tollxyz/goat-plugin",
-  "version": "0.3.0",
-  "description": "GOAT SDK plugin: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
+  "version": "0.3.1",
+  "description": "DEPRECATED (GOAT SDK upstream archived 2026-07-02; use @tollxyz/ai-sdk, @tollxyz/langchain or @tollxyz/mcp). GOAT SDK plugin: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",

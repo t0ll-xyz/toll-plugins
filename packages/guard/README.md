@@ -1,5 +1,10 @@
 # @tollxyz/guard
 
+> **Defaults changed in 0.2.0.** A WARN with any `high` or `critical` warning is now blocked (`onWarn: "block-high"`,
+> the new default); a WARN with only `medium`/`low` warnings still goes ahead, logged. To keep the 0.1.x behaviour,
+> pass `onWarn: "allow"`. New `strict: true` preset: WARN, unavailable and unsupported all block. Any option you pass
+> explicitly still wins over the preset (`{ strict: true, onUnavailable: "allow" }` stays fail-open).
+
 Toll's live pre-sign check in front of an AI agent's wallet. Before the agent signs a transaction, an EIP-712
 signature or an x402 payment on Robinhood Chain, the guard asks [Toll](https://t0ll.xyz/agents/x402#presign) and
 gets ALLOW / WARN / BLOCK with the reasons. Zero runtime dependencies, ESM only, Node >= 20.19, with types.
@@ -15,7 +20,7 @@ const wallet = guard(walletClient);   // viem WalletClient or ethers v6 Signer; 
 ```ts
 import { guard, TollBlockedError } from "@tollxyz/guard";
 
-const wallet = guard(walletClient, { onWarn: "allow", onUnavailable: "allow" });
+const wallet = guard(walletClient, { onWarn: "block-high", onUnavailable: "allow" });
 try {
   await wallet.writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, maxUint256] });
 } catch (e) {
@@ -107,10 +112,11 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 
 | Option | Default | |
 | --- | --- | --- |
-| `onWarn` | `"allow"` | `"allow"` (logged and reported), `"block"`, or `(assessment) => boolean` (true lets it through) |
+| `strict` | `false` | preset: the defaults of `onWarn`, `onUnavailable` and `onUnsupported` become `"block"`; each one passed explicitly still wins |
+| `onWarn` | `"block-high"` | `"block-high"` (blocked when any warning is `high` or `critical`, else allowed and logged), `"allow"` (every WARN goes ahead, logged; the 0.1.x default), `"block"`, or `(assessment) => boolean` (true lets it through) |
 | `onBlock` | `"throw"` | `"throw"` (TollBlockedError), or `(assessment) => boolean`, e.g. ask a human; true lets it through |
-| `onUnavailable` | `"allow"` | Toll unreachable, timed out, 5xx, 429, or a request it could not read: `"allow"` (fail-open, logged) or `"block"` (fail-closed, TollUnavailableError) |
-| `onUnsupported` | `"allow"` | another chain, a deployment: `"allow"` or `"block"` |
+| `onUnavailable` | `"allow"` (`strict`: `"block"`) | Toll unreachable, timed out, 5xx, 429, or a request it could not read: `"allow"` (fail-open, logged) or `"block"` (fail-closed, TollUnavailableError) |
+| `onUnsupported` | `"allow"` (`strict`: `"block"`) | another chain, a deployment: `"allow"` or `"block"` |
 | `onAuthorization` | `"block"` | an EIP-7702 authorization: `"block"` (TollBlockedError) or `"allow"` (unchecked, logged) |
 | `onReport` | none | `(report) => void`: every decision, with `assessment`, `decision`, `basis`, `paidUrl` |
 | `logger` | `console.warn` | where WARN and unavailable lines go; `false` = silent |
@@ -126,13 +132,13 @@ Errors: `TollBlockedError` (`.assessment`, `.codes`, message lists each code and
 The default is fail-open: if Toll cannot answer, the signature goes ahead, with a `[toll-guard] ... NOT checked`
 line and an `onReport` call with `basis: "unavailable"`. The agent must never get stuck because of Toll, and the
 free route is rate limited per IP (a busy agent will see 429s). If an unchecked signature is worse for you than a
-stalled agent, set `onUnavailable: "block"`.
+stalled agent, set `onUnavailable: "block"` (or `strict: true`, which also blocks every WARN and unsupported request).
 
 ## Free limit and the paid route
 
 The check is free, rate limited per IP. The coin a swap buys is read through the same free coins as Toll's coin
 check (10 new coins a day per caller, coins already read stay free); past that the coin is not read and the answer
-is WARN `coin-over-quota` naming the paid route, `https://t0ll.xyz/api/x402/tx` (0.01 USDG over x402, no daily
+is WARN `coin-over-quota` naming the paid route, `https://t0ll.xyz/api/x402/tx` (0.005 USDG over x402, no daily
 limit). The guard never pays: it puts that URL in the log line, in `report.paidUrl` and in `paidUrlOf(assessment)`.
 
 ## Privacy

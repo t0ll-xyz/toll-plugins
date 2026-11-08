@@ -141,7 +141,7 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
   about to trade through): its name and where it was read, what its address lets it do (runs on every trade, can take
   a fee or tax, can act when liquidity is removed), whether its owner can change its code, how many pools use it, and
   whether a test sell through it reverted (sells fail). A $TOLL holder's Toll key adds the measured cut and how its
-  latest coins ended; paid with those parts at https://t0ll.xyz/api/x402/hook/{hook} (0.01 USDG). If sells fail or
+  latest coins ended; paid with those parts at https://t0ll.xyz/api/x402/hook/{hook} (0.005 USDG). If sells fail or
   its code can be changed, tell your owner before you trade through it.
 - `fresh_launches` (limit 1 to 20): the newest coins on Robinhood Chain.
 - `chain_pulse`: launches, graduations and trades on Robinhood Chain right now.
@@ -170,7 +170,7 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
 ## 6. Free limit and the paid path
 
 10 new coins a day per caller are free; coins already read stay free; `check_agent` and `check_hook` use no coin. Past that,
-`check_coin` and `larp_check` answer with the paid x402 URL for that coin: 0.05 USDG on Robinhood Chain per check,
+`check_coin` and `larp_check` answer with the paid x402 URL for that coin: 0.005 USDG on Robinhood Chain per check,
 charged only for a whole answer (https://t0ll.xyz/api/x402/check/{token}?chain=rh and
 https://t0ll.xyz/api/x402/larp/{token}?chain=rh). Pay it only with your owner's consent. How to pay:
 https://t0ll.xyz/agents/x402. The paid list: https://t0ll.xyz/.well-known/x402
@@ -184,7 +184,7 @@ https://t0ll.xyz/api/x402/pulse (the chain pulse).
 
 Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls
 50 / 1,000 / 5,000 / 20,000. Your owner makes a Toll key at https://t0ll.xyz/toll#keys; send it as `x-toll-pass` or
-`Authorization: Bearer` (for example as a header on the remote MCP server). Past the tier, x402 per call: 0.05 USDG a
+`Authorization: Bearer` (for example as a header on the remote MCP server). Past the tier, x402 per call: 0.005 USDG a
 check, 0.02 USDG a stock, 0.01 USDG for fundamentals, insider trades, institutions, guidance, macro, the list or the pulse.
 
 ## More

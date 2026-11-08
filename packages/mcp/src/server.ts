@@ -16,7 +16,7 @@ import {
 import { parsePaidUrl, resolveClientId } from "@tollxyz/sdk";
 import { SNAPSHOT_TOOLS } from "./snapshot.js";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -44,7 +44,7 @@ export const INSTRUCTIONS = [
 export function quotaNote(paidUrl: string): string {
   return (
     "Note from the local Toll MCP server: Toll's free coins for today are used up (10 new coins a day per caller; coins already read stay free). " +
-    `This server does not pay. To read more coins today, the owner can pay per check at ${paidUrl} (x402, 0.05 USDG on Robinhood Chain). ` +
+    `This server does not pay. To read more coins today, the owner can pay per check at ${paidUrl} (x402, 0.005 USDG on Robinhood Chain). ` +
     "Do not pay without the owner's consent."
   );
 }

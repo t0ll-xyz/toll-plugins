@@ -78,7 +78,7 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
 10 new coins a day per caller are free; coins already read stay free; `check_agent` and `check_hook` use no coin. Markets calls
 (Stock Tokens, fundamentals, insider trades, institutions, guidance, macro) have their own count: 50 a day free. Holding $TOLL lifts both: new coins a day 1M $TOLL 100 / 5M 500 /
 20M 2,000, Markets calls 1,000 / 5,000 / 20,000, with a Toll key from https://t0ll.xyz/toll#keys sent as `x-toll-pass`
-or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.05 USDG a check, 0.02 USDG a stock, and
+or `Authorization: Bearer`. Past that, the answer gives the paid x402 URL (0.005 USDG a check, 0.02 USDG a stock, and
 0.01 USDG for fundamentals, insider trades, institutions, guidance, macro, the Stock Token list or the chain pulse, on
 Robinhood Chain). `stock_events` without a key shows the last 10 events found an hour ago or more; Pro holders read it
 15 minutes late, Team live. Pay only with the owner's consent.

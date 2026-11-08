@@ -6,7 +6,7 @@
 export const DEFAULT_BASE_URL = "https://t0ll.xyz";
 /** Robinhood Chain: the only chain the pre-sign check reads for now */
 export const TX_CHAIN_ID = 4663;
-/** the paid route without the daily limit (0.01 USDG over x402); the guard never pays it */
+/** the paid route without the daily limit (0.005 USDG over x402); the guard never pays it */
 export const PAID_TX_PATH = "/api/x402/tx";
 export const PRESIGN_DOCS = "https://t0ll.xyz/agents/x402#presign";
 

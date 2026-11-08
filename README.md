@@ -73,7 +73,7 @@ its payTo is bound to its identity.
 | [`@tollxyz/ai-sdk`](packages/ai-sdk) | Vercel AI SDK tools | `npm install @tollxyz/ai-sdk ai zod` |
 | [`@tollxyz/langchain`](packages/langchain) | LangChain JS tools (createAgent, LangGraph) | `npm install @tollxyz/langchain langchain @langchain/core zod` |
 | [`@tollxyz/mastra`](packages/mastra) | Mastra tools | `npm install @tollxyz/mastra @mastra/core zod` |
-| [`@tollxyz/goat-plugin`](packages/goat) | GOAT SDK plugin | `npm install @tollxyz/goat-plugin @goat-sdk/core zod@3` |
+| [`@tollxyz/goat-plugin`](packages/goat) | GOAT SDK plugin (deprecated: GOAT upstream archived 2026-07-02) | `npm install @tollxyz/goat-plugin @goat-sdk/core zod@3` |
 
 Skills: [`skills/openclaw/toll`](skills/openclaw) (OpenClaw / ClawHub), [`integrations/hermes`](integrations/hermes)
 (Hermes agent config and skill), [`docs/site/skill.md`](docs/site/skill.md) (served at t0ll.xyz/skill.md). Each one
@@ -88,7 +88,7 @@ calls (Robinhood Stock Tokens, fundamentals, insider trades, institutions, guida
 20M 2,000 / 20,000, with a Toll key from <https://t0ll.xyz/toll#keys> sent as `x-toll-pass` (the `tollKey` option in
 `@tollxyz/agentkit`, `@tollxyz/ai-sdk`, `@tollxyz/goat-plugin`, `@tollxyz/plugin-elizaos`, `@tollxyz/langchain`,
 `@tollxyz/mastra` and `@tollxyz/sdk`; `toll_key` in `toll-sdk`). Past that, x402 per
-call: 0.05 USDG a coin check, 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions,
+call: 0.005 USDG a coin check, 0.02 USDG a Stock Token, 0.01 USDG for fundamentals, insider trades, institutions,
 guidance, macro, the Stock Token list or the chain pulse, on Robinhood Chain.
 Docs: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>, <https://t0ll.xyz/agents/x402>.
 
