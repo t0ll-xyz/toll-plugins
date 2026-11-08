@@ -1,4 +1,4 @@
-// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-06). Used only when Toll cannot be reached for the live list.
+// Snapshot of https://t0ll.xyz/mcp tools/list (read 2026-11-08). Used only when Toll cannot be reached for the live list.
 // Regenerate: npm run snapshot -w @tollxyz/mcp
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
@@ -6,7 +6,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "check_coin",
     "title": "Check a coin",
-    "description": "Check one token on Robinhood Chain from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. Toll's findings are tallied as against / careful / clear. On Robinhood Chain a Verdict line (AGAINST / CAREFUL / CLEAR / INCOMPLETE) sits above the tally: INCOMPLETE means some part was not read yet (never read it as clear) and says when to call again. The answer's first line names the chain. Reads Robinhood Chain (4663).",
+    "description": "Use it when someone asks \"is this a rug?\", \"who made this coin?\", \"was it sniped or bundled?\" or \"can the dev pull the liquidity?\" about a token address. Check one token on Robinhood Chain from the chain itself: who is behind it and how it launched. On Robinhood Chain: where and when it launched, the maker (dev) and its launch record, snipers in the first 3 seconds, wallets the launch made exempt from tax (bundles), flagged wallets, what the maker holds and sold, burned supply, the curve or pool. Toll's findings are tallied as against / careful / clear. On Robinhood Chain a Verdict line (AGAINST / CAREFUL / CLEAR / INCOMPLETE) sits above the tally: INCOMPLETE means some part was not read yet (never read it as clear) and says when to call again. The answer's first line names the chain. Reads Robinhood Chain (4663).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -39,7 +39,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "pre_buy_check",
     "title": "Gate before a buy",
-    "description": "One call before buying a coin on Robinhood Chain: Toll reads the coin (the same read as check_coin, counted in the same free coins) and answers Decision: BLOCK / WARN / ALLOW / WAIT with up to 3 reasons, most severe first, on the calibrated rules check_tx uses (BLOCK = a finding whose coins rugged at 40% or more within 24 h in Toll's calibration, or sells that fail). WAIT means part of the coin is still being read: call again after the seconds given. Facts, not advice; ALLOW means nothing against was found in what was read, never a promise. Robinhood Chain only.",
+    "description": "Use it when someone is about to buy a coin and asks \"should I buy this?\" or \"should I ape this?\": Toll answers with facts, not advice. One call before buying a coin on Robinhood Chain: Toll reads the coin (the same read as check_coin, counted in the same free coins) and answers Decision: BLOCK / WARN / ALLOW / WAIT with up to 3 reasons, most severe first, on the calibrated rules check_tx uses (BLOCK = a finding whose coins rugged at 40% or more within 24 h in Toll's calibration, or sells that fail). WAIT means part of the coin is still being read: call again after the seconds given. Facts, not advice; ALLOW means nothing against was found in what was read, never a promise. Robinhood Chain only.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -188,6 +188,33 @@ export const SNAPSHOT_TOOLS: Tool[] = [
     }
   },
   {
+    "name": "wallet_approvals",
+    "title": "Wallet approvals",
+    "description": "A wallet's live token approvals on Robinhood Chain: ERC-20 allowances, NFT approval-for-all and Permit2 allowances, newest first (at most 200, with how many more). Each one: the token, the spender (plain wallet or contract, and its name when Toll knows it), the amount (unlimited flagged), a risk (high / medium / low), and the revoke transaction (to, data, value 0) with check_tx's answer on it. Revoked, zero and expired allowances are left out. Facts read from the chain, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "wallet": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$",
+          "description": "The wallet address on Robinhood Chain: 0x followed by 40 hex characters"
+        }
+      },
+      "required": [
+        "wallet"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Wallet approvals",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
     "name": "fresh_launches",
     "title": "Newest coins",
     "description": "The newest coins launched on Robinhood Chain, newest first, from Toll's live engine: launchpad, age, pair, and the engine's short notes on each (dev record, first buyers, buyers, curve), with a link to the full check. At most 20. Robinhood Chain only.",
@@ -259,7 +286,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "check_agent",
     "title": "Check an agent",
-    "description": "One ERC-8004 agent registered on Robinhood Chain (identity registry 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432), by its agent id: whether its registration card loads and from which host, its class (real service / site only / card only / broken card), whether its MCP server answered an initialize call, whether its x402 endpoint answered 402 with payment terms and who it pays, whether that payTo is the registered agentWallet, whether the agent's wallet has sent a transaction, when it was last checked and what changed. Plain facts from Toll's agent census, with the date and the source they were read from (the live census, or the 2026-10-28 snapshot), never a verdict. Robinhood Chain only.",
+    "description": "One ERC-8004 agent registered on Robinhood Chain (identity registry 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432), by its agent id: whether its registration card loads and from which host, its class (real service / site only / card only / broken card), whether its MCP server answered an initialize call, whether its x402 endpoint answered 402 with payment terms and who it pays, whether that payTo is the registered agentWallet, whether the agent's wallet has sent a transaction, when it was last checked and what changed; read live by the id: its reviews in the ERC-8004 reputation registry (count, wallets, average score), its requests in the ERC-8004 validation registry, and whether its card declares a human behind it (the card's claim, not verified). Plain facts from Toll's agent census, with the date and the source they were read from (the live census, or the 2026-10-28 snapshot), never a verdict. Robinhood Chain only.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -320,7 +347,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "check_tx",
     "title": "Check before signing",
-    "description": "Pre-sign check, before an agent signs anything on Robinhood Chain (chain id 4663): send the transaction (to, data, value, and from), an EIP-712 signature request (typedData: Permit, Permit2, TransferWithAuthorization) or an x402 payment (x402: the PaymentRequired from the 402, or one accepts entry; agentId optional), and Toll answers ALLOW / WARN / BLOCK with the reasons, as an ERC-8265 RiskAssessment. It reads approvals (unlimited, to a plain wallet, to a contract we do not know, to a wallet the coin's own check names), transfers (to a burn address, the token itself, a router, a flagged wallet, an unknown contract), swaps (the router, who it pays out to, and the coin bought, through Toll's coin check: BLOCK only for findings whose coins rugged at 40% or more in our calibration), and x402 payments (ERC-8478 payee verification: payTo against the seller's ERC-8004 agent wallet or a payee delegation it signed, read live from the Robinhood Chain or Base identity registry, with the outcome in x-toll; the seller's last delivery spot-check, the asset and amount). Calldata it cannot read is WARN, never ALLOW; a coin still being read is WARN with the seconds to wait. Robinhood Chain only. Facts, not advice.",
+    "description": "Pre-sign check, before an agent signs anything on Robinhood Chain (chain id 4663): send the transaction (to, data, value, and from), a message to sign (message: {kind: personal_sign | eth_sign, data, origin?}), an EIP-712 signature request (typedData), an ERC-4337 user operation (userOp, with entryPoint), a type-4 authorizationList (alone or with the transaction), the wallet request as the agent would send it (rpc: {method, params} for personal_sign, eth_sign, eth_signTypedData_v4 or eth_sendTransaction), or an x402 payment (x402: the PaymentRequired from the 402, or one accepts entry; agentId optional), and Toll answers ALLOW / WARN / BLOCK with the reasons, as an ERC-8265 RiskAssessment. It reads approvals (unlimited, to a plain wallet, to a contract we do not know, to a wallet the coin's own check names), transfers (to a burn address, the token itself, a router, a flagged wallet, an unknown contract), swaps (the router, who it pays out to, and the coin bought, through Toll's coin check: BLOCK only for findings whose coins rugged at 40% or more in our calibration), and x402 payments (ERC-8478 payee verification: payTo against the seller's ERC-8004 agent wallet or a payee delegation it signed, read live from the Robinhood Chain or Base identity registry, with the outcome in x-toll; the seller's last delivery spot-check, the asset and amount). The coin bought's name and symbol are scanned for instructions aimed at AI agents. Calldata it cannot read is never ALLOW: WARN, high when it sends ETH, and BLOCK at 0.05 ETH or more, or any ETH to an address with no code. It reads personal_sign and eth_sign messages (Sign-In with Ethereum included: domain against origin, expiry; eth_sign of a hash is BLOCK), any EIP-712 typed data (Permit, Permit2, EIP-3009, Seaport, UniswapX, and any other named field by field), ERC-4337 user operations (the account's calls, the EntryPoint, the paymaster), and multicall, Safe and smart-account batches leaf by leaf, each warning with its path. For a signature it says what it lets someone take: the amount signed, the owner's balance and what the spender could take now, simulated at the current block. An EIP-7702 delegation (a type-4 authorizationList or a signAuthorization alone) to a delegate Toll has verified by code hash is WARN; any other is BLOCK, each delegate and chain named. A coin still being read is WARN with the seconds to wait. It simulates the transaction at the current block (balance changes, approvals, revert) and can compare it with an optional intent ({action: swap|transfer|approve|pay, sellToken, sellAmount in base units, buyToken, minBuy, to, spender, maxAmount, tolerancePct}). A failed simulation is reported as not read, never ALLOW; a transaction without from cannot be simulated and is WARN. Add ticket: true to get a signed single-use ALLOW ticket (60 s, never for a BLOCK) that a contract can require before it runs this exact call. Robinhood Chain only. Facts, not advice.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -356,10 +383,47 @@ export const SNAPSHOT_TOOLS: Tool[] = [
           "$ref": "#/properties/chainId",
           "description": "Wei sent with it, decimal or 0x hex (default 0)"
         },
+        "authorizationList": {
+          "type": "array",
+          "items": {},
+          "maxItems": 64,
+          "description": "A type-4 (EIP-7702) transaction's authorizationList, or a signAuthorization alone (no to, no data): [{chainId, address, nonce, yParity, r, s}]. A delegate Toll has verified by code hash is WARN; any other is BLOCK"
+        },
+        "authorization_list": {
+          "type": "array",
+          "items": {},
+          "maxItems": 64,
+          "description": "The same list under its snake_case name"
+        },
         "typedData": {
           "type": "object",
           "additionalProperties": {},
-          "description": "An EIP-712 signature request: {domain, types, primaryType, message}"
+          "description": "An EIP-712 signature request: {domain, types, primaryType, message}. Permit, Permit2, EIP-3009, Seaport, UniswapX, or any other (named field by field)"
+        },
+        "message": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "A message to sign: {kind: \"personal_sign\" | \"eth_sign\", data (0x hex or text), origin? (the site asking), from?}. Sign-In with Ethereum is read (domain against origin, expiry); eth_sign of a hash is BLOCK"
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "The site or app asking for the signature (https://...), checked against a Sign-In with Ethereum domain"
+        },
+        "rpc": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "The wallet request as the agent would send it: {method, params}. personal_sign [data, address], eth_sign [address, data], eth_signTypedData_v4 [address, typed data JSON], eth_sendTransaction [tx]"
+        },
+        "userOp": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "An ERC-4337 user operation (v0.6, v0.7 packed or unpacked, v0.8): sender, nonce, callData, gas fields, paymaster, signature. Its calls are opened and each checked"
+        },
+        "entryPoint": {
+          "type": "string",
+          "maxLength": 42,
+          "description": "The userOp's EntryPoint address (0x + 40 hex); an EntryPoint Toll does not know is a warning"
         },
         "x402": {
           "type": "object",
@@ -374,6 +438,23 @@ export const SNAPSHOT_TOOLS: Tool[] = [
           "type": "string",
           "maxLength": 80,
           "description": "The identity registry agentId is in, CAIP-10 (default eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432, Robinhood Chain; Base: eip155:8453:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432)"
+        },
+        "intent": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Optional: what the agent means to do, compared with what the transaction does in the simulation. {action: \"swap\" | \"transfer\" | \"approve\" | \"pay\", sellToken?, sellAmount? (base units, decimal string), buyToken?, minBuy? (base units), to? (who should receive), spender? (who may spend), maxAmount? (approval cap, base units), tolerancePct? (extra outflow allowed on sellAmount, default 1)}. A token is an address or ETH, WETH or USDG. A mismatch is a warning; the findings are in x-toll.intent"
+        },
+        "ticket": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          ],
+          "description": "Optional: ask for a single-use ALLOW ticket a contract can require: true, or {consumer? (the contract that checks it), scope? \"call\" | \"v4swap\", swap? {poolId, zeroForOne, amountSpecified, sqrtPriceLimitX96}}. Returned in x-toll.ticket {ticket, signature, signer}, or {why} when none"
         },
         "strict": {
           "type": "boolean",
@@ -394,7 +475,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "presign_risk_report",
     "title": "Pre-sign risk report",
-    "description": "Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): send a PresignRequest {version: \"erc-presign/1\", subject: {type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x...\", calls: [{to, value, data}], typedData?}, context?: {payment?, texts?, tokens?}} and get a PresignReport: typed facts about the unsigned request on Robinhood Chain, each read or not read at one pinned block (approval amount, unlimited, share of supply, expiry, current allowance; address code; issuer listing of stock tokens; ERC-8470 launch observations; ERC-8478 payee binding; control characters, mixed scripts and addresses in text), bound to the request by digest and EIP-712 signed by Toll (ERC-8004 agent #20030). No verdict: apply your own policy, and treat not read as unknown, never as clean. For an ALLOW / WARN / BLOCK answer use check_tx (which carries this report too).",
+    "description": "Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): send a PresignRequest {version: \"erc-presign/1\", subject: {type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x...\", calls: [{to, value, data}], typedData?, authorizationList?}, context?: {payment?, texts?, tokens?}} and get a PresignReport: typed facts about the unsigned request on Robinhood Chain, each read or not read at one pinned block (approval amount, unlimited, share of supply, expiry, current allowance; address code; issuer listing of stock tokens; ERC-8470 launch observations; ERC-8478 payee binding; control characters, mixed scripts and addresses in text), bound to the request by digest and EIP-712 signed by Toll (ERC-8004 agent #20030). No verdict: apply your own policy, and treat not read as unknown, never as clean. For an ALLOW / WARN / BLOCK answer use check_tx (which carries this report too).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -406,7 +487,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
         "subject": {
           "type": "object",
           "additionalProperties": {},
-          "description": "{type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x<signer>\", calls: [{to, value (wei, decimal string), data}], typedData?}"
+          "description": "{type: \"calls\", chainId: \"eip155:4663\", from: \"eip155:4663:0x<signer>\", calls: [{to, value (wei, decimal string), data}], typedData?, authorizationList? (EIP-7702: bound into the subject digest, listed as a coverage gap, not applied)}"
         },
         "context": {
           "type": "object",
@@ -700,7 +781,7 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   {
     "name": "watch_coin",
     "title": "Watch a coin (webhook)",
-    "description": "Watch one Robinhood Chain coin for your agent: Toll re-reads it about every 10 minutes and POSTs a signed JSON event to your https url when its verdict word changes or a new finding against appears (dev sold, liquidity pulled, wallets dumping together). The first read sends nothing. Answers the watch id and, the first time, the secret that signs every event (x-toll-signature: sha256=<hex HMAC-SHA256(secret, raw body)>). Needs a Toll key; the cap is your tier's (3 / 20 / 50 / 100 by $TOLL held). Facts, not advice.",
+    "description": "Watch one Robinhood Chain coin for your agent: Toll re-reads it about every 10 minutes, and sooner after a trade or liquidity change (with more watched coins it takes longer), and POSTs a signed JSON event to your https url when its verdict word changes, a new finding against appears (liquidity pulled, wallets dumping together), or the dev's or a launch wallet group's sold share rises 5 points or more (dev_sold, cluster_sold). The first read sends nothing. Answers the watch id and, the first time, the secret that signs every event (x-toll-signature: sha256=<hex HMAC-SHA256(secret, raw body)>). Needs a Toll key; the cap is your tier's (3 / 20 / 50 / 100 by $TOLL held). Facts, not advice.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -732,15 +813,15 @@ export const SNAPSHOT_TOOLS: Tool[] = [
   },
   {
     "name": "my_watches",
-    "title": "My coin watches",
-    "description": "The coins your Toll key's wallet watches on Robinhood Chain: id, token, url, paused (after 5 failed deliveries), fails, last read; never the secret. Needs a Toll key.",
+    "title": "My watches",
+    "description": "The coins and the wallets your Toll key's wallet watches on Robinhood Chain: for each watch its id, token or address, url, paused (after 5 failed deliveries), fails, last read; never the secret. Needs a Toll key.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
       "properties": {}
     },
     "annotations": {
-      "title": "My coin watches",
+      "title": "My watches",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": false,
@@ -768,6 +849,66 @@ export const SNAPSHOT_TOOLS: Tool[] = [
     },
     "annotations": {
       "title": "Stop watching a coin",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "watch_wallet",
+    "title": "Watch a wallet (webhook)",
+    "description": "Watch one Robinhood Chain wallet for your agent (its own wallet, or one it trades with): Toll POSTs a signed JSON event to your https url when the wallet gives a new token approval (ERC-20, NFT approval-for-all or Permit2, with the spender and whether the amount is unlimited), signs a new EIP-7702 delegation, or receives a token whose Toll check is against. Answers the watch id and, the first time, the secret that signs every event (x-toll-signature: sha256=<hex HMAC-SHA256(secret, raw body)>). Revoke what an alert finds with wallet_approvals. Needs a Toll key; wallet watches have their own cap, the same size as your tier's coin watches (3 / 20 / 50 / 100 by $TOLL held). Facts, not advice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$",
+          "description": "The wallet address to watch on Robinhood Chain: 0x followed by 40 hex characters"
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Your webhook: a public https URL on the default port"
+        }
+      },
+      "required": [
+        "address",
+        "url"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Watch a wallet (webhook)",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "unwatch_wallet",
+    "title": "Stop watching a wallet",
+    "description": "Remove one of your wallet watches on Robinhood Chain by its id (from my_watches). Needs a Toll key.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "The wallet watch id (a uuid) from my_watches"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "title": "Stop watching a wallet",
       "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": true,

@@ -15,6 +15,7 @@ export const TOOL_NAMES = [
   "larp_check",
   "dev_record",
   "wallet_privacy",
+  "wallet_approvals",
   "fresh_launches",
   "chain_pulse",
   "launch_record",
@@ -33,6 +34,8 @@ export const TOOL_NAMES = [
   "watch_coin",
   "my_watches",
   "unwatch_coin",
+  "watch_wallet",
+  "unwatch_wallet",
 ] as const;
 export type TollToolName = (typeof TOOL_NAMES)[number];
 
@@ -79,7 +82,270 @@ export interface CheckTxRequest {
   registry?: string;
   /** Strict payee policy: an x402 payTo not verified as the seller's (ERC-8478) is BLOCK instead of a warning. */
   strict?: boolean;
+  /**
+   * Ask for a single-use ALLOW ticket for this exact call: `true` (scope "call", any consumer) or {consumer?, scope?}.
+   * It comes back in the RiskAssessment's x-toll.ticket (CheckTxResult.ticket): signed, or {why} none was issued.
+   * A BLOCK is never signed; no ticket without `from`. Same option as @tollxyz/guard 0.4.1.
+   */
+  ticket?: boolean | TicketAsk;
 }
+
+/** What to ask Toll for: `true` = scope "call", any consumer (same shape as @tollxyz/guard). */
+export interface TicketAsk {
+  /** The contract that will check the ticket (its `consumer` field); unset = any contract. */
+  consumer?: string;
+  /** "call" (default): bound to (target, value, keccak256(data)); "v4swap": bound to the swap a HookrRouter call makes. */
+  scope?: "call" | "v4swap";
+}
+
+/** The ticket as Toll returns it (x-toll.ticket.ticket); uint64 times are unix seconds. */
+export interface AllowTicket {
+  scope: number;
+  verdict: number;
+  account: string;
+  consumer: string;
+  subject: string;
+  validAfter: number | bigint | string;
+  validUntil: number | bigint | string;
+  nonce: string;
+  reportHash: string;
+}
+
+/** x-toll.ticket: a signed ticket, or why none was issued. */
+export type TicketResult = { ticket: AllowTicket; signature: string; signer: string } | { why: string };
+
+/** checkTx's answer: the text, plus the ERC-8265 RiskAssessment parsed from it and the ALLOW ticket when asked. */
+export interface CheckTxResult extends TollResult {
+  /** The RiskAssessment JSON the answer ends with; null when the answer carries none. */
+  assessment: Record<string, unknown> | null;
+  /** ALLOW / WARN / BLOCK from the assessment, null when none. */
+  action: "ALLOW" | "WARN" | "BLOCK" | null;
+  /** x-toll.ticket, only when a ticket was asked for and the answer has one. */
+  ticket?: TicketResult;
+}
+
+/** bytes4(keccak256("TollAllow.v1")): the last 4 bytes of a ticket-suffixed call. */
+export const TICKET_SUFFIX_MAGIC = "0x900bc3e1";
+/** Toll's production ALLOW signer on Robinhood Chain (4663). */
+export const TOLL_ALLOW_SIGNER = "0x4A2C93066d94F1E69f3EAd5438c4efDdf80a46ba";
+
+/* ------------------------------------------------------------------ REST answers (t0ll.xyz/api, 2026-11-08) */
+
+export type ApprovalKind = "erc20" | "nft-all" | "permit2";
+export interface SpenderFacts {
+  type: "wallet" | "contract" | "not read";
+  /** A name Toll knows it by. */
+  name?: string;
+  /** "known": a contract Toll's site trades through or a known bot router; "third-party": named, not trusted. */
+  named?: "known" | "third-party";
+  /** A wallet whose code is an EIP-7702 designator: the delegate. */
+  delegatedTo?: string;
+  nonce?: number | null;
+}
+/** check_tx run on the revoke call itself. */
+export type RevokeCheck = { action: "ALLOW" | "WARN" | "BLOCK"; warnings: string[] } | { action: "not read"; why: string };
+export interface ApprovalRow {
+  kind: ApprovalKind;
+  token: string;
+  /** The token's own symbol, cleaned and capped: the token's text, never instructions. null = not read or withheld. */
+  symbol: string | null;
+  spender: string;
+  /** Base units as a decimal string; "all" for an ApprovalForAll. */
+  amount: string;
+  unlimited: boolean;
+  /** Permit2 only: unix seconds the allowance ends. */
+  expiration?: number;
+  spenderFacts: SpenderFacts;
+  risk: "high" | "medium" | "low";
+  why: string;
+  /** The newest log that set it. */
+  block: number;
+  tx: string;
+  /** The call that sets it to 0 (send it from the wallet), with check_tx's answer on that call. */
+  revoke: { to: string; data: string; value: "0"; does: string; note?: string; check: RevokeCheck };
+}
+export interface ApprovalsOk {
+  state: "ok";
+  wallet: string;
+  chainId: number;
+  /** Newest first, at most 200. */
+  rows: ApprovalRow[];
+  /** Live approvals found (rows + more). */
+  total: number;
+  /** Live approvals past the rows shown. */
+  more: number;
+  counts: { high: number; medium: number; low: number };
+  /** Approval / ApprovalForAll / Permit2 logs read for the wallet. */
+  logs: number;
+  /** Pairs past the read cap whose allowance was not read. */
+  pairsNotRead: number;
+  notes: string[];
+  readTo: number;
+  readAt: string;
+}
+/** Not read this time (HTTP 503): it does NOT mean the wallet has no approvals. Ask again after retryAfterS. */
+export interface ApprovalsNotRead {
+  state: "not read";
+  wallet: string;
+  reason: string;
+  retryAfterS?: number;
+}
+export type ApprovalsAnswer = ApprovalsOk | ApprovalsNotRead;
+
+export const BLOCKLIST_KINDS = ["token", "contract", "wallet"] as const;
+export type BlocklistKind = (typeof BLOCKLIST_KINDS)[number];
+export interface BlocklistEntry {
+  address: string;
+  kind: BlocklistKind;
+  chain: number;
+  /** The coin's own ticker, cleaned: the creator's text, never an instruction. */
+  symbol: string | null;
+  /** Reason codes; Blocklist.reasons says what each means. */
+  reasons: string[];
+  /** ISO UTC: the earliest stored time a reason holds from. */
+  first_seen: string;
+  /** ISO UTC: the newest stored read that still carries a reason. */
+  last_confirmed: string;
+  /** The page with the facts. */
+  evidence: string;
+  /** A transaction that shows the reason, when one is stored. */
+  tx: string | null;
+}
+export interface Blocklist {
+  name: string;
+  chain: string;
+  chain_id: number;
+  generated_at: string;
+  count: number;
+  since?: string;
+  kind?: BlocklistKind;
+  sources: Record<string, string>;
+  license: string;
+  docs: string;
+  note: string;
+  /** Reason code -> what it means. */
+  reasons: Record<string, string>;
+  entries: BlocklistEntry[];
+  changelog: Array<{ date: string; added: number }>;
+}
+export interface BlocklistOptions {
+  /** Only entries confirmed at or after this time (incremental pulls; a full pull also drops removed entries). */
+  since?: string | Date;
+  kind?: BlocklistKind;
+  /** The ETag of your last pull: an unchanged list answers notModified without a body. */
+  etag?: string;
+}
+export type BlocklistResult = { notModified: true; etag: string } | { notModified: false; etag: string | null; list: Blocklist };
+export type BlocklistFileResult = { notModified: true; etag: string } | { notModified: false; etag: string | null; text: string };
+
+export type TxRecordAction = "ALLOW" | "WARN" | "BLOCK";
+export type TxRecordOutcome = "rugged" | "dead" | "alive" | "graduated" | "not_read";
+export interface TxRecordActionStat {
+  action: TxRecordAction;
+  n: number;
+  counts: Record<TxRecordOutcome, number>;
+  /** Shares of n in percent, null when n is 0. */
+  rugged: number | null;
+  dead: number | null;
+  ruggedOrDead: number | null;
+  alive: number | null;
+  notRead: number | null;
+}
+export interface TxRecordCalRun { runAt: string; from: string; to: string; days: number; coins: number; rugged: number; baselinePct: number | null }
+export interface TxRecordCalRule {
+  rule: string;
+  finding: string;
+  code: { rugPct: number; n: number };
+  fresh: { n: number; rugPct: number | null; rugA: number | null; rugB: number | null } | null;
+  few: boolean;
+}
+/** GET /api/record/tx: every check_tx call that named a coin, scored 24 h later, and the weekly calibration re-run. */
+export interface TxRecord {
+  asOf: string;
+  windowH: number;
+  /** none = nothing logged yet; waiting = logged, none scored yet; live = scored calls exist. */
+  state: "none" | "waiting" | "live";
+  logged: number;
+  scored: number;
+  pending: number;
+  firstAt: string | null;
+  newestScored: string | null;
+  firstScoresOn: string | null;
+  actions: TxRecordActionStat[];
+  weekly: Array<{ week: string; by: Record<TxRecordAction, { n: number; rugged: number | null; ruggedOrDead: number | null }> }>;
+  latest: Array<{ token: string; sym: string | null; role: "bought" | "approved"; action: TxRecordAction; codes: string[]; at: string; outcome: TxRecordOutcome }>;
+  calibration: { blockAtPct: number; codeDate: string; codeWindow: string; latest: TxRecordCalRun | null; rules: TxRecordCalRule[]; runs: TxRecordCalRun[] };
+  page: string;
+  note: string;
+}
+
+/** The events a coin watch sends. */
+export const COIN_WATCH_EVENTS = ["verdict_changed", "new_against", "dev_sold", "cluster_sold"] as const;
+/** The events a wallet watch sends. */
+export const WALLET_WATCH_EVENTS = ["approval", "delegation", "risky_token_in"] as const;
+export type CoinWatchEventName = (typeof COIN_WATCH_EVENTS)[number];
+export type WalletWatchEventName = (typeof WALLET_WATCH_EVENTS)[number];
+
+/** One watch as GET /api/watch or /api/watch/wallet lists it (never the secret). */
+export interface WatchRow {
+  id: string;
+  /** Coin watches. */
+  token?: string;
+  /** Wallet watches. */
+  address?: string;
+  url: string;
+  paused?: boolean;
+  fails?: number;
+  checked_at?: string | null;
+  [key: string]: unknown;
+}
+export interface WatchList { watches: WatchRow[]; cap: number; docs?: string }
+/** POST /api/watch(/wallet): `secret` only when the watch is new (HTTP 201); keep it, it signs every event. */
+export interface WatchAdded {
+  id: string;
+  token?: string;
+  address?: string;
+  url: string;
+  cap: number;
+  events: string[];
+  signature: string;
+  secret?: string;
+  note: string;
+  /** true when HTTP 201 (a new watch, secret included). */
+  created: boolean;
+}
+
+/** The JSON a coin watch POSTs (type "toll.watch"). */
+export interface CoinWatchEvent {
+  type: "toll.watch";
+  event: CoinWatchEventName;
+  events: CoinWatchEventName[];
+  watch_id: string;
+  token: string;
+  chain: "rh";
+  verdict: { before: string | null; now: string | null };
+  new_against: unknown[];
+  sold?: { dev?: { before: number; now: number; of?: unknown; wallet?: string }; groups?: Array<{ group: unknown; label: string; before: number; now: number }> };
+  check_url: string;
+  at: string;
+}
+/** The JSON a wallet watch POSTs (type "toll.wallet_watch"). */
+export interface WalletWatchEvent {
+  type: "toll.wallet_watch";
+  event: WalletWatchEventName;
+  events: Array<
+    | { type: "approval"; token: string; spender: string; amount: string; kind: ApprovalKind; tx: string; block: number }
+    | { type: "delegation"; delegate: string; previous: string | null; block: number }
+    | { type: "risky_token_in"; token: string; amount: string; from: string; verdict: string; tx: string; block: number; check_url: string }
+  >;
+  more: number;
+  watch_id: string;
+  address: string;
+  chain: "rh";
+  blocks: { from: number; to: number };
+  at: string;
+}
+export type WatchEvent = CoinWatchEvent | WalletWatchEvent;
 
 /** presign_risk_report input: an ERC draft PresignRequest (ethereum/ERCs PR #2134). */
 export interface PresignRequest {
@@ -498,6 +764,34 @@ export class Toll {
   }
 
   /**
+   * Watch a wallet over MCP: Toll reads it about once a minute and POSTs a signed JSON event to `url` on a new approval,
+   * a new EIP-7702 delegation or a token received whose check is against. `data.secret` comes back the first time only.
+   * Needs a Toll key; wallet watches have their own cap (the key's tier).
+   */
+  async watchWallet(address: string, url: string): Promise<TollResult & { data: Record<string, unknown> | null }> {
+    assertWallet(address);
+    this.needKey("watchWallet");
+    const r = await this.call("watch_wallet", { address, url: String(url) });
+    return { ...r, data: this.watchData(r) };
+  }
+
+  /** Remove one wallet watch by its id (from myWatches' wallet_watches). */
+  async unwatchWallet(id: string): Promise<TollResult & { data: Record<string, unknown> | null }> {
+    this.needKey("unwatchWallet");
+    const r = await this.call("unwatch_wallet", { id: String(id) });
+    return { ...r, data: this.watchData(r) };
+  }
+
+  /**
+   * A wallet's live token approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2) as text, over MCP: each
+   * with its risk and the revoke call checked by check_tx. For the typed JSON use approvals().
+   */
+  async walletApprovals(wallet: string): Promise<TollResult> {
+    assertWallet(wallet);
+    return this.call("wallet_approvals", { wallet });
+  }
+
+  /**
    * LARP check. With wait: true, asks again while part of the answer is still being read, or while Toll
    * answers that it is busy with many new LARP checks (a TollError with retryAfterS): max 3 tries, max 120 s waiting.
    */
@@ -577,14 +871,22 @@ export class Toll {
    * Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment), for a
    * transaction (to, data, value, from), an EIP-712 signature (typedData) or an x402 payment (x402).
    */
-  async checkTx(req: CheckTxRequest): Promise<TollResult> {
+  async checkTx(req: CheckTxRequest): Promise<CheckTxResult> {
     if (!isObject(req) || (req.to === undefined && req.typedData === undefined && req.x402 === undefined)) {
       throw new TollError("checkTx needs a transaction (to, data, value, from), typedData or x402.");
     }
     if (req.chainId !== undefined && String(req.chainId) !== "4663" && String(req.chainId).toLowerCase() !== "0x1237") {
       throw new TollError(`Invalid chainId "${req.chainId}": ${RH_ONLY} (chain id 4663)`);
     }
-    return this.call("check_tx", { ...req });
+    const { ticket, ...rest } = req;
+    const ask = ticketAskOf(ticket as CheckTxRequest["ticket"]);
+    if (ask?.consumer !== undefined && !isValidAddress(ask.consumer)) throw new TollError("Invalid ticket.consumer: expected 0x + 40 hex characters.");
+    if (ask?.scope !== undefined && ask.scope !== "call" && ask.scope !== "v4swap") throw new TollError('Invalid ticket.scope: use "call" or "v4swap".');
+    const r = await this.call("check_tx", ask ? { ...rest, ticket: ask } : { ...rest });
+    const assessment = assessmentOf(r.text);
+    const a = assessment?.action;
+    const tk = ticketOfAnswer(assessment);
+    return { ...r, assessment, action: a === "ALLOW" || a === "WARN" || a === "BLOCK" ? a : null, ...(tk ? { ticket: tk } : {}) };
   }
 
   /** Agent Pre-Sign Risk Report (ERC draft, PR #2134): typed facts about an unsigned request, EIP-712 signed by Toll. No verdict. */
@@ -659,6 +961,172 @@ export class Toll {
       ...(opts.kind ? { kind: opts.kind } : {}),
       ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
     });
+  }
+
+  /* -------------------------------------------------------------- REST (t0ll.xyz/api) */
+
+  private restHeaders(auth: boolean, extra: Record<string, string> = {}): Record<string, string> {
+    return {
+      accept: "application/json",
+      "x-toll-client": this.clientId,
+      ...(auth && this.tollKey ? { authorization: `Bearer ${this.tollKey}` } : {}),
+      ...extra,
+    };
+  }
+
+  private async rest(method: "GET" | "POST" | "DELETE", path: string, opts: { auth?: boolean; body?: unknown; headers?: Record<string, string> } = {}) {
+    return this.request(`${this.baseUrl}${path}`, {
+      method,
+      headers: this.restHeaders(!!opts.auth, { ...(opts.body !== undefined ? { "content-type": "application/json" } : {}), ...(opts.headers ?? {}) }),
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    });
+  }
+
+  /**
+   * GET /api/approvals/{wallet}: the wallet's live approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2),
+   * newest first (at most 200, `more` counts the rest), each with its risk and a revoke call checked by check_tx.
+   * `state: "not read"` (HTTP 503) means the logs could not be read this time, never that there are none: ask again
+   * after retryAfterS. Throws TollError on a bad address, a rate limit (6 a minute) or when the list is unavailable.
+   */
+  async approvals(wallet: string): Promise<ApprovalsAnswer> {
+    assertWallet(wallet);
+    const { res, raw } = await this.rest("GET", `/api/approvals/${wallet.toLowerCase()}`);
+    const json = tryJson(raw);
+    if (res.ok && json?.state === "ok") return json as ApprovalsOk;
+    if (json?.state === "not read") {
+      const s = retryAfterOf(res);
+      return { ...(json as ApprovalsNotRead), ...(s !== undefined ? { retryAfterS: s } : {}) };
+    }
+    throw restError(res, raw);
+  }
+
+  /** GET /api/approvals/{wallet}?format=text: the same list as plain lines ending with a t0ll.xyz link (also when not read). */
+  async approvalsText(wallet: string): Promise<string> {
+    assertWallet(wallet);
+    const { res, raw } = await this.rest("GET", `/api/approvals/${wallet.toLowerCase()}?format=text`, { headers: { accept: "text/plain" } });
+    if (res.ok || (res.status === 503 && /^Approvals of /.test(raw))) return raw;
+    throw restError(res, raw);
+  }
+
+  private blocklistQuery(format: string | null, opts: BlocklistOptions): string {
+    const q = new URLSearchParams();
+    if (format) q.set("format", format);
+    if (opts.since !== undefined) {
+      const ms = opts.since instanceof Date ? opts.since.getTime() : Date.parse(String(opts.since));
+      if (!Number.isFinite(ms)) throw new TollError("Invalid since: use a Date or an ISO time, e.g. 2026-11-08T00:00:00Z.");
+      q.set("since", new Date(ms).toISOString());
+    }
+    if (opts.kind !== undefined) {
+      if (!(BLOCKLIST_KINDS as readonly string[]).includes(opts.kind)) throw new TollError("Invalid kind: use token, contract or wallet.");
+      q.set("kind", opts.kind);
+    }
+    const s = q.toString();
+    return `/api/blocklist${s ? `?${s}` : ""}`;
+  }
+
+  /**
+   * GET /api/blocklist: Toll's open Robinhood Chain blocklist (free, no key, open license with attribution). Each entry
+   * names its reasons and the page with the facts. A coin that is not listed is not cleared. Pass `etag` from the last
+   * pull to get `{ notModified: true }` when nothing changed; `since` for an incremental pull.
+   */
+  async blocklist(opts: BlocklistOptions = {}): Promise<BlocklistResult> {
+    const path = this.blocklistQuery(null, opts);
+    const { res, raw } = await this.rest("GET", path, { headers: opts.etag ? { "if-none-match": opts.etag } : {} });
+    const etag = res.headers.get("etag");
+    if (res.status === 304) return { notModified: true, etag: etag ?? opts.etag ?? "" };
+    if (!res.ok) throw restError(res, raw);
+    const list = tryJson(raw);
+    if (!isObject(list) || !Array.isArray(list.entries)) throw new TollError("The blocklist answer was not the expected JSON.", { status: res.status });
+    return { notModified: false, etag, list: list as unknown as Blocklist };
+  }
+
+  /** The blocklist as CSV (address,kind,reasons,first_seen,last_confirmed,evidence,tx,chain_id) or TXT (one address a line). */
+  async blocklistFile(format: "csv" | "txt", opts: BlocklistOptions = {}): Promise<BlocklistFileResult> {
+    if (format !== "csv" && format !== "txt") throw new TollError("Invalid format: use csv or txt (blocklist() returns the JSON).");
+    const path = this.blocklistQuery(format, opts);
+    const { res, raw } = await this.rest("GET", path, { headers: { accept: format === "csv" ? "text/csv" : "text/plain", ...(opts.etag ? { "if-none-match": opts.etag } : {}) } });
+    const etag = res.headers.get("etag");
+    if (res.status === 304) return { notModified: true, etag: etag ?? opts.etag ?? "" };
+    if (!res.ok) throw restError(res, raw);
+    return { notModified: false, etag, text: raw };
+  }
+
+  /**
+   * GET /api/record/tx: the pre-sign record. Every check_tx call that named a coin, scored by how the coin stood 24 h
+   * later (by action: rugged, dead, alive, not read), the weekly trend, the latest scored calls (never a wallet) and
+   * the coin check's calibration re-run weekly beside the figures in code. Same numbers as t0ll.xyz/agents/record.
+   */
+  async txRecord(): Promise<TxRecord> {
+    const { res, raw } = await this.rest("GET", "/api/record/tx");
+    const json = tryJson(raw);
+    if (!res.ok || !isObject(json) || !Array.isArray(json.actions)) throw restError(res, raw);
+    return json as unknown as TxRecord;
+  }
+
+  /** The "Checked by Toll" badge URL for a coin on this client's base URL (see coinBadgeUrl). */
+  badgeUrl(token: string, opts: { size?: CoinBadgeSize } = {}): string {
+    return coinBadgeUrl(token, { ...opts, baseUrl: this.baseUrl });
+  }
+
+  /** Copy-paste HTML / Markdown / React snippets for a coin's badge on this client's base URL (see coinBadgeEmbed). */
+  badgeEmbed(token: string, opts: { size?: CoinBadgeSize } = {}): CoinBadgeEmbed {
+    return coinBadgeEmbed(token, { ...opts, baseUrl: this.baseUrl });
+  }
+
+  private async watchRest<T>(method: "GET" | "POST" | "DELETE", path: string, what: string, body?: unknown): Promise<{ status: number; json: T }> {
+    this.needKey(what);
+    const { res, raw } = await this.rest(method, path, { auth: true, ...(body !== undefined ? { body } : {}) });
+    const json = tryJson(raw);
+    if (res.status === 404 && json?.open === false) {
+      throw new TollError(`${what}: watches for agents are not open on this server yet (it answered 404 open: false; the site's WATCH_API is off).`, { status: 404 });
+    }
+    if (!res.ok || !isObject(json)) throw restError(res, raw);
+    return { status: res.status, json: json as T };
+  }
+
+  /**
+   * POST /api/watch {token, url}: watch a coin. Toll re-reads it about every 10 minutes (sooner after a trade or a
+   * liquidity change) and POSTs a signed event to `url` (public https) on verdict_changed, new_against, dev_sold or
+   * cluster_sold. `secret` comes back only when the watch is new (created: true); check events with verifyWebhook.
+   * Needs a Toll key (sent as Authorization: Bearer); the cap is the key's tier.
+   */
+  async createCoinWatch(token: string, url: string): Promise<WatchAdded> {
+    assertAddress(token, "token");
+    const { status, json } = await this.watchRest<Omit<WatchAdded, "created">>("POST", "/api/watch", "createCoinWatch", { token, url: String(url) });
+    return { ...json, created: status === 201 };
+  }
+
+  /** GET /api/watch: this key's coin watches (never the secret) and the cap. */
+  async listCoinWatches(): Promise<WatchList> {
+    return (await this.watchRest<WatchList>("GET", "/api/watch", "listCoinWatches")).json;
+  }
+
+  /** DELETE /api/watch?id=<uuid>: remove one coin watch. */
+  async deleteCoinWatch(id: string): Promise<{ deleted: string }> {
+    assertUuid(id);
+    return (await this.watchRest<{ deleted: string }>("DELETE", `/api/watch?id=${encodeURIComponent(id)}`, "deleteCoinWatch")).json;
+  }
+
+  /**
+   * POST /api/watch/wallet {address, url}: watch a wallet. Toll reads it about once a minute and POSTs a signed event
+   * on a new approval, a new EIP-7702 delegation or a token received whose check is against (risky_token_in).
+   * `secret` only when new (created: true). Needs a Toll key; wallet watches have their own cap.
+   */
+  async createWalletWatch(address: string, url: string): Promise<WatchAdded> {
+    assertWallet(address);
+    const { status, json } = await this.watchRest<Omit<WatchAdded, "created">>("POST", "/api/watch/wallet", "createWalletWatch", { address, url: String(url) });
+    return { ...json, created: status === 201 };
+  }
+
+  /** GET /api/watch/wallet: this key's wallet watches (never the secret) and the cap. */
+  async listWalletWatches(): Promise<WatchList> {
+    return (await this.watchRest<WatchList>("GET", "/api/watch/wallet", "listWalletWatches")).json;
+  }
+
+  /** DELETE /api/watch/wallet?id=<uuid>: remove one wallet watch. */
+  async deleteWalletWatch(id: string): Promise<{ deleted: string }> {
+    assertUuid(id);
+    return (await this.watchRest<{ deleted: string }>("DELETE", `/api/watch/wallet?id=${encodeURIComponent(id)}`, "deleteWalletWatch")).json;
   }
 
   /**
@@ -786,4 +1254,186 @@ function parseBody(raw: string): any {
   const line = t.split("\n").find((l) => l.startsWith("data:"));
   if (!line) throw new Error("no data");
   return JSON.parse(line.slice(5).trim());
+}
+
+/* ------------------------------------------------------------------ REST helpers */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertUuid(id: unknown): string {
+  if (typeof id !== "string" || !UUID_RE.test(id)) throw new TollError("Invalid watch id: expected the uuid from the list of your watches.");
+  return id;
+}
+
+function retryAfterOf(res: Response): number | undefined {
+  const h = res.headers.get("retry-after");
+  if (h === null) return undefined;
+  return clampSeconds(Number(h), 30);
+}
+
+/** A REST answer that is not the one asked for: the server's `error` text, the status, and Retry-After when sent. */
+function restError(res: Response, raw: string): TollError {
+  const json = tryJson(raw);
+  const msg = isObject(json) && typeof json.error === "string" ? json.error : raw.slice(0, 200);
+  const s = retryAfterOf(res);
+  return new TollError(`Toll answered HTTP ${res.status}${msg ? `: ${msg}` : ""}`, { status: res.status, ...(s !== undefined ? { retryAfterS: s } : {}) });
+}
+
+/* ------------------------------------------------------------------ check_tx: the RiskAssessment and the ALLOW ticket */
+
+const RA_MARK = "RiskAssessment (ERC-8265):";
+
+/** The RiskAssessment JSON a check_tx answer ends with ("RiskAssessment (ERC-8265):" then one JSON line), or null. */
+export function assessmentOf(text: string): Record<string, unknown> | null {
+  const i = text.lastIndexOf(RA_MARK);
+  if (i < 0) return null;
+  const json = tryJson(text.slice(i + RA_MARK.length).trim());
+  return isObject(json) ? json : null;
+}
+
+/** The ask as Toll reads it (`ticket: {consumer?, scope?}`), or null for none. Same as @tollxyz/guard. */
+export function ticketAskOf(t: boolean | TicketAsk | undefined | null): TicketAsk | null {
+  if (t === undefined || t === null || t === false) return null;
+  if (t === true) return {};
+  const o: TicketAsk = {};
+  if (t.consumer !== undefined) o.consumer = t.consumer;
+  if (t.scope !== undefined) o.scope = t.scope;
+  return o;
+}
+
+/** x-toll.ticket of a RiskAssessment: a signed ticket or {why} none was issued; undefined when there is none. */
+export function ticketOfAnswer(a: Record<string, unknown> | null | undefined): TicketResult | undefined {
+  const x = a?.["x-toll"];
+  const t = isObject(x) ? x.ticket : undefined;
+  if (!isObject(t)) return undefined;
+  if (typeof t.why === "string") return { why: t.why };
+  if (isObject(t.ticket) && typeof t.signature === "string" && typeof t.signer === "string") {
+    return { ticket: t.ticket as unknown as AllowTicket, signature: t.signature, signer: t.signer };
+  }
+  return undefined;
+}
+
+const hexBody = (h: string, what: string): string => {
+  if (typeof h !== "string" || !/^0x([0-9a-fA-F]{2})*$/.test(h)) throw new TypeError(`${what} must be 0x hex with whole bytes`);
+  return h.slice(2).toLowerCase();
+};
+const word = (n: bigint, bits: number, what: string): string => {
+  if (n < 0n || n >= 1n << BigInt(bits)) throw new RangeError(`${what} does not fit in uint${bits}`);
+  return n.toString(16).padStart(64, "0");
+};
+const uintWord = (v: number | bigint | string, bits: number, what: string): string => {
+  let n: bigint;
+  try {
+    n = BigInt(v);
+  } catch {
+    throw new TypeError(`${what} must be a whole number`);
+  }
+  return word(n, bits, what);
+};
+const addrWord = (a: string, what: string): string => {
+  if (typeof a !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(a)) throw new TypeError(`${what} must be an address`);
+  return a.slice(2).toLowerCase().padStart(64, "0");
+};
+const b32Word = (h: string, what: string): string => {
+  if (typeof h !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(h)) throw new TypeError(`${what} must be 32 bytes`);
+  return h.slice(2).toLowerCase();
+};
+
+/**
+ * The calldata a ticket-checking contract (toll-allow) reads: `data ‖ abi.encode(ticket, signature) ‖ uint32 len ‖
+ * 0x900bc3e1`. Byte for byte the same as @tollxyz/guard's appendTicketSuffix and TollAllow.encodeSuffix.
+ */
+export function appendTicketSuffix(data: string, ticket: AllowTicket, signature: string): string {
+  const body = hexBody(data, "data");
+  const sig = hexBody(signature, "signature");
+  const head =
+    uintWord(ticket.scope, 8, "ticket.scope") +
+    uintWord(ticket.verdict, 8, "ticket.verdict") +
+    addrWord(ticket.account, "ticket.account") +
+    addrWord(ticket.consumer, "ticket.consumer") +
+    b32Word(ticket.subject, "ticket.subject") +
+    uintWord(ticket.validAfter, 64, "ticket.validAfter") +
+    uintWord(ticket.validUntil, 64, "ticket.validUntil") +
+    b32Word(ticket.nonce, "ticket.nonce") +
+    b32Word(ticket.reportHash, "ticket.reportHash");
+  const tail = word(320n, 256, "offset") + word(BigInt(sig.length / 2), 256, "signature length") + sig + "0".repeat((64 - (sig.length % 64)) % 64);
+  const encoded = head + tail;
+  const n = encoded.length / 2;
+  return `0x${body}${encoded}${n.toString(16).padStart(8, "0")}${TICKET_SUFFIX_MAGIC.slice(2)}`;
+}
+
+/* ------------------------------------------------------------------ coin badge */
+
+export type CoinBadgeSize = "sm" | "lg";
+export interface CoinBadgeEmbed {
+  /** The SVG badge URL. */
+  url: string;
+  /** The coin's Toll check page the badge links to. */
+  page: string;
+  html: string;
+  markdown: string;
+  react: string;
+}
+
+/**
+ * The "Checked by Toll" badge for a coin: an SVG (200x28, or 300x42 with size "lg") with the coin's verdict word from
+ * the checks Toll already holds (AGAINST / CAREFUL / CLEAR / INCOMPLETE), or "not checked yet". A badge request never
+ * starts a chain read.
+ */
+export function coinBadgeUrl(token: string, opts: { size?: CoinBadgeSize; baseUrl?: string } = {}): string {
+  assertAddress(token, "token");
+  if (opts.size !== undefined && opts.size !== "sm" && opts.size !== "lg") throw new TollError('Invalid size: use "sm" or "lg".');
+  const base = (opts.baseUrl ?? "https://t0ll.xyz").replace(/\/+$/, "");
+  return `${base}/badge/${token.toLowerCase()}${opts.size === "lg" ? "?size=lg" : ""}`;
+}
+
+/** Copy-paste snippets for a coin's badge, linking to its check page (the same snippets as t0ll.xyz/agents/embed). */
+export function coinBadgeEmbed(token: string, opts: { size?: CoinBadgeSize; baseUrl?: string } = {}): CoinBadgeEmbed {
+  const url = coinBadgeUrl(token, opts);
+  const base = (opts.baseUrl ?? "https://t0ll.xyz").replace(/\/+$/, "");
+  const page = `${base}/check/${token.toLowerCase()}`;
+  const [w, h] = opts.size === "lg" ? [300, 42] : [200, 28];
+  return {
+    url,
+    page,
+    html: `<a href="${page}"><img src="${url}" alt="Toll check" width="${w}" height="${h}"></a>`,
+    markdown: `[![Toll check](${url})](${page})`,
+    react: `<a href="${page}"><img src="${url}" alt="Toll check" width={${w}} height={${h}} /></a>`,
+  };
+}
+
+/* ------------------------------------------------------------------ webhooks */
+
+const utf8 = new TextEncoder();
+
+/**
+ * Checks a watch event's x-toll-signature header: `sha256=<hex HMAC-SHA256(secret, raw body)>`, the secret being the
+ * text Toll returned when the watch was added. Pass the raw body exactly as received (before any JSON parsing).
+ * Constant-time compare; false on a missing or malformed header. Uses WebCrypto (Node >= 20, browsers, edge).
+ */
+export async function verifyWebhook(secret: string, rawBody: string | Uint8Array, signature: string | null | undefined): Promise<boolean> {
+  if (typeof secret !== "string" || !secret || typeof signature !== "string") return false;
+  const m = /^sha256=([0-9a-fA-F]{64})$/.exec(signature.trim());
+  if (!m) return false;
+  const key = await globalThis.crypto.subtle.importKey("raw", utf8.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const data = typeof rawBody === "string" ? utf8.encode(rawBody) : Uint8Array.from(rawBody);
+  const mac = new Uint8Array(await globalThis.crypto.subtle.sign("HMAC", key, data));
+  const want = m[1].toLowerCase();
+  let have = "";
+  for (const b of mac) have += b.toString(16).padStart(2, "0");
+  let diff = 0;
+  for (let i = 0; i < 64; i++) diff |= have.charCodeAt(i) ^ want.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * verifyWebhook, then the parsed event. Throws TollError when the signature does not match or the body is not a Toll
+ * watch event (type "toll.watch" or "toll.wallet_watch").
+ */
+export async function readWebhook(secret: string, rawBody: string | Uint8Array, signature: string | null | undefined): Promise<WatchEvent> {
+  if (!(await verifyWebhook(secret, rawBody, signature))) throw new TollError("Webhook signature does not match: drop this request.");
+  const text = typeof rawBody === "string" ? rawBody : new TextDecoder().decode(rawBody);
+  const json = tryJson(text);
+  if (!isObject(json) || (json.type !== "toll.watch" && json.type !== "toll.wallet_watch")) throw new TollError("Not a Toll watch event.");
+  return json as unknown as WatchEvent;
 }

@@ -36,7 +36,7 @@ test("tools() parses the real tools/list", async () => {
   const m = mockFetch([fx("tools_list")]);
   const tools = await new Toll({ fetch: m.f }).tools();
   assert.deepEqual(tools.map((t) => t.name), [...TOOL_NAMES]);
-  assert.equal(tools.length, 24);
+  assert.equal(tools.length, 27);
   assert.deepEqual(TOOL_NAMES.slice(0, 3), ["check_coin", "pre_buy_check", "check_coins"]);
   assert.ok(TOOL_NAMES.includes("check_hook"));
   assert.equal(body(m.calls[0]).method, "tools/list");

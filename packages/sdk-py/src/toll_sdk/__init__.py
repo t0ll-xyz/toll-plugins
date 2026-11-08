@@ -5,6 +5,8 @@ Information only, not financial advice.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -13,10 +15,24 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
+from urllib.parse import quote, urlencode
 
 __all__ = [
     "resolve_client_id",
+    "BLOCKLIST_KINDS",
+    "COIN_WATCH_EVENTS",
+    "WALLET_WATCH_EVENTS",
+    "TICKET_SUFFIX_MAGIC",
+    "TOLL_ALLOW_SIGNER",
+    "append_ticket_suffix",
+    "assessment_of",
+    "coin_badge_embed",
+    "coin_badge_url",
+    "read_webhook",
+    "ticket_ask_of",
+    "ticket_of_answer",
+    "verify_webhook",
     "FUNDAMENTALS_PERIODS",
     "RH_ONLY",
     "STOCK_EVENT_KINDS",
@@ -49,6 +65,7 @@ TOOL_NAMES = (
     "larp_check",
     "dev_record",
     "wallet_privacy",
+    "wallet_approvals",
     "fresh_launches",
     "chain_pulse",
     "launch_record",
@@ -67,6 +84,8 @@ TOOL_NAMES = (
     "watch_coin",
     "my_watches",
     "unwatch_coin",
+    "watch_wallet",
+    "unwatch_wallet",
 )
 """Every tool of https://t0ll.xyz/mcp, in the server's order."""
 
@@ -188,6 +207,9 @@ class TollResult:
     paid_url: Optional[str]
     pending: Optional[Dict[str, int]]  # {"retry_after_s": n}: part of the answer is still being read, ask again then
     decision: Optional[str] = None  # pre_buy_check only: BLOCK / WARN / ALLOW / WAIT (None when the answer has none)
+    assessment: Optional[Dict[str, Any]] = None  # check_tx only: the ERC-8265 RiskAssessment the answer ends with
+    action: Optional[str] = None  # check_tx only: ALLOW / WARN / BLOCK from the assessment
+    ticket: Optional[Dict[str, Any]] = None  # check_tx with ticket=...: x-toll.ticket ({ticket, signature, signer} or {why})
 
 
 @dataclass
@@ -426,6 +448,25 @@ class Toll:
         self._need_key("unwatch_coin")
         return self._watch_data(self.call("unwatch_coin", {"id": str(watch_id)})) or {}
 
+    def watch_wallet(self, address: str, url: str) -> Dict[str, Any]:
+        """Watch a wallet over MCP: Toll reads it about once a minute and POSTs a signed JSON event to url on a new
+        approval, a new EIP-7702 delegation or a token received whose check is against. "secret" comes back the first
+        time only. Needs a Toll key; wallet watches have their own cap."""
+        _check_wallet(address)
+        self._need_key("watch_wallet")
+        return self._watch_data(self.call("watch_wallet", {"address": address, "url": str(url)})) or {}
+
+    def unwatch_wallet(self, watch_id: str) -> Dict[str, Any]:
+        """Remove one wallet watch by its id (from my_watches' wallet_watches)."""
+        self._need_key("unwatch_wallet")
+        return self._watch_data(self.call("unwatch_wallet", {"id": str(watch_id)})) or {}
+
+    def wallet_approvals(self, wallet: str) -> TollResult:
+        """A wallet's live token approvals on Robinhood Chain as text, over MCP: each with its risk and the revoke call
+        checked by check_tx. For the typed JSON use approvals()."""
+        _check_wallet(wallet)
+        return self.call("wallet_approvals", {"wallet": wallet})
+
     def larp_check(self, token: str, chain: Optional[str] = None, wait: bool = False) -> TollResult:
         """LARP check.
 
@@ -513,11 +554,16 @@ class Toll:
         registry: Optional[str] = None,
         strict: Optional[bool] = None,
         chain_id: Any = None,
+        ticket: Union[bool, Dict[str, Any], None] = None,
     ) -> TollResult:
         """Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment).
 
         Pass a transaction (to, data, value, from_), an EIP-712 signature request (typed_data) or an x402 payment
         (x402: the PaymentRequired from the 402, or one accepts entry; agent_id optional).
+        ticket: True (scope "call", any consumer) or {"consumer": 0x..., "scope": "call" | "v4swap"} asks for a single-use
+        ALLOW ticket for this exact call; it comes back in result.ticket ({ticket, signature, signer} or {why}). A BLOCK is
+        never signed; no ticket without from_. Same option as @tollxyz/guard 0.4.1.
+        The result also carries .assessment (the RiskAssessment JSON) and .action (ALLOW / WARN / BLOCK).
         """
         if to is None and typed_data is None and x402 is None:
             raise TollError("check_tx needs a transaction (to, data, value, from_), typed_data or x402.")
@@ -536,7 +582,19 @@ class Toll:
         )
         if from_ is not None:
             args["from"] = from_
-        return self.call("check_tx", args)
+        ask = ticket_ask_of(ticket)
+        if ask is not None:
+            if "consumer" in ask and not is_valid_address(ask["consumer"]):
+                raise TollError("Invalid ticket consumer: expected 0x + 40 hex characters.")
+            if "scope" in ask and ask["scope"] not in ("call", "v4swap"):
+                raise TollError('Invalid ticket scope: use "call" or "v4swap".')
+            args["ticket"] = ask
+        r = self.call("check_tx", args)
+        r.assessment = assessment_of(r.text)
+        a = (r.assessment or {}).get("action")
+        r.action = a if a in ("ALLOW", "WARN", "BLOCK") else None
+        r.ticket = ticket_of_answer(r.assessment)
+        return r
 
     def presign_risk_report(
         self,
@@ -601,6 +659,153 @@ class Toll:
             raise TollError(f"Invalid kind: use {', '.join(STOCK_EVENT_KINDS)}.")
         _check_limit(limit, 100)
         return self.call("stock_events", _opt(since=since, kind=kind, limit=limit))
+
+    # -- REST (t0ll.xyz/api) ------------------------------------------------
+    def _rest(self, method: str, path: str, auth: bool = False, body: Any = None, headers: Optional[Dict[str, str]] = None) -> tuple:
+        h = {"accept": "application/json", "x-toll-client": self._client_id}
+        if auth and self._toll_key:
+            h["authorization"] = f"Bearer {self._toll_key}"
+        data = None
+        if body is not None:
+            h["content-type"] = "application/json"
+            data = json.dumps(body).encode()
+        h.update(headers or {})
+        req = urllib.request.Request(f"{self.base_url}{path}", data=data, method=method, headers=h)
+        return self._http(req, self.timeout)
+
+    def approvals(self, wallet: str) -> Dict[str, Any]:
+        """GET /api/approvals/{wallet}: the wallet's live approvals on Robinhood Chain (ERC-20, NFT approval-for-all,
+        Permit2), newest first (at most 200, "more" counts the rest), each with risk, why, spenderFacts and a revoke call
+        {to, data, value, does, check} checked by check_tx. {"state": "not read", "reason", "retry_after_s"} (HTTP 503)
+        means the logs could not be read this time, never that there are none. Raises TollError on a bad address, a rate
+        limit (6 a minute) or when the list is unavailable."""
+        _check_wallet(wallet)
+        status, headers, raw = self._rest("GET", f"/api/approvals/{wallet.lower()}")
+        data = _try_json(raw)
+        if 200 <= status < 300 and isinstance(data, dict) and data.get("state") == "ok":
+            return data
+        if isinstance(data, dict) and data.get("state") == "not read":
+            s = _retry_after(headers)
+            return {**data, **({"retry_after_s": s} if s is not None else {})}
+        raise _rest_error(status, headers, raw)
+
+    def approvals_text(self, wallet: str) -> str:
+        """GET /api/approvals/{wallet}?format=text: the same list as plain lines ending with a t0ll.xyz link."""
+        _check_wallet(wallet)
+        status, headers, raw = self._rest("GET", f"/api/approvals/{wallet.lower()}?format=text", headers={"accept": "text/plain"})
+        if 200 <= status < 300 or (status == 503 and raw.startswith("Approvals of ")):
+            return raw
+        raise _rest_error(status, headers, raw)
+
+    @staticmethod
+    def _blocklist_path(fmt: Optional[str], since: Any, kind: Optional[str]) -> str:
+        q: Dict[str, str] = {}
+        if fmt:
+            q["format"] = fmt
+        if since is not None:
+            q["since"] = _iso(since)
+        if kind is not None:
+            if kind not in BLOCKLIST_KINDS:
+                raise TollError("Invalid kind: use token, contract or wallet.")
+            q["kind"] = kind
+        return "/api/blocklist" + (f"?{urlencode(q)}" if q else "")
+
+    def blocklist(self, since: Any = None, kind: Optional[str] = None, etag: Optional[str] = None) -> Dict[str, Any]:
+        """GET /api/blocklist: Toll's open Robinhood Chain blocklist (free, no key, open license with attribution).
+        Returns {"not_modified": False, "etag", "list": {...entries, reasons, changelog...}}, or {"not_modified": True,
+        "etag"} when etag (from the last pull) still matches. since (datetime or ISO text): an incremental pull.
+        A coin that is not listed is not cleared."""
+        path = self._blocklist_path(None, since, kind)
+        status, headers, raw = self._rest("GET", path, headers={"if-none-match": etag} if etag else None)
+        tag = _header(headers, "etag")
+        if status == 304:
+            return {"not_modified": True, "etag": tag or etag or ""}
+        data = _try_json(raw)
+        if not 200 <= status < 300 or not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+            raise _rest_error(status, headers, raw)
+        return {"not_modified": False, "etag": tag, "list": data}
+
+    def blocklist_file(self, fmt: str, since: Any = None, kind: Optional[str] = None, etag: Optional[str] = None) -> Dict[str, Any]:
+        """The blocklist as "csv" (address,kind,reasons,first_seen,last_confirmed,evidence,tx,chain_id) or "txt" (one
+        address a line): {"not_modified": False, "etag", "text"} or {"not_modified": True, "etag"}."""
+        if fmt not in ("csv", "txt"):
+            raise TollError("Invalid format: use csv or txt (blocklist() returns the JSON).")
+        path = self._blocklist_path(fmt, since, kind)
+        h = {"accept": "text/csv" if fmt == "csv" else "text/plain"}
+        if etag:
+            h["if-none-match"] = etag
+        status, headers, raw = self._rest("GET", path, headers=h)
+        tag = _header(headers, "etag")
+        if status == 304:
+            return {"not_modified": True, "etag": tag or etag or ""}
+        if not 200 <= status < 300:
+            raise _rest_error(status, headers, raw)
+        return {"not_modified": False, "etag": tag, "text": raw}
+
+    def tx_record(self) -> Dict[str, Any]:
+        """GET /api/record/tx: the pre-sign record. Every check_tx call that named a coin, scored by how the coin stood
+        24 h later (actions: BLOCK / WARN / ALLOW with rugged, dead, alive, not read), the weekly trend, the latest scored
+        calls (never a wallet) and the calibration re-run weekly. Same numbers as t0ll.xyz/agents/record."""
+        status, headers, raw = self._rest("GET", "/api/record/tx")
+        data = _try_json(raw)
+        if not 200 <= status < 300 or not isinstance(data, dict) or not isinstance(data.get("actions"), list):
+            raise _rest_error(status, headers, raw)
+        return data
+
+    def badge_url(self, token: str, size: Optional[str] = None) -> str:
+        """The "Checked by Toll" badge URL for a coin on this client's base URL (see coin_badge_url)."""
+        return coin_badge_url(token, size=size, base_url=self.base_url)
+
+    def badge_embed(self, token: str, size: Optional[str] = None) -> Dict[str, str]:
+        """HTML / Markdown / React snippets for a coin's badge on this client's base URL (see coin_badge_embed)."""
+        return coin_badge_embed(token, size=size, base_url=self.base_url)
+
+    def _watch_rest(self, method: str, path: str, what: str, body: Any = None) -> tuple:
+        self._need_key(what)
+        status, headers, raw = self._rest(method, path, auth=True, body=body)
+        data = _try_json(raw)
+        if status == 404 and isinstance(data, dict) and data.get("open") is False:
+            raise TollError(
+                f"{what}: watches for agents are not open on this server yet (it answered 404 open: false; the site's WATCH_API is off).",
+                status=404,
+            )
+        if not 200 <= status < 300 or not isinstance(data, dict):
+            raise _rest_error(status, headers, raw)
+        return status, data
+
+    def create_coin_watch(self, token: str, url: str) -> Dict[str, Any]:
+        """POST /api/watch {token, url}: Toll re-reads the coin about every 10 minutes (sooner after a trade or a liquidity
+        change) and POSTs a signed event to url on verdict_changed, new_against, dev_sold or cluster_sold. "secret" only
+        when the watch is new ("created": True); check events with verify_webhook. Needs a Toll key (Bearer)."""
+        _check_address(token, "token")
+        status, data = self._watch_rest("POST", "/api/watch", "create_coin_watch", {"token": token, "url": str(url)})
+        return {**data, "created": status == 201}
+
+    def list_coin_watches(self) -> Dict[str, Any]:
+        """GET /api/watch: {"watches": [...], "cap"} for this key (never the secret)."""
+        return self._watch_rest("GET", "/api/watch", "list_coin_watches")[1]
+
+    def delete_coin_watch(self, watch_id: str) -> Dict[str, Any]:
+        """DELETE /api/watch?id=<uuid>: {"deleted": id}."""
+        _check_uuid(watch_id)
+        return self._watch_rest("DELETE", f"/api/watch?id={quote(watch_id)}", "delete_coin_watch")[1]
+
+    def create_wallet_watch(self, address: str, url: str) -> Dict[str, Any]:
+        """POST /api/watch/wallet {address, url}: Toll reads the wallet about once a minute and POSTs a signed event on a
+        new approval, a new EIP-7702 delegation or a token received whose check is against (risky_token_in). "secret"
+        only when new ("created": True). Needs a Toll key; wallet watches have their own cap."""
+        _check_wallet(address)
+        status, data = self._watch_rest("POST", "/api/watch/wallet", "create_wallet_watch", {"address": address, "url": str(url)})
+        return {**data, "created": status == 201}
+
+    def list_wallet_watches(self) -> Dict[str, Any]:
+        """GET /api/watch/wallet: {"watches": [...], "cap"} for this key (never the secret)."""
+        return self._watch_rest("GET", "/api/watch/wallet", "list_wallet_watches")[1]
+
+    def delete_wallet_watch(self, watch_id: str) -> Dict[str, Any]:
+        """DELETE /api/watch/wallet?id=<uuid>: {"deleted": id}."""
+        _check_uuid(watch_id)
+        return self._watch_rest("DELETE", f"/api/watch/wallet?id={quote(watch_id)}", "delete_wallet_watch")[1]
 
     # -- paying ------------------------------------------------------------
     def pay(self, paid_url: str, sign: Optional[SignPayment] = None, timeout: Optional[float] = None) -> Any:
@@ -719,3 +924,190 @@ def _header(headers: Any, name: str) -> Optional[str]:
         if str(k).lower() == name:
             return str(headers[k])
     return None
+
+
+# -- REST helpers ------------------------------------------------------------
+BLOCKLIST_KINDS = ("token", "contract", "wallet")
+COIN_WATCH_EVENTS = ("verdict_changed", "new_against", "dev_sold", "cluster_sold")
+"""The events a coin watch sends."""
+WALLET_WATCH_EVENTS = ("approval", "delegation", "risky_token_in")
+"""The events a wallet watch sends."""
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def _check_uuid(value: object) -> None:
+    if not isinstance(value, str) or not _UUID.fullmatch(value):
+        raise TollError("Invalid watch id: expected the uuid from the list of your watches.")
+
+
+def _iso(value: Any) -> str:
+    """A datetime or ISO text as ISO UTC (what ?since takes)."""
+    import datetime as _dt
+
+    if isinstance(value, _dt.datetime):
+        d = value if value.tzinfo else value.replace(tzinfo=_dt.timezone.utc)
+    elif isinstance(value, str):
+        try:
+            d = _dt.datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise TollError("Invalid since: use a datetime or an ISO time, e.g. 2026-11-08T00:00:00Z.") from None
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_dt.timezone.utc)
+    else:
+        raise TollError("Invalid since: use a datetime or an ISO time, e.g. 2026-11-08T00:00:00Z.")
+    d = d.astimezone(_dt.timezone.utc)
+    return d.strftime("%Y-%m-%dT%H:%M:%S.") + f"{d.microsecond // 1000:03d}Z"
+
+
+def _retry_after(headers: Any) -> Optional[int]:
+    v = _header(headers, "retry-after")
+    return None if v is None else _clamp_seconds(v, 30)
+
+
+def _rest_error(status: int, headers: Any, raw: str) -> TollError:
+    data = _try_json(raw)
+    msg = data["error"] if isinstance(data, dict) and isinstance(data.get("error"), str) else raw[:200]
+    return TollError(f"Toll answered HTTP {status}" + (f": {msg}" if msg else ""), status=status, retry_after_s=_retry_after(headers))
+
+
+# -- check_tx: the RiskAssessment and the ALLOW ticket -------------------------
+TICKET_SUFFIX_MAGIC = "0x900bc3e1"
+"""bytes4(keccak256("TollAllow.v1")): the last 4 bytes of a ticket-suffixed call."""
+TOLL_ALLOW_SIGNER = "0x4A2C93066d94F1E69f3EAd5438c4efDdf80a46ba"
+"""Toll's production ALLOW signer on Robinhood Chain (4663)."""
+_RA_MARK = "RiskAssessment (ERC-8265):"
+
+
+def assessment_of(text: str) -> Optional[Dict[str, Any]]:
+    """The RiskAssessment JSON a check_tx answer ends with, or None."""
+    i = text.rfind(_RA_MARK)
+    if i < 0:
+        return None
+    data = _try_json(text[i + len(_RA_MARK):].strip())
+    return data if isinstance(data, dict) else None
+
+
+def ticket_ask_of(t: Union[bool, Dict[str, Any], None]) -> Optional[Dict[str, Any]]:
+    """The ask as Toll reads it ({consumer?, scope?}), or None for none. Same as @tollxyz/guard's ticketAskOf."""
+    if t is None or t is False:
+        return None
+    if t is True:
+        return {}
+    if not isinstance(t, dict):
+        raise TollError('Invalid ticket: use True or {"consumer": 0x..., "scope": "call" | "v4swap"}.')
+    return {k: t[k] for k in ("consumer", "scope") if t.get(k) is not None}
+
+
+def ticket_of_answer(a: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """x-toll.ticket of a RiskAssessment: {ticket, signature, signer} or {why}; None when there is none."""
+    x = (a or {}).get("x-toll")
+    t = x.get("ticket") if isinstance(x, dict) else None
+    if not isinstance(t, dict):
+        return None
+    if isinstance(t.get("why"), str):
+        return {"why": t["why"]}
+    if isinstance(t.get("ticket"), dict) and isinstance(t.get("signature"), str) and isinstance(t.get("signer"), str):
+        return {"ticket": t["ticket"], "signature": t["signature"], "signer": t["signer"]}
+    return None
+
+
+def _hex_body(h: Any, what: str) -> str:
+    if not isinstance(h, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})*", h):
+        raise ValueError(f"{what} must be 0x hex with whole bytes")
+    return h[2:].lower()
+
+
+def _word(n: int, bits: int, what: str) -> str:
+    if n < 0 or n >= 1 << bits:
+        raise ValueError(f"{what} does not fit in uint{bits}")
+    return format(n, "064x")
+
+
+def _uint_word(v: Any, bits: int, what: str) -> str:
+    try:
+        n = int(v, 0) if isinstance(v, str) else int(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"{what} must be a whole number") from None
+    return _word(n, bits, what)
+
+
+def _addr_word(a: Any, what: str) -> str:
+    if not isinstance(a, str) or not _EVM.fullmatch(a):
+        raise ValueError(f"{what} must be an address")
+    return a[2:].lower().rjust(64, "0")
+
+
+def _b32_word(h: Any, what: str) -> str:
+    if not isinstance(h, str) or not re.fullmatch(r"0x[0-9a-fA-F]{64}", h):
+        raise ValueError(f"{what} must be 32 bytes")
+    return h[2:].lower()
+
+
+def append_ticket_suffix(data: str, ticket: Dict[str, Any], signature: str) -> str:
+    """The calldata a ticket-checking contract (toll-allow) reads: data || abi.encode(ticket, signature) || uint32 len ||
+    0x900bc3e1. Byte for byte the same as @tollxyz/guard's appendTicketSuffix and TollAllow.encodeSuffix."""
+    body = _hex_body(data, "data")
+    sig = _hex_body(signature, "signature")
+    head = (
+        _uint_word(ticket["scope"], 8, "ticket.scope")
+        + _uint_word(ticket["verdict"], 8, "ticket.verdict")
+        + _addr_word(ticket["account"], "ticket.account")
+        + _addr_word(ticket["consumer"], "ticket.consumer")
+        + _b32_word(ticket["subject"], "ticket.subject")
+        + _uint_word(ticket["validAfter"], 64, "ticket.validAfter")
+        + _uint_word(ticket["validUntil"], 64, "ticket.validUntil")
+        + _b32_word(ticket["nonce"], "ticket.nonce")
+        + _b32_word(ticket["reportHash"], "ticket.reportHash")
+    )
+    tail = _word(320, 256, "offset") + _word(len(sig) // 2, 256, "signature length") + sig + "0" * ((64 - len(sig) % 64) % 64)
+    encoded = head + tail
+    return "0x" + body + encoded + format(len(encoded) // 2, "08x") + TICKET_SUFFIX_MAGIC[2:]
+
+
+# -- coin badge ----------------------------------------------------------------
+def coin_badge_url(token: str, size: Optional[str] = None, base_url: str = "https://t0ll.xyz") -> str:
+    """The "Checked by Toll" badge for a coin: an SVG (200x28, or 300x42 with size "lg") with the coin's verdict word
+    from the checks Toll already holds (AGAINST / CAREFUL / CLEAR / INCOMPLETE), or "not checked yet"."""
+    _check_address(token, "token")
+    if size not in (None, "sm", "lg"):
+        raise TollError('Invalid size: use "sm" or "lg".')
+    return f"{base_url.rstrip('/')}/badge/{token.lower()}" + ("?size=lg" if size == "lg" else "")
+
+
+def coin_badge_embed(token: str, size: Optional[str] = None, base_url: str = "https://t0ll.xyz") -> Dict[str, str]:
+    """Copy-paste snippets for a coin's badge linking to its check page: {url, page, html, markdown, react}."""
+    url = coin_badge_url(token, size=size, base_url=base_url)
+    page = f"{base_url.rstrip('/')}/check/{token.lower()}"
+    w, h = (300, 42) if size == "lg" else (200, 28)
+    return {
+        "url": url,
+        "page": page,
+        "html": f'<a href="{page}"><img src="{url}" alt="Toll check" width="{w}" height="{h}"></a>',
+        "markdown": f"[![Toll check]({url})]({page})",
+        "react": f'<a href="{page}"><img src="{url}" alt="Toll check" width={{{w}}} height={{{h}}} /></a>',
+    }
+
+
+# -- webhooks ------------------------------------------------------------------
+def verify_webhook(secret: str, raw_body: Union[str, bytes], signature: Optional[str]) -> bool:
+    """Check a watch event's x-toll-signature header: sha256=<hex HMAC-SHA256(secret, raw body)>, the secret being the
+    text Toll returned when the watch was added. Pass the raw body exactly as received. Constant-time compare."""
+    if not isinstance(secret, str) or not secret or not isinstance(signature, str):
+        return False
+    m = re.fullmatch(r"sha256=([0-9a-fA-F]{64})", signature.strip())
+    if not m:
+        return False
+    body = raw_body.encode("utf-8") if isinstance(raw_body, str) else bytes(raw_body)
+    want = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(want, m.group(1).lower())
+
+
+def read_webhook(secret: str, raw_body: Union[str, bytes], signature: Optional[str]) -> Dict[str, Any]:
+    """verify_webhook, then the parsed event (type "toll.watch" or "toll.wallet_watch"); raises TollError otherwise."""
+    if not verify_webhook(secret, raw_body, signature):
+        raise TollError("Webhook signature does not match: drop this request.")
+    text = raw_body if isinstance(raw_body, str) else bytes(raw_body).decode("utf-8", "replace")
+    data = _try_json(text)
+    if not isinstance(data, dict) or data.get("type") not in ("toll.watch", "toll.wallet_watch"):
+        raise TollError("Not a Toll watch event.")
+    return data

@@ -1,3 +1,28 @@
+# Release 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
+
+Server first: `wallet_approvals`, `watch_wallet`, `unwatch_wallet` are live on https://t0ll.xyz/mcp (27 tools), and the
+REST routes `/api/approvals/{wallet}`, `/api/blocklist`, `/api/record/tx`, `/api/watch`, `/api/watch/wallet` answer.
+The coin badge (`/badge/<token>`) may land with a later site deploy; the SDK only builds its URL.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/sdk` (packages/sdk-js) | 0.4.1 | 0.5.0 (approvals, blocklist, txRecord, badge helpers, REST watches, verifyWebhook, checkTx `ticket` + appendTicketSuffix, 27 tools) |
+| `toll-sdk` (PyPI, packages/sdk-py) | 0.4.1 | 0.5.0 (the same methods, snake_case) |
+| `@tollxyz/mcp` | 0.4.1 | 0.5.0 (27-tool snapshot, server.json 0.5.0) |
+| agentkit, ai-sdk, langchain, mastra, plugin-elizaos, goat, guard, x402-seller | | unchanged, do not publish |
+
+```sh
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                                             # tollxyz
+(cd packages/sdk-js && npm run build && npm test && npm publish --access public)
+npm view @tollxyz/sdk@0.5.0 version                    # wait until it prints 0.5.0
+(cd packages/mcp && npm test && npm publish --access public)
+(cd packages/sdk-py && uv run --with pytest pytest -q && rm -rf dist && uv build && uvx twine check dist/* && uvx twine upload dist/*)
+(cd packages/mcp && mcp-publisher login github && mcp-publisher publish)
+```
+
+---
+
 # Release 0.3.0 (2026-11-06): pre_buy_check + check_coins
 
 Server first: both tools live on https://t0ll.xyz/mcp since 2026-11-06 (21 tools). Every package exposes them.

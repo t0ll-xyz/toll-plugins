@@ -78,7 +78,7 @@ def test_validators():
 def test_tools_from_real_list():
     op = FakeOpener(fx("tools_list"))
     tools = Toll(opener=op).tools()
-    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 24 and "check_hook" in TOOL_NAMES
+    assert [t["name"] for t in tools] == list(TOOL_NAMES) and len(tools) == 27 and "check_hook" in TOOL_NAMES
     assert list(TOOL_NAMES[:3]) == ["check_coin", "pre_buy_check", "check_coins"]
     req, timeout = op.requests[0]
     assert req.full_url == "https://t0ll.xyz/mcp" and timeout == 30.0

@@ -1,6 +1,6 @@
 # toll-sdk
 
-Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 19 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
+Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 27 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
 
 Information only, not financial advice.
 
@@ -38,10 +38,52 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, period=None)` (`ttm`, `annual`, `quarterly`), `insider_trades(id, limit=None)` (1 to 100), `institutions(id, limit=None)` (13F holders, 1 to 20), `guidance(id, limit=None)` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stock_events(since=None, kind=None, limit=None)` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 19
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 27
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
+
+## 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
+
+All 27 tools of https://t0ll.xyz/mcp (new: `wallet_approvals`, `watch_wallet`, `unwatch_wallet`), plus Toll's REST routes.
+
+```python
+from toll_sdk import Toll, coin_badge_embed, verify_webhook, append_ticket_suffix
+
+toll = Toll(toll_key=os.environ.get("TOLL_KEY"))
+
+a = toll.approvals(wallet)                      # GET /api/approvals/{wallet}
+if a["state"] == "ok":
+    for r in a["rows"]:
+        print(r["risk"], r["token"], r["spender"], r["revoke"]["to"], r["revoke"]["data"])
+else:
+    print("not read, ask again in", a.get("retry_after_s"), "s")   # never read it as "no approvals"
+
+bl = toll.blocklist(kind="token")               # {"not_modified", "etag", "list"}
+bl = toll.blocklist(kind="token", etag=bl["etag"])  # {"not_modified": True, ...} when unchanged
+csv = toll.blocklist_file("csv", since="2026-11-08T00:00:00Z")["text"]
+
+rec = toll.tx_record()                          # check_tx calls scored 24 h later + the weekly calibration
+coin_badge_embed(token)["markdown"]             # [![Toll check](https://t0ll.xyz/badge/0x...)](https://t0ll.xyz/check/0x...)
+
+w = toll.create_wallet_watch(wallet, "https://your-agent.example/toll")  # w["secret"] when w["created"]
+ok = verify_webhook(w["secret"], raw_body, headers.get("x-toll-signature"))
+
+r = toll.check_tx(to=to, data=data, value=0, from_=me, ticket=True)
+if r.action == "ALLOW" and r.ticket and "ticket" in r.ticket:
+    data = append_ticket_suffix(data, r.ticket["ticket"], r.ticket["signature"])
+```
+
+- `approvals(wallet)` / `approvals_text(wallet)` / `wallet_approvals(wallet)` (the MCP tool, text)
+- `blocklist(since=None, kind=None, etag=None)`, `blocklist_file("csv" | "txt", ...)`. A coin that is not listed is not cleared.
+- `tx_record()` - the `/api/record/tx` JSON
+- `coin_badge_url(token, size=None)`, `coin_badge_embed(token)` -> `{url, page, html, markdown, react}` (also `toll.badge_url`, `toll.badge_embed`)
+- Coin watches: `create_coin_watch(token, url)`, `list_coin_watches()`, `delete_coin_watch(id)`; events `verdict_changed`, `new_against`, `dev_sold`, `cluster_sold`
+- Wallet watches: `create_wallet_watch(address, url)`, `list_wallet_watches()`, `delete_wallet_watch(id)` (REST, `Authorization: Bearer <key>`) or `watch_wallet` / `unwatch_wallet` (MCP); events `approval`, `delegation`, `risky_token_in`
+- `verify_webhook(secret, raw_body, signature)` / `read_webhook(...)`: `x-toll-signature: sha256=<hex HMAC-SHA256(secret, raw body)>`, constant-time
+- `check_tx(..., ticket=True | {"consumer": ..., "scope": "call" | "v4swap"})`: the result carries `.assessment`, `.action` and `.ticket` (`{ticket, signature, signer}` or `{why}`); a BLOCK is never signed. `append_ticket_suffix` matches `@tollxyz/guard` byte for byte.
+
+Watches need a Toll key and the server's watch routes open (404 `open: false` otherwise, raised as `TollError`).
 
 ## Free limit and the paid path
 

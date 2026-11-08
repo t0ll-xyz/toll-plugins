@@ -1,6 +1,6 @@
 # @tollxyz/sdk
 
-Client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 19 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain is refused with `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Zero runtime dependencies (global `fetch`), ESM only (no CommonJS build), Node >= 20.19, with types.
+Client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 27 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain is refused with `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Zero runtime dependencies (global `fetch`), ESM only (no CommonJS build), Node >= 20.19, with types.
 
 Information only, not financial advice.
 
@@ -40,10 +40,57 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `stockToken(id)`, `stockTokens({ query?, limit? })` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, { period? })` (`ttm`, `annual`, `quarterly`), `insiderTrades(id, { limit? })` (1 to 100), `institutions(id, { limit? })` (13F holders, 1 to 20), `guidance(id, { limit? })` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stockEvents({ since?, kind?, limit? })` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 19
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 27
 - `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)
 - `isValidAddress(x)`, `isValidWallet(x)`, `isValidStockId(x)` - the same checks the SDK runs before anything is sent
 - Errors (HTTP, JSON-RPC, timeouts, server-side input errors) are thrown as `TollError`.
+
+## 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
+
+All 27 tools of https://t0ll.xyz/mcp (new: `wallet_approvals`, `watch_wallet`, `unwatch_wallet`), plus typed calls to
+Toll's REST routes.
+
+```ts
+import { Toll, appendTicketSuffix, coinBadgeEmbed, verifyWebhook } from "@tollxyz/sdk";
+const toll = new Toll({ tollKey: process.env.TOLL_KEY });
+
+// a wallet's live approvals: risk, why, and a revoke call checked by check_tx
+const a = await toll.approvals(wallet);                    // GET /api/approvals/{wallet}
+if (a.state === "ok") for (const r of a.rows) console.log(r.risk, r.token, r.spender, r.revoke.to, r.revoke.data);
+else console.log("not read, ask again in", a.retryAfterS, "s"); // never read "not read" as "no approvals"
+
+// the open blocklist (free, no key): pull once, then only when it changed
+let bl = await toll.blocklist({ kind: "token" });
+if (!bl.notModified) save(bl.list.entries, bl.etag);
+bl = await toll.blocklist({ kind: "token", etag: savedEtag }); // { notModified: true } when unchanged
+const csv = await toll.blocklistFile("csv", { since: "2026-11-08T00:00:00Z" });
+
+// the pre-sign record: check_tx calls scored 24 h later, and the weekly calibration
+const rec = await toll.txRecord();                         // rec.actions, rec.weekly, rec.calibration
+
+// the "Checked by Toll" badge for a coin (SVG, verdict word from stored checks only)
+coinBadgeEmbed(token).markdown;                            // [![Toll check](https://t0ll.xyz/badge/0x...)](https://t0ll.xyz/check/0x...)
+
+// watches over REST (Authorization: Bearer <key>), and checking each event
+const w = await toll.createWalletWatch(wallet, "https://your-agent.example/toll"); // w.secret when w.created
+// in your webhook handler, with the raw body:
+if (!(await verifyWebhook(w.secret!, rawBody, req.headers["x-toll-signature"]))) return 401;
+
+// check_tx with a single-use ALLOW ticket for a contract that requires one (toll-allow)
+const r = await toll.checkTx({ from, to, data, value: 0, ticket: true });
+if (r.action === "ALLOW" && r.ticket && "ticket" in r.ticket) data = appendTicketSuffix(data, r.ticket.ticket, r.ticket.signature);
+```
+
+- `approvals(wallet)` / `approvalsText(wallet)` (`?format=text`) / `walletApprovals(wallet)` (the MCP tool, text)
+- `blocklist({ since?, kind?, etag? })` -> `{ notModified, etag, list }`; `blocklistFile("csv" | "txt", opts)` -> `{ notModified, etag, text }`. A coin that is not listed is not cleared.
+- `txRecord()` -> the `/api/record/tx` JSON (`state` none / waiting / live, `actions`, `weekly`, `latest`, `calibration`)
+- `coinBadgeUrl(token, { size?: "sm" | "lg" })`, `coinBadgeEmbed(token)` -> `{ url, page, html, markdown, react }` (also `toll.badgeUrl`, `toll.badgeEmbed` on the client's base URL)
+- Coin watches: `createCoinWatch(token, url)`, `listCoinWatches()`, `deleteCoinWatch(id)`; events `verdict_changed`, `new_against`, `dev_sold`, `cluster_sold`
+- Wallet watches: `createWalletWatch(address, url)`, `listWalletWatches()`, `deleteWalletWatch(id)` (REST) or `watchWallet` / `unwatchWallet` (MCP); events `approval`, `delegation`, `risky_token_in`
+- `verifyWebhook(secret, rawBody, signatureHeader)` checks `x-toll-signature: sha256=<hex HMAC-SHA256(secret, raw body)>` in constant time; `readWebhook` also parses the event (types `CoinWatchEvent`, `WalletWatchEvent`)
+- `checkTx({ ..., ticket: true | { consumer?, scope?: "call" | "v4swap" } })` now returns `assessment` (the RiskAssessment JSON), `action` and `ticket` (`{ ticket, signature, signer }` or `{ why }`). A BLOCK is never signed. `appendTicketSuffix` is byte for byte the same as `@tollxyz/guard`'s.
+
+Watches need a Toll key and the server's watch routes open (they answer 404 `open: false` otherwise; the SDK then throws a `TollError` naming it). Caps by $TOLL held: 3 / 20 / 50 / 100 coins, and as many wallets.
 
 ## Free limit and the paid path
 
