@@ -54,3 +54,5 @@ export {
 export type { Observation8470, Finding8470, LatestFinding8470, Read8470Options, Lean, KeyKind, Unit } from "./erc8470.js";
 export { spendOf, NATIVE, USDG, WETH, DEFAULT_SPEND_ASSETS, UNLIMITED } from "./spend.js";
 export type { Spend, SpendItem } from "./spend.js";
+export { MemorySpendStore, dayStart } from "./store.js";
+export type { SpendStore } from "./store.js";
