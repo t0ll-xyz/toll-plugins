@@ -36,7 +36,7 @@ Nothing below has been run. Run it in Git Bash, in this order. `npm whoami` must
 ## 0. Check the branch
 
 ```sh
-cd ~/toll-plugins
+cd toll-plugins
 git checkout rh-only-1105
 git status --short                      # must be empty
 export NODE_OPTIONS=--max-old-space-size=3072
@@ -122,7 +122,7 @@ Two listings point at Toll:
    "coin and product checks on Robinhood Chain, Solana, BSC"), and the README lists all 18 tools.
 
    ```sh
-   cd ~/toll-mcp-repo
+   cd toll-mcp
    git push origin rh-only-1105
    git checkout main && git merge --ff-only rh-only-1105 && git push origin main
    mcp-publisher login dns --domain t0ll.xyz --private-key <the key used for 1.0.2>
@@ -166,7 +166,7 @@ Branch `client-id-1105`. Nothing below has been run. The SDKs now send a stable 
 | `@tollxyz/x402-seller`, `@tollxyz/guard` | unchanged, do not publish | |
 
 ```sh
-cd ~/toll-plugins
+cd toll-plugins
 git checkout client-id-1105
 git status --short                      # only packages/sdk-py/uv.lock may show (leave it)
 export NODE_OPTIONS=--max-old-space-size=3072
