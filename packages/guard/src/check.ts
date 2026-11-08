@@ -133,12 +133,12 @@ export interface CheckOptions {
 export class TollBlockedError extends Error {
   readonly assessment: RiskAssessment;
   readonly codes: string[];
-  constructor(assessment: RiskAssessment, why = assessment.action) {
+  constructor(assessment: RiskAssessment, why: Action | "policy" = assessment.action) {
     const ws = assessment.warnings ?? [];
     const top = ws.filter((w) => w.severity !== "low").slice(0, 5);
     const lines = (top.length ? top : ws.slice(0, 5)).map((w) => `${w.code}: ${w.message}`);
     const link = assessment["x-toll"]?.link;
-    super(`Toll ${why}, not signed. ${lines.join(" | ") || "No reason given."}${link ? ` More: ${link}` : ""}`);
+    super(`${why === "policy" ? "Spend policy" : `Toll ${why}`}, not signed. ${lines.join(" | ") || "No reason given."}${link ? ` More: ${link}` : ""}`);
     this.name = "TollBlockedError";
     this.assessment = assessment;
     this.codes = ws.map((w) => w.code);
