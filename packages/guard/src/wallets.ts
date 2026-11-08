@@ -178,7 +178,9 @@ export function guardViem<T extends object>(client: T, opts: ViemGuardOptions = 
   if (typeof c.signTypedData === "function") {
     wrapped.signTypedData = async (args: Obj, ...rest: unknown[]) => {
       const td: TypedDataLike = { domain: args?.domain ?? {}, types: args?.types ?? {}, primaryType: args?.primaryType, message: args?.message ?? {} };
-      return guarded(opts, undefined, (o) => enforce("typedData", () => ({ typedData: td, ...origin }), o), () => c.signTypedData(args, ...rest));
+      // the signer (0.3.1): Toll reads what the signature lets someone take from it (a Permit2 message names no owner)
+      const from = fromOf(args);
+      return guarded(opts, undefined, (o) => enforce("typedData", () => ({ typedData: td, ...(from ? { from } : {}), ...origin }), o), () => c.signTypedData(args, ...rest));
     };
   }
   if (typeof c.signMessage === "function") {
@@ -360,7 +362,11 @@ export function guardEthers<T extends object>(signer: T, opts: GuardOptions = {}
   }
   if (typeof s.signTypedData === "function") {
     wrapped.signTypedData = async (domain: Obj, types: Obj, value: Obj, ...rest: unknown[]) => {
-      return guarded(opts, undefined, (o) => enforce("typedData", () => ({ typedData: { domain: domain ?? {}, types: types ?? {}, primaryType: primaryTypeOf(types ?? {}), message: value ?? {} }, ...origin }), o), () => s.signTypedData(domain, types, value, ...rest));
+      return guarded(opts, undefined, (o) => enforce("typedData", async () => {
+        // the signer (0.3.1): Toll reads what the signature lets someone take from it (a Permit2 message names no owner)
+        const from = typeof s.getAddress === "function" ? await s.getAddress() : undefined;
+        return { typedData: { domain: domain ?? {}, types: types ?? {}, primaryType: primaryTypeOf(types ?? {}), message: value ?? {} }, ...(isAddress(from) ? { from } : {}), ...origin };
+      }, o), () => s.signTypedData(domain, types, value, ...rest));
     };
   }
   if (typeof s.signMessage === "function") {

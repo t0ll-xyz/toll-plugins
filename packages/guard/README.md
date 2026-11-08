@@ -3,6 +3,8 @@
 > **New in 0.4.0: spend caps, allowlists, human approval and preview** (`spend` option). Unset, nothing changes.
 > See [0.4.0: spend caps, allowlists, approval, preview](#040-spend-caps-allowlists-approval-preview).
 
+> **0.3.1:** `signTypedData` (viem and ethers) now sends the signing account as `from`, so Toll can say what a Permit2 signature lets someone take.
+>
 > **What changed in 0.3.0: every signing method is checked.**
 > - Messages: viem and ethers `signMessage`, and `request()` for `personal_sign` and `eth_sign`.
 > - Typed data: `request()` for `eth_signTypedData_v4` too, any EIP-712 (orders, permits, sign-ins).

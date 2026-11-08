@@ -199,7 +199,11 @@ export function bodyOf(input: CheckInput): Record<string, unknown> {
     if (input.from !== undefined) b.from = input.from;
     b.authorizationList = input.authorizationList;
   }
-  if (input.typedData) b.typedData = input.typedData;
+  if (input.typedData) {
+    b.typedData = input.typedData;
+    // the signer of typed data alone (0.3.1): Toll reads what the signature lets someone take from it
+    if (b.from === undefined && input.from !== undefined) b.from = input.from;
+  }
   if (input.message) b.message = input.message;
   if (input.rpc) b.rpc = input.rpc;
   if (input.userOp) {
