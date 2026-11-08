@@ -1,5 +1,8 @@
 # @tollxyz/guard
 
+> **New in 0.4.0: spend caps, allowlists, human approval and preview** (`spend` option). Unset, nothing changes.
+> See [0.4.0: spend caps, allowlists, approval, preview](#040-spend-caps-allowlists-approval-preview).
+
 > **What changed in 0.3.0: every signing method is checked.**
 > - Messages: viem and ethers `signMessage`, and `request()` for `personal_sign` and `eth_sign`.
 > - Typed data: `request()` for `eth_signTypedData_v4` too, any EIP-712 (orders, permits, sign-ins).
@@ -162,9 +165,169 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `timeoutMs` | `15000` | one request to Toll |
 | `retry`, `maxRetryWaitMs` | `true`, `10000` | the one retry after Retry-After |
 | `baseUrl`, `fetch` | `https://t0ll.xyz`, global fetch | |
+| `spend` | none | 0.4.0: caps, allowlists, approval ([below](#040-spend-caps-allowlists-approval-preview)); unset = 0.3.x behaviour |
+| `store` | in-process `MemorySpendStore` | where spend counters and paid x402 ids live |
+| `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked |
 
 Errors: `TollBlockedError` (`.assessment`, `.codes`, message lists each code and message) and
 `TollUnavailableError` (`.reason`, `.status`, `.paidUrl`).
+
+## 0.4.0: spend caps, allowlists, approval, preview
+
+Toll's verdict says whether a request looks safe. `spend` adds your own limits on top: how much the agent may spend
+per call and per UTC day, who it may pay, and when a human has to say yes. Without `spend` nothing changes: 0.4.0
+behaves exactly like 0.3.x.
+
+The order for every request:
+
+1. **Allowlists** (`allow.to`, `allow.spender`, `allow.payTo`): read from the request itself, before Toll is asked.
+   Off the list = blocked, and Toll is not called.
+2. **Toll's verdict**: ALLOW / WARN / BLOCK with your `onWarn`, `onBlock`, `onUnavailable` as before. A WARN that
+   `block-high` blocks is still blocked, however small the amount.
+3. **Caps** (`assets`, `perEndpoint`): per call, then per day. The day amount is reserved.
+4. **Approval** (`approveAbove` + `approve`): above the threshold your `approve` function decides.
+5. **After the send**: the reservation is committed. If the send throws (rejected, nonce too low, RPC down), it is
+   released, so failures never use up the day cap.
+
+Caps never relax Toll's verdict, and Toll's ALLOW never lifts a cap: a request must pass both.
+
+```ts
+import { guard, NATIVE, USDG, TollPolicyError } from "@tollxyz/guard";
+
+const wallet = guard(walletClient, {
+  spend: {
+    // base units: ETH in wei, USDG with 6 decimals
+    assets: {
+      [NATIVE]: { perCall: 10n ** 16n, perDay: 5n * 10n ** 16n }, // 0.01 ETH a call, 0.05 ETH a day
+      [USDG]: { perCall: 20_000_000n, perDay: 100_000_000n },    // 20 USDG a call, 100 USDG a day
+    },
+    allow: { spender: ["0xYourRouter..."] },                     // approvals only to your router
+    approveAbove: { [USDG]: 10_000_000n },                       // above 10 USDG a human decides
+    approve: async (req) => {
+      const ok = await askOnTelegram(`Spend ${req.over[0].amount} of ${req.over[0].asset}?`);
+      return { approved: ok, approvalRef: ok ? "tg-msg-1234" : undefined };
+    },
+  },
+  failClosed: true, // a contract call whose spend cannot be read is blocked
+});
+
+try {
+  await wallet.sendTransaction(tx);
+} catch (e) {
+  if (e instanceof TollPolicyError) console.log(e.code, e.amount, e.limit); // "cap-per-day", ...
+  else throw e;
+}
+```
+
+**What counts as spend.** Only what leaves the wallet in a spend asset. The defaults are native ETH, WETH and USDG on
+Robinhood Chain, plus every asset you name in `assets` or `approveAbove`. A sell of any other coin is never capped.
+
+- Read locally, with no Toll answer needed: the transaction's value, ERC-20 `transfer` / `transferFrom` / `approve` /
+  `increaseAllowance` on a spend asset, EIP-2612 permits, Permit2 permits, EIP-3009 transfer authorizations, and an
+  x402 402's amount. So caps hold even when Toll is unreachable.
+- Any other contract call (a swap, a router): the amount comes from Toll's simulation (`x-toll.simulation.deltas`).
+  When the simulation shows more leaving than the call declares, the larger amount counts.
+- An approval counts against the per-call cap at its full size (an unlimited approval is over any cap) and must fit
+  in what is left of the day cap; it is not added to the day total (the later swap is).
+- Unknown spend: a contract call with no simulation (Toll unreachable), a raw user operation, a bare EIP-7702
+  authorization. `onUnknownSpend` decides: `"allow"` by default, `"block"` under `failClosed: true`.
+
+| `spend` field | |
+| --- | --- |
+| `assets` | `{ [asset]: { perCall?, perDay? } }`, asset = `"native"` or a token address, amounts in base units |
+| `perEndpoint` | x402 caps per URL prefix (origin + path), e.g. `{ "https://api.example.com/v1/": { perDay: 1_000_000n } }` |
+| `allow` | `{ to?, spender?, payTo? }`: every recipient (or called contract), approval spender, x402 payee must be listed |
+| `approveAbove` | `{ [asset]: amount }`: above it, `approve` must say yes |
+| `approve` | `(req) => Promise<{ approved, approvalRef? }>`; no function = denied. `approvalRef` lands in `report.spend.approvalRef` |
+| `onUnknownSpend` | `"allow"` (default) or `"block"` (default under `failClosed`) |
+
+New options next to `spend`: `store` (where counters live, below) and `failClosed`.
+
+`TollPolicyError` extends `TollBlockedError` (existing `catch` blocks still see a block). `.code` is one of
+`not-allowlisted`, `cap-per-call`, `cap-per-day`, `cap-endpoint`, `approval-denied`, `duplicate-payment`,
+`unknown-spend`; `.asset`, `.amount`, `.limit` when they apply. The report has `basis: "policy"` and `policy: code`.
+
+### Preview, then confirm
+
+```ts
+import { preview } from "@tollxyz/guard";
+
+const p = await preview({ chainId: 4663, from, to, data, value }, opts); // same opts as the guard
+// p.decision "allowed" | "blocked", p.basis, p.policy, p.spend, p.needsApproval, p.reason
+if (p.decision === "allowed") await wallet.sendTransaction({ to, data, value, tollConfirm: p.confirmId });
+```
+
+`preview` asks Toll and checks every rule, but reserves nothing, calls no `approve` and no `onReport`. Passing its
+`confirmId` as `tollConfirm` within 30 seconds reuses that Toll answer (one Toll call instead of two). It is used
+once, and only for the identical request; anything else is checked again. The guard strips `tollConfirm` before the
+wallet sees the request (viem `sendTransaction` / `signTransaction` / `writeContract`, ethers `sendTransaction` /
+`signTransaction`).
+
+### x402: payment ids and per-endpoint caps
+
+With `spend` set, `guardX402Fetch` also:
+
+- counts a 402's amount against `assets` and `perEndpoint` caps when it is checked. The reservation waits for the
+  paid retry: committed when the seller answers, released on another 402 or an error, released after `holdMs`
+  (default 2 minutes) when no paid retry comes.
+- never sends the same x402 `payment-identifier` twice: a paid retry whose id was already sent throws
+  `TollPolicyError` `duplicate-payment` (ids are kept `paymentIdTtlS`, default 1 day). The id is marked when the
+  request goes out, so a retry with the same id after a network error is refused too: sign a new payment.
+
+### Where the counters live
+
+The default store is a `MemorySpendStore` in this process, one per `spend` object. **It resets when the process
+restarts and is not shared between processes**: two workers each get the full day cap. For a cap that survives
+restarts or spans workers, pass your own `store` implementing `SpendStore`:
+
+```ts
+interface SpendStore {
+  reserve(k: string, amt: bigint, limit: bigint, windowStart: number): Promise<{ ok: boolean; id: string; used: bigint }>;
+  commit(id: string): Promise<void>;
+  release(id: string): Promise<void>;
+  paymentSeen(id: string): Promise<boolean>;
+  markPaid(id: string, ttlS: number): Promise<void>;
+}
+```
+
+A Redis store (example only, not shipped; `reserve` must be atomic, hence the Lua script):
+
+```ts
+import Redis from "ioredis";
+import type { SpendStore } from "@tollxyz/guard";
+
+const redis = new Redis(process.env.REDIS_URL!);
+const RESERVE = `
+local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+local amt, limit = tonumber(ARGV[1]), tonumber(ARGV[2])
+if used + amt > limit then return {0, tostring(used)} end
+redis.call('INCRBY', KEYS[1], ARGV[1])
+redis.call('EXPIRE', KEYS[1], 172800)
+redis.call('SET', KEYS[2], KEYS[1] .. '|' .. ARGV[1], 'EX', 3600)
+return {1, tostring(used + amt)}`;
+const RELEASE = `
+local v = redis.call('GET', KEYS[1])
+if not v then return 0 end
+local sep = string.find(v, '|', 1, true)
+redis.call('DECRBY', string.sub(v, 1, sep - 1), string.sub(v, sep + 1))
+redis.call('DEL', KEYS[1])
+return 1`;
+
+export const redisStore: SpendStore = {
+  async reserve(k, amt, limit, windowStart) {
+    const id = `toll:res:${crypto.randomUUID()}`;
+    // amounts as numbers in Lua: fine below 2^53 base units; use string math for larger caps
+    const [ok, used] = (await redis.eval(RESERVE, 2, `toll:cap:${k}:${windowStart}`, id, amt.toString(), limit.toString())) as [number, string];
+    return { ok: ok === 1, id: ok === 1 ? id : "", used: BigInt(used) };
+  },
+  async commit(id) { await redis.del(id); },          // the amount stays in the day counter
+  async release(id) { await redis.eval(RELEASE, 1, id); },
+  async paymentSeen(id) { return (await redis.exists(`toll:paid:${id}`)) === 1; },
+  async markPaid(id, ttlS) { await redis.set(`toll:paid:${id}`, "1", "EX", ttlS); },
+};
+
+const wallet = guard(walletClient, { spend: { /* ... */ }, store: redisStore });
+```
 
 ## Fail-open or fail-closed
 

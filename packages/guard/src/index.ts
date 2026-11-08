@@ -30,11 +30,11 @@ export type {
   Numberish,
   UnavailableReason,
 } from "./check.js";
-export { enforce, enforceCalls, unsupportedWhy, refuse, gateAuthorization, resolvePolicy, hasHighWarning, isSignature, isEthSign, TollPolicyError, commitSpend, releaseSpend } from "./policy.js";
-export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy, SpendPolicy, Caps, ApprovalRequest, PolicyCode } from "./policy.js";
+export { enforce, enforceCalls, unsupportedWhy, refuse, gateAuthorization, resolvePolicy, hasHighWarning, isSignature, isEthSign, TollPolicyError, commitSpend, releaseSpend, preview } from "./policy.js";
+export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy, SpendPolicy, Caps, ApprovalRequest, PolicyCode, GuardDecision } from "./policy.js";
 export { guard, guardViem, guardEthers, guardSmartAccount, isViemClient, isBundlerClient, primaryTypeOf } from "./wallets.js";
 export type { ViemGuardOptions } from "./wallets.js";
-export { guardX402Fetch, readPaymentRequired, readPaymentForms, paymentFormsDiffer } from "./x402.js";
+export { guardX402Fetch, readPaymentRequired, readPaymentForms, paymentFormsDiffer, paymentIdOf } from "./x402.js";
 export type { X402GuardOptions } from "./x402.js";
 export {
   read8470,

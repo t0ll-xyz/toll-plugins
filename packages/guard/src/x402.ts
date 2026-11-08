@@ -6,7 +6,7 @@
  *   const pay = wrapFetchWithPayment(guardX402Fetch(fetch), account);   // x402-fetch, or any x402 client
  */
 import type { CheckInput, FetchLike } from "./check.js";
-import { enforce, refuse, type GuardOptions, type GuardReport } from "./policy.js";
+import { commitSpend, enforce, policyRefuse, refuse, releaseSpend, storeOf, type GuardOptions, type GuardReport, type InternalOptions } from "./policy.js";
 
 type AnyFetch = (input: any, init?: any) => Promise<Response>;
 
@@ -75,22 +75,58 @@ const urlOf = (input: unknown): string => {
 };
 
 const PAY_HEADERS = ["payment-signature", "x-payment"];
-const hasPayment = (input: unknown, init: { headers?: unknown } | undefined): boolean => {
-  const read = (h: unknown) => {
-    if (!h) return false;
+/** the payment header's value on the request (init headers first, then a Request's own), or null */
+const paymentHeader = (input: unknown, init: { headers?: unknown } | undefined): string | null => {
+  const read = (h: unknown): string | null => {
+    if (!h) return null;
     try {
       const hs = new Headers(h as HeadersInit);
-      return PAY_HEADERS.some((n) => hs.has(n));
+      for (const n of PAY_HEADERS) if (hs.has(n)) return hs.get(n) ?? "";
     } catch {
-      return false;
+      /* unreadable headers */
     }
+    return null;
   };
-  return read(init?.headers) || (typeof Request !== "undefined" && input instanceof Request && read(input.headers));
+  return read(init?.headers) ?? (typeof Request !== "undefined" && input instanceof Request ? read(input.headers) : null);
+};
+const hasPayment = (input: unknown, init: { headers?: unknown } | undefined): boolean => paymentHeader(input, init) !== null;
+
+/**
+ * The x402 payment-identifier extension's id in a signed payment header (base64 JSON PaymentPayload):
+ * extensions["payment-identifier"].info.id (or .id); null when there is none.
+ */
+export function paymentIdOf(header: string | null): string | null {
+  if (!header) return null;
+  try {
+    const p = decodeBase64Json(header) as Record<string, any>;
+    const ext = p?.extensions?.["payment-identifier"] ?? p?.payload?.extensions?.["payment-identifier"];
+    const id = ext?.info?.id ?? ext?.id ?? p?.paymentId;
+    return typeof id === "string" && id ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** the request URL without its query: the key a 402's hold waits under for its paid retry */
+const holdKey = (url: string): string => {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return url;
+  }
 };
 
 export interface X402GuardOptions extends GuardOptions {
   /** called with each 402's report (also passed to onReport) */
   on402?: (report: GuardReport, url: string) => void;
+  /**
+   * With `spend`: how long a checked 402's cap reservation waits for its paid retry before it is given back
+   * (default 120000 ms). The paid retry commits it on a non-402 answer and releases it on a 402 or an error.
+   */
+  holdMs?: number;
+  /** With `spend`: how long a paid payment-identifier is remembered (default 86400 s) */
+  paymentIdTtlS?: number;
 }
 
 /**
@@ -99,7 +135,45 @@ export interface X402GuardOptions extends GuardOptions {
  */
 export function guardX402Fetch<F extends AnyFetch>(fetchLike: F, opts: X402GuardOptions = {}): F {
   const toll: GuardOptions = { ...opts, fetch: opts.fetch ?? ((globalThis.fetch as FetchLike | undefined)?.bind(globalThis) as FetchLike | undefined) };
+  // spend mode: each checked 402's reservations wait here (oldest first per URL) for the paid retry
+  const holds = new Map<string, Array<{ reports: GuardReport[]; timer: ReturnType<typeof setTimeout> }>>();
+  const takeHold = (key: string) => {
+    const q = holds.get(key);
+    const h = q?.shift();
+    if (q && !q.length) holds.delete(key);
+    if (h) clearTimeout(h.timer);
+    return h ?? null;
+  };
+  const paidRetry = async (input: unknown, init: { headers?: unknown } | undefined, header: string | null) => {
+    const url = urlOf(input);
+    const id = paymentIdOf(header);
+    if (id !== null) {
+      const store = storeOf(toll);
+      if (await store.paymentSeen(id)) {
+        await policyRefuse("x402", { x402: { url } }, "duplicate-payment", `Not paid: payment-identifier ${id} was already paid; the guard never pays it twice.`, toll);
+      }
+      // marked before the send: two concurrent retries with one id cannot both go out
+      await store.markPaid(id, opts.paymentIdTtlS ?? 86_400);
+    }
+    const hold = takeHold(holdKey(url));
+    let res: Response;
+    try {
+      res = await fetchLike(input, init);
+    } catch (e) {
+      if (hold) await releaseSpend(hold.reports, toll);
+      throw e;
+    }
+    if (hold) {
+      if (res.status === 402) await releaseSpend(hold.reports, toll);
+      else await commitSpend(hold.reports, toll);
+    }
+    return res;
+  };
   const wrapped = async (input: unknown, init?: { headers?: unknown }) => {
+    if (toll.spend) {
+      const header = paymentHeader(input, init);
+      if (header !== null) return paidRetry(input, init, header);
+    }
     const res = await fetchLike(input, init);
     if (res.status !== 402 || hasPayment(input, init)) return res;
     const url = urlOf(input);
@@ -110,12 +184,30 @@ export function guardX402Fetch<F extends AnyFetch>(fetchLike: F, opts: X402Guard
       await refuse("x402", { x402: { ...forms.header, url } }, "x402-forms-differ", "The 402's PAYMENT-REQUIRED header and its JSON body ask for different payments (payee, amount, asset or scheme). A client pays from the one it reads, so it was not paid.", toll);
     }
     const pr = forms.header ?? forms.body;
+    const col: GuardReport[] = [];
+    const eo: InternalOptions = toll.spend ? { ...toll, _collect: col, _endpoint: url } : toll;
     const r = await enforce("x402", () => {
       if (!pr) return {} as CheckInput; // nothing readable: the unsupported policy decides
       const x402 = pr.resource || pr.url ? pr : { ...pr, url };
       const id = typeof opts.agentId === "function" ? opts.agentId(url) : opts.agentId;
       return { x402, ...(id !== undefined && id !== null ? { agentId: id } : {}) };
-    }, toll);
+    }, eo);
+    if (col.some((c) => c.spend?.reservations.length)) {
+      const key = holdKey(url);
+      const entry = { reports: col, timer: setTimeout(() => {
+        const q = holds.get(key);
+        const i = q ? q.indexOf(entry) : -1;
+        if (q && i >= 0) {
+          q.splice(i, 1);
+          if (!q.length) holds.delete(key);
+          void releaseSpend(col, toll);
+        }
+      }, opts.holdMs ?? 120_000) };
+      (entry.timer as { unref?: () => void }).unref?.();
+      const q = holds.get(key) ?? [];
+      q.push(entry);
+      holds.set(key, q);
+    }
     opts.on402?.(r, url);
     return res;
   };

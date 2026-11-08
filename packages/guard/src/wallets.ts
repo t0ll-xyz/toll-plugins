@@ -3,7 +3,7 @@
  * The wrapper is a Proxy: every other method and field of the client passes through unchanged.
  */
 import { chainIdOf, isAddress, type CheckInput, type Hex, type TypedDataLike } from "./check.js";
-import { enforce, enforceCalls, gateAuthorization, type GuardOptions } from "./policy.js";
+import { commitSpend, enforce, enforceCalls, gateAuthorization, releaseSpend, type GuardOptions, type GuardReport, type InternalOptions } from "./policy.js";
 
 type AnyFn = (...args: any[]) => any;
 type Obj = Record<string | symbol, any>;
@@ -25,6 +25,36 @@ function proxy<T extends object>(target: T, wrapped: Record<string, AnyFn>): T {
       return typeof v === "function" ? v.bind(t) : v;
     },
   });
+}
+
+/**
+ * One wrapped call: the check, then the send. With `spend` set, the day-cap reservations the check made are committed
+ * after the send and released when the check or the send throws. `confirm` is a preview's confirmId (tollConfirm).
+ */
+async function guarded<R>(o: GuardOptions, confirm: string | undefined, check: (o: GuardOptions) => Promise<unknown>, send: () => R): Promise<Awaited<R>> {
+  if (!o.spend && confirm === undefined) {
+    await check(o);
+    return send() as Awaited<R>;
+  }
+  const col: GuardReport[] = [];
+  const io: InternalOptions = { ...o, _collect: col, ...(confirm !== undefined ? { _confirm: confirm } : {}) };
+  let out: Awaited<R>;
+  try {
+    await check(io);
+    out = await send();
+  } catch (e) {
+    await releaseSpend(col, o);
+    throw e;
+  }
+  await commitSpend(col, o);
+  return out;
+}
+
+/** a preview's confirmId on the request (tollConfirm), and the request without it (what the wallet gets) */
+function takeConfirm<T>(args: T): [string | undefined, T] {
+  if (!args || typeof args !== "object" || !Object.prototype.hasOwnProperty.call(args, "tollConfirm")) return [undefined, args];
+  const { tollConfirm, ...rest } = args as Obj;
+  return [typeof tollConfirm === "string" && tollConfirm ? tollConfirm : undefined, rest as T];
 }
 
 /** a transaction that carries an EIP-7702 authorizationList (any entry at all) */
@@ -127,59 +157,54 @@ export function guardViem<T extends object>(client: T, opts: ViemGuardOptions = 
   const wrapped: Record<string, AnyFn> = {};
   for (const m of ["sendTransaction", "signTransaction"] as const) {
     if (typeof c[m] !== "function") continue;
-    wrapped[m] = async (args: Obj, ...rest: unknown[]) => {
+    wrapped[m] = async (raw: Obj, ...rest: unknown[]) => {
+      const [confirm, args] = takeConfirm(raw);
       // a deployment (no `to`) goes to the unsupported policy
-      await gateTx(m, () => txInput(args, args?.data), hasAuthorizations(args), opts);
-      return c[m](args, ...rest);
+      return guarded(opts, confirm, (o) => gateTx(m, () => txInput(args, args?.data), hasAuthorizations(args), o), () => c[m](args, ...rest));
     };
   }
   if (typeof c.writeContract === "function") {
-    wrapped.writeContract = async (args: Obj, ...rest: unknown[]) => {
-      await gateTx("writeContract", async () => {
+    wrapped.writeContract = async (raw: Obj, ...rest: unknown[]) => {
+      const [confirm, args] = takeConfirm(raw);
+      const build = async () => {
         const enc = opts.encodeFunctionData ?? (await loadViemEncode());
         let data = String(enc({ abi: args.abi, functionName: args.functionName, args: args.args }));
         if (typeof args.dataSuffix === "string") data += args.dataSuffix.replace(/^0x/, "");
         return txInput({ ...args, to: args.address }, data);
-      }, hasAuthorizations(args), opts);
-      return c.writeContract(args, ...rest);
+      };
+      return guarded(opts, confirm, (o) => gateTx("writeContract", build, hasAuthorizations(args), o), () => c.writeContract(args, ...rest));
     };
   }
   if (typeof c.signTypedData === "function") {
     wrapped.signTypedData = async (args: Obj, ...rest: unknown[]) => {
       const td: TypedDataLike = { domain: args?.domain ?? {}, types: args?.types ?? {}, primaryType: args?.primaryType, message: args?.message ?? {} };
-      await enforce("typedData", () => ({ typedData: td, ...origin }), opts);
-      return c.signTypedData(args, ...rest);
+      return guarded(opts, undefined, (o) => enforce("typedData", () => ({ typedData: td, ...origin }), o), () => c.signTypedData(args, ...rest));
     };
   }
   if (typeof c.signMessage === "function") {
-    wrapped.signMessage = async (args: Obj, ...rest: unknown[]) => {
-      await enforce("message", () => {
+    wrapped.signMessage = async (args: Obj, ...rest: unknown[]) =>
+      guarded(opts, undefined, (o) => enforce("message", () => {
         const m = args?.message;
         const raw = m && typeof m === "object" ? m.raw : undefined;
         const data = typeof m === "string" ? utf8Hex(m) : typeof raw === "string" ? raw : raw instanceof Uint8Array ? bytesHex(raw) : null;
         if (data === null) throw new Error("signMessage: message must be a string or {raw}");
         const from = fromOf(args);
         return { message: { kind: "personal_sign", data, ...(from ? { from } : {}) }, ...origin };
-      }, opts);
-      return c.signMessage(args, ...rest);
-    };
+      }, o), () => c.signMessage(args, ...rest));
   }
   if (typeof c.sendCalls === "function") {
     wrapped.sendCalls = async (args: Obj, ...rest: unknown[]) => {
-      await enforceCalls(() => callsOf(args?.calls, chainOf(args), fromOf(args), opts), opts);
-      return c.sendCalls(args, ...rest);
+      return guarded(opts, undefined, (o) => enforceCalls(() => callsOf(args?.calls, chainOf(args), fromOf(args), opts), o), () => c.sendCalls(args, ...rest));
     };
   }
   if (typeof c.signAuthorization === "function") {
     wrapped.signAuthorization = async (args: Obj, ...rest: unknown[]) => {
-      await gateAuthorization("transaction", "signAuthorization", () => authInput(args, c.chain?.id, fromOf(args)), opts);
-      return c.signAuthorization(args, ...rest);
+      return guarded(opts, undefined, (o) => gateAuthorization("transaction", "signAuthorization", () => authInput(args, c.chain?.id, fromOf(args)), o), () => c.signAuthorization(args, ...rest));
     };
   }
   if (typeof c.request === "function") {
     wrapped.request = async (args: Obj, ...rest: unknown[]) => {
-      await checkRequest(args, c, fromOf({}), opts);
-      return c.request(args, ...rest);
+      return guarded(opts, undefined, (o) => checkRequest(args, c, fromOf({}), { ...opts, ...o }), () => c.request(args, ...rest));
     };
   }
   return proxy(client, wrapped);
@@ -247,9 +272,9 @@ const USEROP_FIELDS = [
  * `calls` are checked one by one as transactions from the smart account's address; a ready `callData` is sent as a
  * user operation with the account's EntryPoint. An EIP-7702 `authorization` goes to onAuthorization.
  */
-export function guardSmartAccount<T extends object>(client: T, opts: ViemGuardOptions = {}): T {
+export function guardSmartAccount<T extends object>(client: T, sopts: ViemGuardOptions = {}): T {
   const c = client as Obj;
-  const check = async (where: string, args: Obj) => {
+  const check = async (where: string, args: Obj, opts: ViemGuardOptions) => {
     const acct = args?.account ?? c.account;
     const sender = addrOf(acct);
     const chainId = args?.chain?.id ?? c.chain?.id;
@@ -271,10 +296,7 @@ export function guardSmartAccount<T extends object>(client: T, opts: ViemGuardOp
   const wrapped: Record<string, AnyFn> = {};
   for (const m of ["sendUserOperation", "prepareUserOperation"] as const) {
     if (typeof c[m] !== "function") continue;
-    wrapped[m] = async (args: Obj, ...rest: unknown[]) => {
-      await check(m, args);
-      return c[m](args, ...rest);
-    };
+    wrapped[m] = async (args: Obj, ...rest: unknown[]) => guarded(sopts, undefined, (o) => check(m, args, { ...sopts, ...o }), () => c[m](args, ...rest));
   }
   return proxy(client, wrapped);
 }
@@ -331,37 +353,34 @@ export function guardEthers<T extends object>(signer: T, opts: GuardOptions = {}
   const wrapped: Record<string, AnyFn> = {};
   for (const m of ["sendTransaction", "signTransaction"] as const) {
     if (typeof s[m] !== "function") continue;
-    wrapped[m] = async (tx: Obj, ...rest: unknown[]) => {
-      await gateTx(m, () => ethersTx(s, tx), hasAuthorizations(tx), opts);
-      return s[m](tx, ...rest);
+    wrapped[m] = async (raw: Obj, ...rest: unknown[]) => {
+      const [confirm, tx] = takeConfirm(raw);
+      return guarded(opts, confirm, (o) => gateTx(m, () => ethersTx(s, tx), hasAuthorizations(tx), o), () => s[m](tx, ...rest));
     };
   }
   if (typeof s.signTypedData === "function") {
     wrapped.signTypedData = async (domain: Obj, types: Obj, value: Obj, ...rest: unknown[]) => {
-      await enforce("typedData", () => ({ typedData: { domain: domain ?? {}, types: types ?? {}, primaryType: primaryTypeOf(types ?? {}), message: value ?? {} }, ...origin }), opts);
-      return s.signTypedData(domain, types, value, ...rest);
+      return guarded(opts, undefined, (o) => enforce("typedData", () => ({ typedData: { domain: domain ?? {}, types: types ?? {}, primaryType: primaryTypeOf(types ?? {}), message: value ?? {} }, ...origin }), o), () => s.signTypedData(domain, types, value, ...rest));
     };
   }
   if (typeof s.signMessage === "function") {
-    wrapped.signMessage = async (message: unknown, ...rest: unknown[]) => {
-      await enforce("message", async () => {
+    wrapped.signMessage = async (message: unknown, ...rest: unknown[]) =>
+      guarded(opts, undefined, (o) => enforce("message", async () => {
         // ethers signs a string as its UTF-8 bytes, even one that looks like hex
         const data = typeof message === "string" ? utf8Hex(message) : message instanceof Uint8Array ? bytesHex(message) : null;
         if (data === null) throw new Error("signMessage: message must be a string or bytes");
         const from = typeof s.getAddress === "function" ? await s.getAddress() : undefined;
         return { message: { kind: "personal_sign", data, ...(isAddress(from) ? { from } : {}) }, ...origin };
-      }, opts);
-      return s.signMessage(message, ...rest);
-    };
+      }, o), () => s.signMessage(message, ...rest));
   }
   if (typeof s.authorize === "function") {
     wrapped.authorize = async (auth: Obj, ...rest: unknown[]) => {
-      await gateAuthorization("transaction", "authorize", async () => {
+      const build = async () => {
         const chainId = chainOut(await ethersChainId(s));
         const from = typeof s.getAddress === "function" ? await s.getAddress() : undefined;
         return authInput(auth ?? {}, chainId, isAddress(from) ? from : undefined);
-      }, opts);
-      return s.authorize(auth, ...rest);
+      };
+      return guarded(opts, undefined, (o) => gateAuthorization("transaction", "authorize", build, o), () => s.authorize(auth, ...rest));
     };
   }
   return proxy(signer, wrapped);

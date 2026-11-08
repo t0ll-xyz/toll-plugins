@@ -607,3 +607,66 @@ async function enforceSpend(kind: GuardKind, build: () => CheckInput | Promise<C
   }
   return r;
 }
+
+/** a request the spend policy refuses outside enforce (a repeated x402 payment id): reported, then TollPolicyError */
+export async function policyRefuse(kind: GuardKind, input: CheckInput | null, code: PolicyCode, message: string, o: GuardOptions): Promise<never> {
+  const r: GuardReport = { kind, input, assessment: null, decision: "blocked", basis: "policy", policy: code, paidUrl: null };
+  await report(o, r);
+  throw new TollPolicyError(code, message, { report: r });
+}
+
+/* ------------------------------------------------------------------ preview */
+
+export interface GuardDecision {
+  decision: "allowed" | "blocked";
+  basis: GuardReport["basis"];
+  /** Toll's answer (null when Toll was not asked or could not answer) */
+  assessment: RiskAssessment | null;
+  /** the spend rule that would block it */
+  policy?: PolicyCode;
+  /** what it would spend (with `spend` set) */
+  spend?: Spend;
+  /** over an approveAbove threshold: the send will ask `approve` */
+  needsApproval?: boolean;
+  /** why it would be blocked */
+  reason?: string;
+  paidUrl: string | null;
+}
+
+const kindOf = (i: CheckInput): GuardKind =>
+  i.x402 ? "x402" : i.userOp ? "userOp" : i.typedData || i.rpc?.method === "eth_signTypedData_v4" ? "typedData" : i.message || i.rpc ? "message" : "transaction";
+
+/**
+ * What the guard would do with this request, without doing it: Toll is asked and every spend rule is checked, but
+ * nothing is reserved, `approve` is not called and onReport is not called. When allowed, `confirmId` passed as
+ * `tollConfirm` on the send within 30 s skips the second Toll call (once, and only for the identical request).
+ */
+export async function preview(input: CheckInput, opts: GuardOptions & { kind?: GuardKind } = {}): Promise<GuardDecision & { confirmId: string }> {
+  const { kind: k, ...rest } = opts;
+  const kind = k ?? kindOf(input);
+  const io: InternalOptions = { ...rest, onReport: undefined, _preview: true };
+  try {
+    const r = await enforce(kind, () => input, io);
+    return {
+      decision: "allowed",
+      basis: r.basis,
+      assessment: r.assessment,
+      ...(r.spend ? { spend: r.spend.spend } : {}),
+      ...(r.spend?.needsApproval ? { needsApproval: true } : {}),
+      paidUrl: r.paidUrl,
+      confirmId: r.assessment ? rememberConfirm(input, r.assessment) : "",
+    };
+  } catch (e) {
+    const rep = (e as { report?: GuardReport }).report;
+    if (e instanceof TollPolicyError) {
+      return { decision: "blocked", basis: "policy", policy: e.code, assessment: rep?.assessment ?? null, ...(rep?.spend ? { spend: rep.spend.spend } : {}), reason: e.message, paidUrl: rep?.paidUrl ?? null, confirmId: "" };
+    }
+    if (e instanceof TollBlockedError) {
+      return { decision: "blocked", basis: e.assessment.action, assessment: e.assessment, reason: e.message, paidUrl: paidUrlOf(e.assessment), confirmId: "" };
+    }
+    if (e instanceof TollUnavailableError) {
+      return { decision: "blocked", basis: e.reason === "unsupported" ? "unsupported" : "unavailable", assessment: null, reason: e.message, paidUrl: e.paidUrl, confirmId: "" };
+    }
+    throw e;
+  }
+}
