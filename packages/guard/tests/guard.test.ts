@@ -580,3 +580,24 @@ test("real viem WalletClient: wrapped signTypedData signs the same after ALLOW, 
   await assert.rejects(g.signTypedData(args), TollBlockedError);
   assert.equal(body(t.m.calls[0]).typedData.domain.chainId, RH);
 });
+
+/* ------------------------------------------------------------------ 0.3.1: typed data carries the signer */
+
+test("viem: signTypedData sends from (the account), so Toll can read what a Permit2 signature lets someone take", async () => {
+  const { client } = fakeViem();
+  const t = opts([json(fx("allow")), json(fx("allow"))]);
+  const g = guardViem(client, t.o);
+  await g.signTypedData({ domain: { chainId: RH }, types: { PermitSingle: [] }, primaryType: "PermitSingle", message: {} });
+  assert.equal(body(t.m.calls[0]).from, FROM);
+  // an account passed with the call wins over the client's
+  const OTHER = "0x" + "12".repeat(20);
+  await g.signTypedData({ account: OTHER, domain: { chainId: RH }, types: { PermitSingle: [] }, primaryType: "PermitSingle", message: {} });
+  assert.equal(body(t.m.calls[1]).from, OTHER);
+});
+
+test("ethers: signTypedData sends from (getAddress)", async () => {
+  const { signer } = fakeEthers();
+  const t = opts([json(fx("allow"))]);
+  await guardEthers(signer, t.o).signTypedData({ chainId: RH }, { PermitSingle: [{ name: "spender", type: "address" }] }, { spender: TO });
+  assert.equal(body(t.m.calls[0]).from, FROM);
+});
