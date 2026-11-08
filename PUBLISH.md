@@ -117,7 +117,7 @@ Two listings point at Toll:
    cd ../..
    ```
 
-2. `xyz.t0ll/toll` (the remote listing in `~\toll-mcp-repo`, branch `rh-only-1105`, commit bbd798e):
+2. `xyz.t0ll/toll` (the remote listing in the toll-mcp repo, branch `rh-only-1105`, commit bbd798e):
    `server.json` is now 1.0.3 with the title "Toll — coin, agent and pre-sign checks on Robinhood Chain" (it said
    "coin and product checks on Robinhood Chain, Solana, BSC"), and the README lists all 18 tools.
 
