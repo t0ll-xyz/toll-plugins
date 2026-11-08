@@ -270,9 +270,11 @@ With `spend` set, `guardX402Fetch` also:
 - counts a 402's amount against `assets` and `perEndpoint` caps when it is checked. The reservation waits for the
   paid retry: committed when the seller answers, released on another 402 or an error, released after `holdMs`
   (default 2 minutes) when no paid retry comes.
-- never sends the same x402 `payment-identifier` twice: a paid retry whose id was already sent throws
-  `TollPolicyError` `duplicate-payment` (ids are kept `paymentIdTtlS`, default 1 day). The id is marked when the
-  request goes out, so a retry with the same id after a network error is refused too: sign a new payment.
+- never pays the same x402 `payment-identifier` twice. An id is marked paid only when the seller accepts the paid
+  request (any answer but 402); sending that id again throws `TollPolicyError` `duplicate-payment` (ids are kept
+  `paymentIdTtlS`, default 1 day). A second send of an id that is still in flight is refused too. After a network
+  error or timeout the same id may be retried (the seller dedupes it): the retry reuses the reservation of its 402,
+  so nothing is counted twice. A different id is a new payment.
 
 ### Where the counters live
 

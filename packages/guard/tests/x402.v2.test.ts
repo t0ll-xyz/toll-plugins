@@ -66,3 +66,48 @@ test("a paid retry the seller refuses (402 again) gives the reservation back", a
   // the first hold is gone, so a new 402 of 50000 fits under 60000
   assert.equal((await t.f("https://seller.test/api/a")).status, 402);
 });
+
+test("same id retried after a network error is allowed and not double-counted", async () => {
+  const spend: SpendPolicy = { assets: { [USDG]: { perDay: 100_000n } } };
+  const answers: Array<Response | "down"> = [res402(), "down", json({ ok: 1 }), res402(), res402()];
+  let sent = 0;
+  const inner = async () => {
+    sent++;
+    const a = answers.shift();
+    if (a === "down") throw new TypeError("fetch failed");
+    if (!a) throw new Error("no more seller answers");
+    return a;
+  };
+  const f = guardX402Fetch(inner, { fetch: async () => json(ALLOW), logger: false, spend, store: new MemorySpendStore() });
+  const h = { headers: { "PAYMENT-SIGNATURE": payment("pay_retry") } };
+  assert.equal((await f("https://seller.test/api/a")).status, 402); // 50000 held
+  await assert.rejects(f("https://seller.test/api/a", h), /fetch failed/);
+  assert.equal((await f("https://seller.test/api/a", h)).status, 200); // the same id again: allowed, reuses the hold
+  assert.equal(sent, 3);
+  // exactly 50000 counted: one more 402 of 50000 fits, the next does not
+  assert.equal((await f("https://seller.test/api/b")).status, 402);
+  await assert.rejects(f("https://seller.test/api/c"), (e: unknown) => e instanceof TollPolicyError && e.code === "cap-per-day");
+});
+
+test("same id in flight twice concurrently: the second is refused", async () => {
+  let open!: (r: Response) => void;
+  let sent = 0;
+  const inner = async () => (sent++, new Promise<Response>((r) => (open = r)));
+  const f = guardX402Fetch(inner, { fetch: async () => json(ALLOW), logger: false, spend: {}, store: new MemorySpendStore() });
+  const h = { headers: { "PAYMENT-SIGNATURE": payment("pay_dup") } };
+  const first = f("https://seller.test/api/a", h);
+  await new Promise((r) => setTimeout(r, 5));
+  await assert.rejects(f("https://seller.test/api/a", h), (e: unknown) => e instanceof TollPolicyError && e.code === "duplicate-payment");
+  open(json({ ok: 1 }));
+  assert.equal((await first).status, 200);
+  assert.equal(sent, 1);
+});
+
+test("same id after a successful paid answer: refused; after a 402 answer: not marked", async () => {
+  const t = setup({}, [json({}, 402), json({ ok: 1 })]);
+  const h = { headers: { "PAYMENT-SIGNATURE": payment("pay_once") } };
+  assert.equal((await t.f("https://seller.test/api/a", h)).status, 402); // refused by the seller: not paid
+  assert.equal((await t.f("https://seller.test/api/a", h)).status, 200); // so the same id may go again
+  await assert.rejects(t.f("https://seller.test/api/a", h), (e: unknown) => e instanceof TollPolicyError && e.code === "duplicate-payment");
+  assert.equal(t.seen.length, 2);
+});

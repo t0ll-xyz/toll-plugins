@@ -144,28 +144,65 @@ export function guardX402Fetch<F extends AnyFetch>(fetchLike: F, opts: X402Guard
     if (h) clearTimeout(h.timer);
     return h ?? null;
   };
+  // payment ids being sent right now, and the hold each id keeps across a retry after a network error
+  const inFlight = new Set<string>();
+  const idHolds = new Map<string, { reports: GuardReport[]; timer: ReturnType<typeof setTimeout> }>();
+  const keepForRetry = (id: string, reports: GuardReport[]) => {
+    const timer = setTimeout(() => {
+      if (idHolds.get(id)?.reports === reports) {
+        idHolds.delete(id);
+        void releaseSpend(reports, toll);
+      }
+    }, opts.holdMs ?? 120_000);
+    (timer as { unref?: () => void }).unref?.();
+    idHolds.set(id, { reports, timer });
+  };
+  /**
+   * A paid request. With an x402 payment-identifier: an id the seller already accepted (non-402 answer) is refused,
+   * and so is a second send of an id still in flight; after a network error the same id may be sent again (the
+   * seller dedupes it) and it reuses the cap reservation of its 402, so nothing is counted twice.
+   */
   const paidRetry = async (input: unknown, init: { headers?: unknown } | undefined, header: string | null) => {
     const url = urlOf(input);
     const id = paymentIdOf(header);
+    const store = storeOf(toll);
     if (id !== null) {
-      const store = storeOf(toll);
       if (await store.paymentSeen(id)) {
         await policyRefuse("x402", { x402: { url } }, "duplicate-payment", `Not paid: payment-identifier ${id} was already paid; the guard never pays it twice.`, toll);
       }
-      // marked before the send: two concurrent retries with one id cannot both go out
-      await store.markPaid(id, opts.paymentIdTtlS ?? 86_400);
+      // checked after the await, right before the mark: no other send of this id can slip in between
+      if (inFlight.has(id)) {
+        await policyRefuse("x402", { x402: { url } }, "duplicate-payment", `Not paid: payment-identifier ${id} is being sent right now; the guard never sends it twice at once.`, toll);
+      }
+      inFlight.add(id);
     }
-    const hold = takeHold(holdKey(url));
+    let hold: { reports: GuardReport[] } | null = null;
+    if (id !== null && idHolds.has(id)) {
+      const h = idHolds.get(id)!;
+      clearTimeout(h.timer);
+      idHolds.delete(id);
+      hold = h;
+    } else hold = takeHold(holdKey(url));
     let res: Response;
     try {
       res = await fetchLike(input, init);
     } catch (e) {
-      if (hold) await releaseSpend(hold.reports, toll);
+      if (id !== null) {
+        // no answer: the seller may not have it; the same id may be retried and keeps this reservation
+        inFlight.delete(id);
+        if (hold) keepForRetry(id, hold.reports);
+      } else if (hold) await releaseSpend(hold.reports, toll);
       throw e;
     }
-    if (hold) {
-      if (res.status === 402) await releaseSpend(hold.reports, toll);
-      else await commitSpend(hold.reports, toll);
+    try {
+      if (res.status === 402) {
+        if (hold) await releaseSpend(hold.reports, toll);
+      } else {
+        if (hold) await commitSpend(hold.reports, toll);
+        if (id !== null) await store.markPaid(id, opts.paymentIdTtlS ?? 86_400);
+      }
+    } finally {
+      if (id !== null) inFlight.delete(id);
     }
     return res;
   };
