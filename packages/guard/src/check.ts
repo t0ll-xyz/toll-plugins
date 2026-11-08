@@ -66,8 +66,24 @@ export interface TypedDataLike {
   message: Record<string, unknown>;
 }
 
+/** A personal_sign / eth_sign message: data is hex (the bytes signed) or text. */
+export interface SignMessageLike {
+  kind: "personal_sign" | "eth_sign";
+  data: string;
+  origin?: string;
+  from?: string;
+}
+
+/** A wallet RPC request Toll reads as the body it stands for: personal_sign, eth_sign, eth_signTypedData_v4, eth_sendTransaction. */
+export interface RpcLike {
+  method: string;
+  params?: readonly unknown[];
+}
+
 /**
- * What to check. A transaction ({chainId, from, to, data, value}), an EIP-712 request ({typedData}), an x402 payment
+ * What to check. A transaction ({chainId, from, to, data, value}, with an EIP-7702 authorizationList or not), an
+ * authorization list alone ({chainId, from, authorizationList}), an EIP-712 request ({typedData}), a message
+ * ({message}), a wallet request ({rpc}), an ERC-4337 user operation ({userOp, entryPoint?}), an x402 payment
  * ({x402, agentId?, payment?}), or several together.
  */
 export interface CheckInput {
@@ -76,7 +92,17 @@ export interface CheckInput {
   to?: string;
   data?: string;
   value?: Numberish;
+  /** EIP-7702 authorizations: with to/data a type-4 transaction, alone a signAuthorization */
+  authorizationList?: readonly unknown[];
   typedData?: TypedDataLike;
+  message?: SignMessageLike;
+  rpc?: RpcLike;
+  /** an ERC-4337 user operation (v0.6, v0.7 packed or the RPC form) */
+  userOp?: Record<string, unknown>;
+  /** the user operation's EntryPoint */
+  entryPoint?: string;
+  /** the site asking for the signature (a URL or host name) */
+  origin?: string;
   /** the 402's PaymentRequired, or one of its accepts entries */
   x402?: Record<string, unknown>;
   /** the seller's ERC-8004 agent id, when known */
@@ -159,14 +185,28 @@ const trimBase = (b: string) => b.replace(/\/+$/, "");
 /** the request body as the route reads it (lib/txcheck.ts parseTxCheckBody): payment rides inside x402 */
 export function bodyOf(input: CheckInput): Record<string, unknown> {
   const b: Record<string, unknown> = {};
+  const auths = input.authorizationList !== undefined && input.authorizationList !== null && input.authorizationList.length > 0;
   if (input.to !== undefined || input.data !== undefined) {
     if (input.chainId !== undefined) b.chainId = input.chainId;
     if (input.from !== undefined) b.from = input.from;
     b.to = input.to;
     b.data = input.data ?? "0x";
     b.value = input.value ?? 0;
+    if (auths) b.authorizationList = input.authorizationList;
+  } else if (auths) {
+    // a signAuthorization alone: the list and its signer
+    if (input.chainId !== undefined) b.chainId = input.chainId;
+    if (input.from !== undefined) b.from = input.from;
+    b.authorizationList = input.authorizationList;
   }
   if (input.typedData) b.typedData = input.typedData;
+  if (input.message) b.message = input.message;
+  if (input.rpc) b.rpc = input.rpc;
+  if (input.userOp) {
+    b.userOp = input.userOp;
+    if (input.entryPoint !== undefined) b.entryPoint = input.entryPoint;
+  }
+  if (input.origin !== undefined) b.origin = input.origin;
   if (input.x402) b.x402 = input.payment ? { ...input.x402, payment: input.payment } : input.x402;
   if (input.agentId !== undefined && input.agentId !== null) b.agentId = input.agentId;
   return b;

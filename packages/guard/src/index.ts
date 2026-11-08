@@ -1,5 +1,6 @@
 export {
   checkTx,
+  bodyOf,
   chainIdOf,
   paidUrlOf,
   isAssessment,
@@ -19,6 +20,8 @@ export type {
   ScannerVerdict,
   TollExtra,
   RiskAssessment,
+  SignMessageLike,
+  RpcLike,
   CheckInput,
   CheckOptions,
   TypedDataLike,
@@ -27,9 +30,9 @@ export type {
   Numberish,
   UnavailableReason,
 } from "./check.js";
-export { enforce, unsupportedWhy, refuse, gateAuthorization, resolvePolicy, hasHighWarning } from "./policy.js";
+export { enforce, enforceCalls, unsupportedWhy, refuse, gateAuthorization, resolvePolicy, hasHighWarning, isSignature, isEthSign } from "./policy.js";
 export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy } from "./policy.js";
-export { guard, guardViem, guardEthers, isViemClient, primaryTypeOf } from "./wallets.js";
+export { guard, guardViem, guardEthers, guardSmartAccount, isViemClient, isBundlerClient, primaryTypeOf } from "./wallets.js";
 export type { ViemGuardOptions } from "./wallets.js";
 export { guardX402Fetch, readPaymentRequired, readPaymentForms, paymentFormsDiffer } from "./x402.js";
 export type { X402GuardOptions } from "./x402.js";

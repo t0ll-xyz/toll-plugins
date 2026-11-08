@@ -13,7 +13,7 @@ import {
 export type WarnPolicy = "allow" | "block" | "block-high" | ((assessment: RiskAssessment) => boolean | Promise<boolean>);
 export type BlockPolicy = "throw" | ((assessment: RiskAssessment) => boolean | Promise<boolean>);
 
-export type GuardKind = "transaction" | "typedData" | "x402";
+export type GuardKind = "transaction" | "typedData" | "x402" | "message" | "userOp" | "calls";
 
 export interface GuardReport {
   kind: GuardKind;
@@ -58,10 +58,15 @@ export interface GuardOptions extends CheckOptions {
   agentId?: number | string | ((url: string) => number | string | undefined | null);
   /**
    * An EIP-7702 authorization (a transaction's authorizationList, signAuthorization / authorize): it sets the
-   * wallet's code to another contract, which can then move everything the wallet holds. Toll does not read one yet.
-   * "block" (default): TollBlockedError, nothing is signed. "allow": let it through unchecked (logged, reported).
+   * wallet's code to another contract, which can then move everything the wallet holds.
+   * "check" (default since 0.3.0): Toll reads it and decides (a known, verified delegate comes back WARN medium and
+   * passes under onWarn "block-high"; an unknown one comes back BLOCK). It fails closed: when Toll cannot read it
+   * (unreachable, another chain, a request it refuses) it is blocked, whatever onUnavailable / onUnsupported say.
+   * "block": TollBlockedError, nothing is signed, Toll is not asked. "allow": let it through unchecked (logged, reported).
    */
-  onAuthorization?: "block" | "allow";
+  onAuthorization?: "check" | "block" | "allow";
+  /** the site asking for a signature (a URL or host name), sent with messages so Toll can match a sign-in's domain */
+  origin?: string;
 }
 
 /** the effective policy: explicit options win, then the strict preset, then the defaults */
@@ -96,21 +101,59 @@ async function report(o: GuardOptions, r: GuardReport): Promise<void> {
   }
 }
 
+const SIGN_RPC = new Set(["personal_sign", "eth_sign", "eth_signTypedData_v4"]);
+
+/** the typed data a request signs: its typedData, or an eth_signTypedData_v4 request's params[1] (JSON or object) */
+function typedOf(input: CheckInput): { domain?: Record<string, unknown> } | null {
+  if (input.typedData) return input.typedData;
+  if (input.rpc?.method !== "eth_signTypedData_v4") return null;
+  let td: unknown = input.rpc.params?.[1];
+  if (typeof td === "string") {
+    try {
+      td = JSON.parse(td);
+    } catch {
+      return null;
+    }
+  }
+  return td && typeof td === "object" ? (td as { domain?: Record<string, unknown> }) : null;
+}
+
+/** true for a signature request (typed data, a message, a signing RPC) rather than a transaction or an x402 payment */
+export const isSignature = (input: CheckInput | null | undefined): boolean =>
+  !!input && !input.x402 && (!!input.typedData || !!input.message || SIGN_RPC.has(String(input.rpc?.method)));
+
+/** true for eth_sign: it signs any 32 bytes (a transaction hash included), so it fails closed when Toll cannot answer */
+export const isEthSign = (input: CheckInput | null | undefined): boolean => input?.message?.kind === "eth_sign" || input?.rpc?.method === "eth_sign";
+
+/** the other chain a typed-data signature names (its domain chainId), or null (Robinhood Chain, none, or an x402 payment) */
+function otherChainSignature(input: CheckInput): number | null {
+  if (input.x402) return null;
+  const c = typedOf(input)?.domain?.chainId;
+  const cid = c === undefined || c === null ? null : chainIdOf(c);
+  return cid !== null && cid !== TX_CHAIN_ID ? cid : null;
+}
+
+/** Toll's 400 for a request on another chain ("... chainId N is not read ...") */
+const OTHER_CHAIN_400 = /chainId \d+ is not read/;
+
 /** why Toll would not read this request, or null when it does */
 export function unsupportedWhy(input: CheckInput): string | null {
   const tx = input.to !== undefined || input.data !== undefined;
+  const auths = !!input.authorizationList && input.authorizationList.length > 0;
+  if (!tx && auths) {
+    const cid = input.chainId === undefined ? null : chainIdOf(input.chainId);
+    if (input.chainId !== undefined && cid === null) return "the chain id could not be read";
+    if (cid !== null && cid !== TX_CHAIN_ID) return `chain ${cid} is not read (Robinhood Chain ${TX_CHAIN_ID} only for now)`;
+  }
   if (tx) {
     if (input.to === undefined || input.to === null) return "a contract deployment (no `to`) is not read";
     const cid = input.chainId === undefined ? null : chainIdOf(input.chainId);
     if (input.chainId !== undefined && cid === null) return "the chain id could not be read";
     if (cid !== null && cid !== TX_CHAIN_ID) return `chain ${cid} is not read (Robinhood Chain ${TX_CHAIN_ID} only for now)`;
   }
-  if (input.typedData && !input.x402) {
-    const c = input.typedData.domain?.chainId;
-    const cid = c === undefined || c === null ? null : chainIdOf(c);
-    if (cid !== null && cid !== TX_CHAIN_ID) return `a signature for chain ${cid} is not read (Robinhood Chain ${TX_CHAIN_ID} only for now)`;
-  }
-  if (!tx && !input.typedData && !input.x402) return "nothing to check";
+  const other = otherChainSignature(input);
+  if (other !== null) return `a signature for chain ${other} is not read (Robinhood Chain ${TX_CHAIN_ID} only for now)`;
+  if (!tx && !auths && !input.typedData && !input.x402 && !input.message && !input.rpc && !input.userOp) return "nothing to check";
   return null;
 }
 
@@ -128,6 +171,10 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
     return unavailable(kind, null, err, o);
   }
   const why = unsupportedWhy(input);
+  // a signature for another chain is not "unsupported -> allow": an off-chain signature Toll cannot read is refused
+  if (why && isSignature(input) && otherChainSignature(input) !== null && o.onUnsupported !== "allow") {
+    return refuse(kind, input, "signature-other-chain", `Not signed: ${why}. A signature Toll cannot read could hand over anything; onUnsupported: "allow" lets it through unchecked.`, o);
+  }
   if (why) {
     const blocked = resolvePolicy(o).onUnsupported === "block";
     const r: GuardReport = { kind, input, assessment: null, decision: blocked ? "blocked" : "allowed", basis: "unsupported", paidUrl: null };
@@ -140,6 +187,10 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
     a = await checkTx(input, o);
   } catch (e) {
     const err = e instanceof TollUnavailableError ? e : new TollUnavailableError(`Toll's check failed: ${(e as Error)?.message ?? e}`, { reason: "network", cause: e });
+    // Toll's 400 for a signature on another chain: blocked, never "unsupported -> allow"
+    if (err.reason === "bad-request" && isSignature(input) && OTHER_CHAIN_400.test(err.message) && o.onUnsupported !== "allow") {
+      return refuse(kind, input, "signature-other-chain", `Not signed: Toll does not read a signature for another chain (${err.message}). onUnsupported: "allow" lets it through unchecked.`, o);
+    }
     return unavailable(kind, input, err, o);
   }
   const paidUrl = paidUrlOf(a);
@@ -170,7 +221,8 @@ export async function enforce(kind: GuardKind, build: () => CheckInput | Promise
 }
 
 async function unavailable(kind: GuardKind, input: CheckInput | null, err: TollUnavailableError, o: GuardOptions): Promise<GuardReport> {
-  const blocked = resolvePolicy(o).onUnavailable === "block";
+  // eth_sign signs any 32 bytes (a transaction hash included): it always fails closed
+  const blocked = resolvePolicy(o).onUnavailable === "block" || isEthSign(input);
   const r: GuardReport = { kind, input, assessment: null, decision: blocked ? "blocked" : "allowed", basis: "unavailable", paidUrl: err.paidUrl, error: err };
   await report(o, r);
   if (blocked) throw err;
@@ -188,12 +240,54 @@ export async function refuse(kind: GuardKind, input: CheckInput | null, code: st
   throw new TollBlockedError(a, "BLOCK");
 }
 
-/** the onAuthorization policy for an EIP-7702 authorization: resolves when it may go ahead, else throws */
-export async function gateAuthorization(kind: GuardKind, where: string, input: CheckInput | null, o: GuardOptions = {}): Promise<void> {
-  if (o.onAuthorization === "allow") {
+/**
+ * The onAuthorization policy for an EIP-7702 authorization. Resolves true when Toll checked the whole request (the
+ * "check" default: the caller asks nothing more), false when "allow" let it through unchecked (the caller still checks
+ * the rest of the request); throws when it is blocked. `input` is the request with its authorizationList, or a function
+ * that builds it; under "check", null is blocked (nothing to send).
+ */
+export async function gateAuthorization(
+  kind: GuardKind,
+  where: string,
+  input: CheckInput | null | (() => CheckInput | Promise<CheckInput>),
+  o: GuardOptions = {},
+): Promise<boolean> {
+  const p = o.onAuthorization ?? "check";
+  const shown = typeof input === "function" ? null : input;
+  if (p === "allow") {
     say(o, `EIP-7702 authorization (${where}) NOT checked, going ahead (onAuthorization "allow")`);
-    await report(o, { kind, input, assessment: null, decision: "allowed", basis: "unsupported", paidUrl: null });
-    return;
+    await report(o, { kind, input: shown, assessment: null, decision: "allowed", basis: "unsupported", paidUrl: null });
+    return false;
   }
-  await refuse(kind, input, "eip7702-authorization", `${where} carries an EIP-7702 authorization, which sets this wallet's code to another contract that can then move everything it holds. Toll does not read authorizations yet; onAuthorization: "allow" lets it through unchecked.`, o);
+  const what = `${where} carries an EIP-7702 authorization, which sets this wallet's code to another contract that can then move everything it holds.`;
+  if (p === "block" || input === null) {
+    return refuse(kind, shown, "eip7702-authorization", `${what} ${p === "block" ? 'onAuthorization is "block"' : "It could not be read for Toll's check"}; onAuthorization: "allow" lets it through unchecked.`, o);
+  }
+  const build = typeof input === "function" ? input : () => input;
+  try {
+    // fail closed: an authorization Toll could not read is not signed
+    await enforce(kind, build, { ...o, onUnavailable: "block", onUnsupported: "block" });
+  } catch (e) {
+    if (!(e instanceof TollUnavailableError)) throw e;
+    return refuse(kind, null, "eip7702-authorization", `${what} Toll could not read it (${e.message}), so it is not signed; onAuthorization: "allow" lets it through unchecked.`, o);
+  }
+  return true;
+}
+
+/**
+ * A batch (EIP-5792 sendCalls, wallet_sendCalls, a smart account's calls): each call is checked as its own transaction
+ * from the batch's sender, in order; the first one blocked stops the batch. Reports carry kind "calls".
+ */
+export async function enforceCalls(build: () => CheckInput[] | Promise<CheckInput[]>, o: GuardOptions = {}): Promise<GuardReport[]> {
+  let calls: CheckInput[];
+  try {
+    calls = await build();
+  } catch (e) {
+    const err = e instanceof TollUnavailableError ? e : new TollUnavailableError(`The batch could not be read for Toll's check: ${(e as Error)?.message ?? e}`, { reason: "encode", cause: e });
+    return [await unavailable("calls", null, err, o)];
+  }
+  if (!calls.length) return [await enforce("calls", () => ({}), o)];
+  const out: GuardReport[] = [];
+  for (const c of calls) out.push(await enforce("calls", () => c, o));
+  return out;
 }

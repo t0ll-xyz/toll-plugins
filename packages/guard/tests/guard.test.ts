@@ -219,8 +219,10 @@ test("unsupported (another chain, a deployment): not sent; allowed by default, o
   assert.equal(t.m.calls.length, 0);
   const d = await enforce("transaction", () => ({ ...TX, to: undefined }), t.o);
   assert.equal(d.basis, "unsupported");
-  const td = await enforce("typedData", () => ({ typedData: { domain: { chainId: 1 }, types: {}, primaryType: "Permit", message: {} } }), t.o);
-  assert.equal(td.basis, "unsupported");
+  // a signature for another chain is blocked since 0.3.0 (not "unsupported -> allow"); onUnsupported "allow" lets it through
+  const sig = () => ({ typedData: { domain: { chainId: 1 }, types: {}, primaryType: "Permit", message: {} } });
+  await assert.rejects(enforce("typedData", sig, t.o), (e: unknown) => e instanceof TollBlockedError && e.codes[0] === "signature-other-chain");
+  assert.equal((await enforce("typedData", sig, { ...t.o, onUnsupported: "allow" })).basis, "unsupported");
   await assert.rejects(enforce("transaction", () => ({ ...TX, chainId: "eip155:1" }), { ...t.o, onUnsupported: "block" }), TollUnavailableError);
   assert.equal(t.m.calls.length, 0);
 });
@@ -438,10 +440,10 @@ test("x402: header and body that ask the same payment (v2 amount vs v1 maxAmount
 
 const AUTH = [{ address: "0x000000000000000000000000000000000000bEEF", chainId: RH, nonce: 0, r: "0x1", s: "0x2", yParity: 0 }];
 
-test("7702 viem: an authorizationList on sendTransaction / signTransaction / writeContract is blocked before Toll and the wallet", async () => {
+test('7702 viem, onAuthorization "block": an authorizationList on sendTransaction / signTransaction / writeContract is blocked before Toll and the wallet', async () => {
   const { client, sent } = fakeViem();
   const c = { ...client, signTransaction: async () => (sent.push("signTx"), "0xraw"), signAuthorization: async () => (sent.push("auth"), AUTH[0]) };
-  const t = opts([], { encodeFunctionData: () => "0x095ea7b3" });
+  const t = opts([], { encodeFunctionData: () => "0x095ea7b3", onAuthorization: "block" });
   const g = guardViem(c, t.o);
   for (const call of [
     () => g.sendTransaction({ to: TO, authorizationList: AUTH }),
@@ -467,10 +469,10 @@ test("7702 viem: an empty authorizationList is a plain transaction; onAuthorizat
   assert.ok(a.logs.some((l) => l.includes("EIP-7702")));
 });
 
-test("7702 ethers: an authorizationList and authorize() are blocked before the signer", async () => {
+test('7702 ethers, onAuthorization "block": an authorizationList and authorize() are blocked before the signer', async () => {
   const { signer, sent } = fakeEthers();
   const s = Object.assign(signer, { authorize: async () => (sent.push("authorize"), AUTH[0]) });
-  const t = opts([]);
+  const t = opts([], { onAuthorization: "block" });
   const g = guardEthers(s, t.o);
   await assert.rejects(g.sendTransaction({ to: TO, authorizationList: AUTH }), TollBlockedError);
   await assert.rejects(g.signTransaction({ to: TO, authorizationList: AUTH }), TollBlockedError);
