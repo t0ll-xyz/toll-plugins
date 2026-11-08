@@ -56,3 +56,5 @@ export { spendOf, NATIVE, USDG, WETH, DEFAULT_SPEND_ASSETS, UNLIMITED } from "./
 export type { Spend, SpendItem } from "./spend.js";
 export { MemorySpendStore, dayStart } from "./store.js";
 export type { SpendStore } from "./store.js";
+export { appendTicketSuffix, encodeTicketAndSig, ticketAskOf, ticketOfAnswer, TICKET_SUFFIX_MAGIC, TOLL_ALLOW_SIGNER, ALLOW_DOCS } from "./ticket.js";
+export type { TicketAsk, AllowTicket, TicketResult } from "./ticket.js";

@@ -11,6 +11,7 @@ import {
   type CheckOptions,
   type RiskAssessment,
 } from "./check.js";
+import { ticketOfAnswer, type TicketResult } from "./ticket.js";
 import { DEFAULT_SPEND_ASSETS, spendOf, type Spend } from "./spend.js";
 import { MemorySpendStore, dayStart, type SpendStore } from "./store.js";
 
@@ -39,6 +40,11 @@ export interface GuardReport {
   policy?: PolicyCode;
   /** with `spend` set: what the request spends, the day-cap reservations it holds, and the approval reference */
   spend?: { spend: Spend; reservations: string[]; approvalRef?: string; needsApproval?: boolean };
+  /**
+   * 0.4.1, with the `ticket` option: Toll's single-use ALLOW ticket for this exact call ({ticket, signature, signer}),
+   * or {why} none was issued. Put it on the call with appendTicketSuffix (routers) or pass abi.encode(ticket, signature).
+   */
+  ticket?: TicketResult;
 }
 
 /* ------------------------------------------------------------------ spend policy (0.4.0) */
@@ -289,7 +295,8 @@ async function enforceVerdict(kind: GuardKind, build: () => CheckInput | Promise
   }
   const paidUrl = paidUrlOf(a);
   const done = async (decision: "allowed" | "blocked", basis: GuardReport["basis"]) => {
-    const r: GuardReport = { kind, input, assessment: a, decision, basis, paidUrl };
+    const tk = ticketOfAnswer(a);
+    const r: GuardReport = { kind, input, assessment: a, decision, basis, paidUrl, ...(tk ? { ticket: tk } : {}) };
     await report(o, r);
     return r;
   };

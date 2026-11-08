@@ -3,6 +3,8 @@
  * every agent without a package update. This file only sends the request and reads the answer.
  */
 
+import { ticketAskOf, type TicketAsk } from "./ticket.js";
+
 export const DEFAULT_BASE_URL = "https://t0ll.xyz";
 /** Robinhood Chain: the only chain the pre-sign check reads for now */
 export const TX_CHAIN_ID = 4663;
@@ -126,6 +128,11 @@ export interface CheckOptions {
   maxRetryWaitMs?: number;
   /** for tests */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * 0.4.1: ask Toll for a single-use ALLOW ticket for this exact call (`true`, or {consumer?, scope?}). It comes back
+   * in x-toll.ticket (and on the GuardReport): signed, or with why none was issued. A BLOCK is never signed.
+   */
+  ticket?: boolean | TicketAsk;
 }
 
 /* ------------------------------------------------------------------ errors */
@@ -291,7 +298,8 @@ export async function checkTx(input: CheckInput, opts: CheckOptions = {}): Promi
   const base = trimBase(opts.baseUrl ?? DEFAULT_BASE_URL);
   const url = `${base}/api/tx/check`;
   const paid = `${base}${PAID_TX_PATH}`;
-  const body = toJson(bodyOf(input));
+  const ask = ticketAskOf(opts.ticket);
+  const body = toJson(ask ? { ...bodyOf(input), ticket: ask } : bodyOf(input));
   const first = await once(url, body, opts, f, paid);
   if (first.retryS === null || opts.retry === false) return first.a;
   const waitMs = Math.max(1, first.retryS) * 1000;

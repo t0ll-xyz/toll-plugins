@@ -1,5 +1,8 @@
 # @tollxyz/guard
 
+> **New in 0.4.1: ALLOW tickets** (`ticket` option, `appendTicketSuffix`): a single-use, signed ticket for one exact
+> call, for contracts that require one. See [ALLOW tickets](#allow-tickets).
+
 > **New in 0.4.0: spend caps, allowlists, human approval and preview** (`spend` option). Unset, nothing changes.
 > See [0.4.0: spend caps, allowlists, approval, preview](#040-spend-caps-allowlists-approval-preview).
 
@@ -170,6 +173,7 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `spend` | none | 0.4.0: caps, allowlists, approval ([below](#040-spend-caps-allowlists-approval-preview)); unset = 0.3.x behaviour |
 | `store` | in-process `MemorySpendStore` | where spend counters and paid x402 ids live |
 | `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked |
+| `ticket` | none | 0.4.1: `true` or `{consumer?, scope?}`: ask Toll for a single-use ALLOW ticket for this exact call; it comes back as `report.ticket` ([below](#allow-tickets)) |
 
 Errors: `TollBlockedError` (`.assessment`, `.codes`, message lists each code and message) and
 `TollUnavailableError` (`.reason`, `.status`, `.paidUrl`).
@@ -332,6 +336,41 @@ export const redisStore: SpendStore = {
 
 const wallet = guard(walletClient, { spend: { /* ... */ }, store: redisStore });
 ```
+
+## ALLOW tickets
+
+A contract can require a Toll ALLOW ticket before a sensitive call (a router, a module, a Uniswap v4 hook, a
+delegation caveat). The Solidity side is [toll-allow](https://github.com/t0ll-xyz/toll-allow); the full guide is
+https://t0ll.xyz/agents/allow.
+
+- A ticket is an EIP-712 verdict signed by Toll for **one exact call** (target, value, data), one account (`from`),
+  an optional consumer contract and a 60 second window. It is single use.
+- A BLOCK is never signed. A WARN is signed only when no warning is high or critical (as verdict 1). No ticket
+  without `from`, or for a transaction with an EIP-7702 authorization list. When none is issued, `report.ticket` is
+  `{ why }`.
+- Toll's production signer on Robinhood Chain (4663) is `0x4A2C93066d94F1E69f3EAd5438c4efDdf80a46ba`
+  (`TOLL_ALLOW_SIGNER`). Pin it in your contract, or a `TollSignerSet` you control that includes it.
+
+```ts
+import { enforce, appendTicketSuffix } from "@tollxyz/guard";
+
+// 1. check the inner call (what the router will call), bound to your router as the consumer
+const r = await enforce("transaction", () => ({ chainId: 4663, from: me, to: target, data, value }), {
+  ticket: { consumer: ROUTER },
+});
+if (!r.ticket || !("signature" in r.ticket)) throw new Error(r.ticket?.why ?? "no ticket");
+
+// 2. put the ticket on the calldata: data ‖ abi.encode(ticket, signature) ‖ uint32 len ‖ 0x900bc3e1
+const withTicket = appendTicketSuffix(data, r.ticket.ticket, r.ticket.signature);
+// 3. call the router within 60 s: router.exec(target, withTicket) with the same value, from the same account
+```
+
+`appendTicketSuffix` is byte for byte `TollAllow.encodeSuffix` (tested against toll-allow's vectors). For a v4 hook,
+ask with `scope: "v4swap"` and pass `abi.encode(ticket, signature)` as `hookData`. The same option works on
+`checkTx(input, { ticket })`, where the ticket is in `assessment["x-toll"].ticket`.
+
+A ticket is necessary, never sufficient: the contract keeps its own checks (slippage, limits, access control), and
+should keep an owner bypass behind a timelock in case Toll is unreachable.
 
 ## Fail-open or fail-closed
 

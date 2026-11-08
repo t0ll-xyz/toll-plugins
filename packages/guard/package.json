@@ -1,7 +1,7 @@
 {
   "name": "@tollxyz/guard",
-  "version": "0.4.0",
-  "description": "Toll's live pre-sign check in front of an AI agent's wallet: viem, viem smart-account, ethers and x402 fetch wrappers that ask Toll (ALLOW / WARN / BLOCK, ERC-8265) before anything is signed on Robinhood Chain: transactions, messages, typed data, batches, user operations, EIP-7702 authorizations. Spend caps, allowlists and human approval around the verdict. Zero runtime dependencies.",
+  "version": "0.4.1",
+  "description": "Toll's live pre-sign check in front of an AI agent's wallet: viem, viem smart-account, ethers and x402 fetch wrappers that ask Toll (ALLOW / WARN / BLOCK, ERC-8265) before anything is signed on Robinhood Chain: transactions, messages, typed data, batches, user operations, EIP-7702 authorizations. Spend caps, allowlists and human approval around the verdict; single-use ALLOW tickets for contracts that require one. Zero runtime dependencies.",
   "license": "MIT",
   "author": "Toll",
   "type": "module",
@@ -37,6 +37,7 @@
     "erc-8004",
     "erc-8470",
     "erc-8265",
+    "allow-ticket",
     "robinhood-chain",
     "viem",
     "ethers",
