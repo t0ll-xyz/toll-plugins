@@ -84,7 +84,8 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
 - `check_agent`: whether its card loads, whether it answers over MCP or x402, its payment terms, and whether x402 pays
   its registered agentWallet. If it does not, stop and tell the owner.
 - `check_tx`: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment). Calldata it cannot read is WARN,
-  never ALLOW. `presign_risk_report` gives the signed facts (approval amounts, payee binding, text checks) with no
+  never ALLOW. What it reads (a simulated run, what a signature lets someone take, hidden text, x402 terms):
+  https://t0ll.xyz/agents/safety. `presign_risk_report` gives the signed facts (approval amounts, payee binding, text checks) with no
   verdict: treat not read as unknown, never as clean.
 
 ## Free limit

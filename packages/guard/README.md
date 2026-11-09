@@ -75,10 +75,15 @@ check the transaction itself when it is signed.
 ## What is checked
 
 Every check runs on Toll's server (`POST https://t0ll.xyz/api/tx/check`), so new checks reach you without a package
-update. The full list is at <https://t0ll.xyz/agents/x402#presign>: what the calldata or signature does (approvals,
+update. The full list is at <https://t0ll.xyz/agents/safety>: what the calldata or signature does (approvals,
 Permit / Permit2, transfers, swaps), unlimited approvals and approvals to a wallet instead of a contract, spenders and
 recipients Toll has flagged, a swap that pays someone else, the coin a swap buys (Toll's coin check: who is behind
-it), and for x402 the payee against the seller's registered ERC-8004 agentWallet (including `extra.erc8004`).
+it), the transaction simulated at the current block, what a signature lets someone take (the pull simulated on the
+wallet's real balances, in USD where Toll has a price), instructions aimed at AI agents in token text and in the text
+fields of EIP-712 typed data, a single-pool Uniswap v4 swap quoted on the coin's main pool (`swap-route-worse` when
+that pays more than 3% more), Uniswap v4 position manager calls (`lp-take-to-other`, `lp-mint-to-other`), and for x402
+the payee against the seller's registered ERC-8004 agentWallet (including `extra.erc8004`), an `upto` payment's
+signed maximum and an `auth-capture` payment's escrow, token collector and hold.
 
 The answer is an [ERC-8265](https://github.com/ethereum/ERCs/pull/1753) RiskAssessment:
 `{ action, warnings: [{ code, severity, message, "x-toll-evidence" }], scanners, "x-toll": { decoded, link, checked_at, note } }`.
