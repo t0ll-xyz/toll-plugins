@@ -1,3 +1,31 @@
+# Release wrappers 0.4.0 (2026-11-09): the agent-framework packages on `@tollxyz/sdk` 0.5.0
+
+`@tollxyz/sdk` 0.5.0 is on npm. Each wrapper now depends on `^0.5.0` and re-exports `verifyWebhook` and `readWebhook`.
+The by-list packages (agentkit, ai-sdk, langchain, mastra) expose every name in the SDK's `TOOL_NAMES` (27, the live
+server's list); plugin-elizaos is message-driven and adds two actions. `check_tx` takes the `ticket` option everywhere.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/agentkit` | 0.3.1 | 0.4.0 (actions `wallet_approvals`, `watch_coin`, `my_watches`, `unwatch_coin`, `watch_wallet`, `unwatch_wallet`; `check_tx` `ticket`) |
+| `@tollxyz/ai-sdk` | 0.3.1 | 0.4.0 (the same six tools; `check_tx` `ticket`) |
+| `@tollxyz/langchain` | 0.3.1 | 0.4.0 (the same six tools; `check_tx` `ticket`) |
+| `@tollxyz/mastra` | 0.3.1 | 0.4.0 (the same six tools; `check_tx` `ticket`) |
+| `@tollxyz/plugin-elizaos` | 0.3.1 | 0.4.0 (`TOLL_WALLET_APPROVALS`, `TOLL_BLOCKLIST` + `blocklistText`; `TOLL_CHECK_TX` passes `ticket`) |
+| `@tollxyz/goat-plugin` | 0.3.1 | unchanged, deprecated (GOAT upstream archived), do not publish |
+| sdk, mcp, guard, x402-seller, priors-guard, toll-sdk (PyPI) | | unchanged, do not publish |
+
+```sh
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                                             # tollxyz
+npm view @tollxyz/sdk@0.5.0 version                    # 0.5.0
+for d in agentkit ai-sdk langchain mastra plugin-elizaos; do
+  (cd packages/$d && npm run build && npm test && npm publish --access public) || { echo "STOP: $d"; break; }
+done
+for p in agentkit ai-sdk langchain mastra plugin-elizaos; do npm view @tollxyz/$p version; done   # each 0.4.0
+```
+
+---
+
 # Release 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
 
 Server first: `wallet_approvals`, `watch_wallet`, `unwatch_wallet` are live on https://t0ll.xyz/mcp (27 tools), and the

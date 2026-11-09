@@ -22,7 +22,7 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("all 21 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 27 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools).sort(), [...TOOL_NAMES].sort());
   assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, check who is behind it/);
@@ -178,4 +178,44 @@ test("pre_buy_check and check_coins (11-06): live descriptions, one call each wi
   assert.equal(await tools.pre_buy_check!.execute!({ address: TOKEN }, opts), "Decision: WAIT");
   assert.equal(await tools.check_coins!.execute!({ addresses: [TOKEN, HOOK] }, opts), "2 coins");
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["pre_buy_check", { address: TOKEN }], ["check_coins", { addresses: [TOKEN, HOOK] }]]);
+});
+
+const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
+const HOOK_URL = "https://example.com/toll-hook";
+test("0.4.0: wallet_approvals, watches and check_tx ticket: live descriptions, Toll's argument names, the key on every call", async () => {
+  const calls: Array<{ body: any; key: string | null }> = [];
+  const replies = ["a", "w", "[]", "{}", "w2", "{}", "t"];
+  const f = async (_u: string, init?: RequestInit) => {
+    calls.push({ body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get("x-toll-pass") });
+    return new Response(ok(replies.shift()!), { status: 200 });
+  };
+  const tools = tollTools({ client: new Toll({ fetch: f, tollKey: "tk_9", sleep: async () => {} }) });
+  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+    assert.equal(tools[n]!.description, LIVE_DESCRIPTIONS[n]);
+  }
+  const tx: any = await asSchema(tools.check_tx!.inputSchema).jsonSchema;
+  assert.ok(tx.properties.ticket);
+  assert.equal(await tools.wallet_approvals!.execute!({ wallet: WALLET }, opts), "a");
+  assert.equal(await tools.watch_coin!.execute!({ address: TOKEN, url: HOOK_URL }, opts), "w");
+  assert.equal(await tools.my_watches!.execute!({}, opts), "[]");
+  assert.equal(await tools.unwatch_coin!.execute!({ id: "w1" }, opts), "{}");
+  assert.equal(await tools.watch_wallet!.execute!({ address: WALLET, url: HOOK_URL }, opts), "w2");
+  assert.equal(await tools.unwatch_wallet!.execute!({ id: "w2" }, opts), "{}");
+  assert.equal(await tools.check_tx!.execute!({ to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: { scope: "call" } }, opts), "t");
+  assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [
+    ["wallet_approvals", { wallet: WALLET }],
+    ["watch_coin", { address: TOKEN, url: HOOK_URL }],
+    ["my_watches", {}],
+    ["unwatch_coin", { id: "w1" }],
+    ["watch_wallet", { address: WALLET, url: HOOK_URL }],
+    ["unwatch_wallet", { id: "w2" }],
+    ["check_tx", { to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: { scope: "call" } }],
+  ]);
+  for (const c of calls) assert.equal(c.key, "tk_9");
+});
+
+test("0.4.0: a watch without a Toll key is answered as text, never sent", async () => {
+  const { tools, bodies } = setup([]);
+  assert.match(await tools.watch_wallet!.execute!({ address: WALLET, url: HOOK_URL }, opts), /needs a Toll key/);
+  assert.equal(bodies.length, 0);
 });

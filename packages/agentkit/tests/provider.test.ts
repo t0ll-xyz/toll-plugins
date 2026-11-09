@@ -28,7 +28,7 @@ function provider(responses: string[]) {
 const ok = (text: string) => JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text }] } });
 const getAction = (p: TollActionProvider, suffix: string) => p.getActions({} as any).find((a) => a.name.endsWith(suffix))!;
 
-test("declares all 19 live tools as actions with prefixed names and schemas", () => {
+test("declares all 27 live tools as actions with prefixed names and schemas", () => {
   const actions = new TollActionProvider().getActions({} as any);
   assert.deepEqual(
     actions.map((a) => a.name).sort(),

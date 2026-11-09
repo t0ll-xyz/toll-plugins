@@ -31,6 +31,8 @@ test("plugin shape", () => {
     "TOLL_LARP_CHECK",
     "TOLL_DEV_RECORD",
     "TOLL_WALLET_PRIVACY",
+    "TOLL_WALLET_APPROVALS",
+    "TOLL_BLOCKLIST",
     "TOLL_LAUNCH_RECORD",
     "TOLL_FRESH_LAUNCHES",
     "TOLL_CHAIN_PULSE",
@@ -281,4 +283,73 @@ test("TOLL_CHECK_HOOK (11-05): a message naming a hook and its address calls che
   assert.equal(await a.validate({}, msg(`check ${HOOK}`)), false);
   assert.equal((await a.handler({}, msg(`what does the hook ${HOOK} do?`))).success, true);
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
+function restClient(replies: Array<{ status?: number; body: string }>) {
+  const calls: Array<{ url: string; body: any }> = [];
+  const f = async (url: string, init?: RequestInit) => {
+    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+    const r = replies.shift();
+    if (r === undefined) throw new Error("no more responses");
+    return new Response(r.body, { status: r.status ?? 200 });
+  };
+  return { toll: new Toll({ fetch: f, sleep: async () => {} }), calls };
+}
+const LIST = JSON.stringify({
+  name: "Toll blocklist",
+  chain: "robinhood",
+  chain_id: 4663,
+  generated_at: "2026-11-09T00:00:00Z",
+  count: 2,
+  sources: {},
+  license: "CC-BY-4.0",
+  docs: "https://t0ll.xyz/blocklist",
+  note: "",
+  reasons: { lp_pulled: "liquidity was pulled" },
+  entries: [
+    { address: "0x1111111111111111111111111111111111111111", kind: "token", chain: 4663, symbol: "OLD", reasons: ["lp_pulled"], first_seen: "2026-11-01T00:00:00Z", last_confirmed: "2026-11-02T00:00:00Z", evidence: "https://t0ll.xyz/c/0x1111", tx: null },
+    { address: "0x2222222222222222222222222222222222222222", kind: "token", chain: 4663, symbol: null, reasons: ["lp_pulled"], first_seen: "2026-11-05T00:00:00Z", last_confirmed: "2026-11-08T00:00:00Z", evidence: "https://t0ll.xyz/c/0x2222", tx: "0xabc" },
+  ],
+  changelog: [],
+});
+
+test("0.4.0 TOLL_WALLET_APPROVALS: needs an approvals word and a wallet; calls wallet_approvals", async () => {
+  const { toll, calls } = restClient([{ body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "2 approvals" }] } }) }]);
+  const p = createTollPlugin({ client: toll });
+  const a = act(p, "TOLL_WALLET_APPROVALS");
+  assert.equal(await a.validate({}, msg(`what approvals has ${WALLET} given?`)), true);
+  assert.equal(await a.validate({}, msg(`revoke anything on ${WALLET}?`)), true);
+  assert.equal(await a.validate({}, msg(`check ${WALLET}`)), false);
+  assert.equal(await a.validate({}, msg("what approvals do I have?")), false);
+  const res = await a.handler({}, msg(`list the allowances of ${WALLET}`));
+  assert.equal(res.success, true);
+  assert.equal(res.text, "2 approvals");
+  assert.deepEqual([calls[0].body.params.name, calls[0].body.params.arguments], ["wallet_approvals", { wallet: WALLET }]);
+});
+
+test("0.4.0 TOLL_BLOCKLIST: looks an address up, or lists the newest entries; never calls a coin clear", async () => {
+  const { toll, calls } = restClient([{ body: LIST }, { body: LIST }, { body: LIST }]);
+  const p = createTollPlugin({ client: toll });
+  const a = act(p, "TOLL_BLOCKLIST");
+  assert.equal(await a.validate({}, msg("is 0x1111111111111111111111111111111111111111 on the blocklist?")), true);
+  assert.equal(await a.validate({}, msg("show me the block list")), true);
+  assert.equal(await a.validate({}, msg(`check ${TOKEN}`)), false);
+  const hit = await a.handler({}, msg("is 0x1111111111111111111111111111111111111111 blocklisted?"));
+  assert.equal(hit.success, true);
+  assert.match(hit.text, /0x1111111111111111111111111111111111111111 is listed:\n0x1111111111111111111111111111111111111111 \(token, symbol "OLD"\) \| reasons: lp_pulled \(liquidity was pulled\)/);
+  const miss = await a.handler({}, msg(`is ${TOKEN} on the blocklist?`));
+  assert.match(miss.text, /is not on the list\. A coin that is not listed is not cleared/);
+  const all = await a.handler({}, msg("what's new on the blocklist?"));
+  assert.match(all.text, /2 entries, generated 2026-11-09T00:00:00Z/);
+  assert.ok(all.text.indexOf("0x2222") < all.text.indexOf("0x1111"), "newest first");
+  assert.match(all.text, /tx: 0xabc/);
+  assert.ok(calls.every((c) => c.url === "https://t0ll.xyz/api/blocklist"));
+});
+
+test("0.4.0 TOLL_CHECK_TX passes ticket through", async () => {
+  const { toll, calls } = restClient([{ body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "ALLOW" }] } }) }]);
+  const p = createTollPlugin({ client: toll });
+  await act(p, "TOLL_CHECK_TX").handler({}, msg(`check before I sign: {"to":"${TOKEN}","data":"0x","value":"0","from":"${WALLET}","ticket":true}`));
+  assert.deepEqual(calls[0].body.params.arguments, { to: TOKEN, data: "0x", value: "0", from: WALLET, ticket: {} });
 });

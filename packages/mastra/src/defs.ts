@@ -15,6 +15,7 @@ export type TollToolName =
   | "larp_check"
   | "dev_record"
   | "wallet_privacy"
+  | "wallet_approvals"
   | "fresh_launches"
   | "chain_pulse"
   | "launch_record"
@@ -29,9 +30,14 @@ export type TollToolName =
   | "institutions"
   | "guidance"
   | "macro"
-  | "stock_events";
+  | "stock_events"
+  | "watch_coin"
+  | "my_watches"
+  | "unwatch_coin"
+  | "watch_wallet"
+  | "unwatch_wallet";
 
-/** All twenty-one, in the server's order. */
+/** All twenty-seven, in the server's order. */
 export const TOOL_NAMES: TollToolName[] = [
   "check_coin",
   "pre_buy_check",
@@ -39,6 +45,7 @@ export const TOOL_NAMES: TollToolName[] = [
   "larp_check",
   "dev_record",
   "wallet_privacy",
+  "wallet_approvals",
   "fresh_launches",
   "chain_pulse",
   "launch_record",
@@ -54,6 +61,11 @@ export const TOOL_NAMES: TollToolName[] = [
   "guidance",
   "macro",
   "stock_events",
+  "watch_coin",
+  "my_watches",
+  "unwatch_coin",
+  "watch_wallet",
+  "unwatch_wallet",
 ];
 
 /** Toll's text (as Toll sent it), or one line saying why it could not answer. Never throws. */
@@ -78,6 +90,7 @@ export const descriptions: Record<TollToolName, string> = {
     "A launcher wallet's record on Robinhood Chain: how many coins it launched, how many graduated, and whether it sold. Information only, not advice.",
   wallet_privacy:
     "What anyone can learn about a Robinhood Chain wallet: funding, linked wallets, holdings, activity hours. The grade measures exposure, not whether the wallet is good or bad.",
+  wallet_approvals: LIVE_DESCRIPTIONS.wallet_approvals,
   fresh_launches: "The newest coins launched on Robinhood Chain, with the first facts Toll reads about each.",
   chain_pulse: "How busy Robinhood Chain is right now: launches, graduations and trades.",
   launch_record:
@@ -95,6 +108,11 @@ export const descriptions: Record<TollToolName, string> = {
   guidance: LIVE_DESCRIPTIONS.guidance,
   macro: LIVE_DESCRIPTIONS.macro,
   stock_events: LIVE_DESCRIPTIONS.stock_events,
+  watch_coin: LIVE_DESCRIPTIONS.watch_coin,
+  my_watches: LIVE_DESCRIPTIONS.my_watches,
+  unwatch_coin: LIVE_DESCRIPTIONS.unwatch_coin,
+  watch_wallet: LIVE_DESCRIPTIONS.watch_wallet,
+  unwatch_wallet: LIVE_DESCRIPTIONS.unwatch_wallet,
 };
 
 type Inputs = { [K in TollToolName]: z.infer<(typeof schemas)[K]> };
@@ -108,6 +126,7 @@ export function runners(toll: Toll): { [K in TollToolName]: (input: Inputs[K]) =
     larp_check: ({ token, chain }) => run(() => toll.larpCheck(token, { wait: true, ...(chain ? { chain } : {}) })),
     dev_record: ({ wallet, chain }) => run(() => toll.devRecord(wallet, chain ? { chain } : {})),
     wallet_privacy: ({ wallet }) => run(() => toll.walletPrivacy(wallet)),
+    wallet_approvals: ({ wallet }) => run(() => toll.walletApprovals(wallet)),
     fresh_launches: ({ limit }) => run(() => toll.freshLaunches(limit)),
     chain_pulse: () => run(() => toll.chainPulse()),
     launch_record: ({ address }) => run(() => toll.launchRecord(address)),
@@ -123,6 +142,11 @@ export function runners(toll: Toll): { [K in TollToolName]: (input: Inputs[K]) =
     guidance: ({ id, limit }) => run(() => toll.guidance(id, { limit })),
     macro: () => run(() => toll.macro()),
     stock_events: ({ since, kind, limit }) => run(() => toll.stockEvents({ since, kind, limit })),
+    watch_coin: ({ address, url }) => run(() => toll.watchCoin(address, url)),
+    my_watches: () => run(() => toll.myWatches()),
+    unwatch_coin: ({ id }) => run(() => toll.unwatchCoin(id)),
+    watch_wallet: ({ address, url }) => run(() => toll.watchWallet(address, url)),
+    unwatch_wallet: ({ id }) => run(() => toll.unwatchWallet(id)),
   };
 }
 

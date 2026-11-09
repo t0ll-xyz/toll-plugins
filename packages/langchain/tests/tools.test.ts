@@ -24,11 +24,11 @@ function setup(responses: string[]) {
   return { tools, by, bodies };
 }
 
-test("all 21 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 27 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools, by } = setup([]);
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
   assert.deepEqual(TOOL_NAMES, [...SDK_TOOL_NAMES]);
-  assert.equal(tools.length, 21);
+  assert.equal(tools.length, 27);
   assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(by.check_agent.description, /^Before paying or trusting an ERC-8004 agent/);
   assert.match(by.larp_check.description, /^Is there a real product behind this coin on Robinhood Chain\?/);
@@ -46,7 +46,7 @@ test("schemas convert to OpenAI function JSON for bindTools", () => {
   const agent: any = convertToOpenAITool(by.check_agent as any).function;
   assert.deepEqual(agent.parameters.properties.id.anyOf.map((x: any) => x.type), ["integer", "string"]);
   const tx: any = convertToOpenAITool(by.check_tx as any).function;
-  assert.deepEqual(Object.keys(tx.parameters.properties).sort(), ["agentId", "chainId", "data", "from", "registry", "strict", "to", "typedData", "value", "x402"]);
+  assert.deepEqual(Object.keys(tx.parameters.properties).sort(), ["agentId", "chainId", "data", "from", "registry", "strict", "ticket", "to", "typedData", "value", "x402"]);
   const ev: any = convertToOpenAITool(by.stock_events as any).function;
   assert.equal(ev.parameters.properties.kind.enum.length, 9);
 });
@@ -176,4 +176,43 @@ test("check_hook (11-05): one call with { address }", async () => {
   assert.match(by.check_hook.description, /Uniswap v4 hook/);
   assert.equal(await by.check_hook.invoke({ address: HOOK }), "h");
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
+const HOOK_URL = "https://example.com/toll-hook";
+test("0.4.0: wallet_approvals, watches and check_tx ticket: live descriptions, Toll's argument names, the key on every call", async () => {
+  const calls: Array<{ body: any; key: string | null }> = [];
+  const replies = ["a", "w", "[]", "{}", "w2", "{}", "t"];
+  const f = async (_u: string, init?: RequestInit) => {
+    calls.push({ body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get("x-toll-pass") });
+    return new Response(ok(replies.shift()!), { status: 200 });
+  };
+  const by = Object.fromEntries(tollTools({ tollKey: "tk_9", client: new Toll({ fetch: f, tollKey: "tk_9", sleep: async () => {} }) }).map((t) => [t.name, t]));
+  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+    assert.equal(by[n].description, LIVE_DESCRIPTIONS[n]);
+  }
+  assert.ok((convertToOpenAITool(by.check_tx).function.parameters as any).properties.ticket);
+  assert.equal(await by.wallet_approvals.invoke({ wallet: WALLET }), "a");
+  assert.equal(await by.watch_coin.invoke({ address: TOKEN, url: HOOK_URL }), "w");
+  assert.equal(await by.my_watches.invoke({}), "[]");
+  assert.equal(await by.unwatch_coin.invoke({ id: "w1" }), "{}");
+  assert.equal(await by.watch_wallet.invoke({ address: WALLET, url: HOOK_URL }), "w2");
+  assert.equal(await by.unwatch_wallet.invoke({ id: "w2" }), "{}");
+  assert.equal(await by.check_tx.invoke({ to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: true }), "t");
+  assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [
+    ["wallet_approvals", { wallet: WALLET }],
+    ["watch_coin", { address: TOKEN, url: HOOK_URL }],
+    ["my_watches", {}],
+    ["unwatch_coin", { id: "w1" }],
+    ["watch_wallet", { address: WALLET, url: HOOK_URL }],
+    ["unwatch_wallet", { id: "w2" }],
+    ["check_tx", { to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: {} }],
+  ]);
+  for (const c of calls) assert.equal(c.key, "tk_9");
+});
+
+test("0.4.0: a watch without a Toll key is answered as text, never sent", async () => {
+  const { by, bodies } = setup([]);
+  assert.match(String(await by.watch_wallet.invoke({ address: WALLET, url: HOOK_URL })), /needs a Toll key/);
+  assert.equal(bodies.length, 0);
 });

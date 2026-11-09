@@ -9,8 +9,8 @@ import { descriptions, pick, runners, schemas, type TollToolName } from "./defs.
 export { formatResult } from "./format.js";
 export { TOOL_NAMES } from "./defs.js";
 export type { TollToolName } from "./defs.js";
-export { Toll, TollError } from "@tollxyz/sdk";
-export type { TollResult } from "@tollxyz/sdk";
+export { Toll, TollError, verifyWebhook, readWebhook } from "@tollxyz/sdk";
+export type { TollResult, WatchEvent } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
   /** A ready Toll client (for example with a custom fetch). Default: new Toll({ tollKey }). */
@@ -20,7 +20,7 @@ export interface TollToolsOptions {
    * (more new coins and Markets calls a day, the live stock_events feed). Ignored when client is given.
    */
   tollKey?: string;
-  /** Which tools to return. Default: all twenty-one. */
+  /** Which tools to return. Default: all twenty-seven. */
   only?: TollToolName[];
 }
 

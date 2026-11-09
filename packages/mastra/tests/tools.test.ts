@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { Agent } from "@mastra/core/agent";
 import { Toll } from "@tollxyz/sdk";
 import { tollTools, TOOL_NAMES } from "../src/index.js";
+import { LIVE_DESCRIPTIONS } from "../src/live.js";
 
 const fx = (n: string) => readFileSync(new URL(`../../sdk-js/tests/fixtures/${n}.json`, import.meta.url), "utf8");
 const TOKEN = "0xff9e86e6b21fd688027981bee4b64c8b6b804ed3";
@@ -21,10 +22,10 @@ function setup(responses: string[]) {
   return { tools: tollTools({ client: new Toll({ fetch: f, sleep: async () => {} }) }), bodies };
 }
 
-test("all 21 live tools keyed and id'd by Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 27 live tools keyed and id'd by Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools), TOOL_NAMES);
-  assert.equal(Object.keys(tools).length, 21);
+  assert.equal(Object.keys(tools).length, 27);
   for (const t of Object.values(tools)) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(t!.description));
   for (const [k, t] of Object.entries(tools)) {
     assert.equal(t!.id, k);
@@ -138,4 +139,42 @@ test("check_hook (11-05): one call with { address }", async () => {
   assert.match(tools.check_hook!.description, /Uniswap v4 hook/);
   assert.equal(await tools.check_hook!.execute!({ address: HOOK }, ctx), "h");
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
+const HOOK_URL = "https://example.com/toll-hook";
+test("0.4.0: wallet_approvals, watches and check_tx ticket: live descriptions, Toll's argument names, the key on every call", async () => {
+  const calls: Array<{ body: any; key: string | null }> = [];
+  const replies = ["a", "w", "[]", "{}", "w2", "{}", "t"];
+  const f = async (_u: string, init?: RequestInit) => {
+    calls.push({ body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get("x-toll-pass") });
+    return new Response(ok(replies.shift()!), { status: 200 });
+  };
+  const tools = tollTools({ client: new Toll({ fetch: f, tollKey: "tk_9", sleep: async () => {} }) });
+  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+    assert.equal(tools[n]!.description, LIVE_DESCRIPTIONS[n]);
+  }
+  assert.equal(await tools.wallet_approvals!.execute!({ wallet: WALLET }, ctx), "a");
+  assert.equal(await tools.watch_coin!.execute!({ address: TOKEN, url: HOOK_URL }, ctx), "w");
+  assert.equal(await tools.my_watches!.execute!({}, ctx), "[]");
+  assert.equal(await tools.unwatch_coin!.execute!({ id: "w1" }, ctx), "{}");
+  assert.equal(await tools.watch_wallet!.execute!({ address: WALLET, url: HOOK_URL }, ctx), "w2");
+  assert.equal(await tools.unwatch_wallet!.execute!({ id: "w2" }, ctx), "{}");
+  assert.equal(await tools.check_tx!.execute!({ to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: true }, ctx), "t");
+  assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [
+    ["wallet_approvals", { wallet: WALLET }],
+    ["watch_coin", { address: TOKEN, url: HOOK_URL }],
+    ["my_watches", {}],
+    ["unwatch_coin", { id: "w1" }],
+    ["watch_wallet", { address: WALLET, url: HOOK_URL }],
+    ["unwatch_wallet", { id: "w2" }],
+    ["check_tx", { to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: {} }],
+  ]);
+  for (const c of calls) assert.equal(c.key, "tk_9");
+});
+
+test("0.4.0: a watch without a Toll key is answered as text, never sent", async () => {
+  const { tools, bodies } = setup([]);
+  assert.match(String(await tools.watch_wallet!.execute!({ address: WALLET, url: HOOK_URL }, ctx)), /needs a Toll key/);
+  assert.equal(bodies.length, 0);
 });

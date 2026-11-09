@@ -6,6 +6,7 @@ import type { Action, HandlerCallback, IAgentRuntime, Memory, Plugin, Provider, 
 import { RH_ONLY, STOCK_EVENT_KINDS, Toll, TollError, type StockEventKind, type TollResult } from "@tollxyz/sdk";
 import { extractAddress, extractAddresses, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
 import { LIVE_DESCRIPTIONS } from "./live.js";
+import { BLOCKLIST_URL, blocklistText } from "./blocklist.js";
 import {
   MACRO_NOTE,
   MARKETS_NOTE,
@@ -24,6 +25,7 @@ import {
 
 export { extractAddress, extractAddresses, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
 export { LIVE_DESCRIPTIONS } from "./live.js";
+export { BLOCKLIST_URL, blocklistText } from "./blocklist.js";
 export {
   FACTS_NOTE,
   MACRO_NOTE,
@@ -43,8 +45,8 @@ export {
   type MarketsOptions,
   type PaidMarketsKind,
 } from "./markets.js";
-export { Toll, TollError } from "@tollxyz/sdk";
-export type { TollResult } from "@tollxyz/sdk";
+export { Toll, TollError, verifyWebhook, readWebhook } from "@tollxyz/sdk";
+export type { TollResult, WatchEvent } from "@tollxyz/sdk";
 
 export interface TollPluginOptions {
   /** A ready Toll client for the coin actions (for example with a custom fetch). Default: a client that sends the Toll key. */
@@ -99,6 +101,10 @@ const GUIDANCE_WORDS = /\b(guidance|outlook|forecast|kpis?|non-?gaap|earnings re
 const EVENT_WORDS = /\b(stock (?:token )?events?|events? feed|listings?|delist(?:ed|ings?)?|multiplier|corporate actions?|feed (?:stale|paused|resumed)|new filings?)\b/i;
 /** Words that ask what a wallet gives away. */
 const PRIVACY_WORDS = /\b(privacy|private|exposed?|exposure|dox(?:x)?(?:ed)?|what can (?:anyone|people|someone) (?:see|learn))\b/i;
+/** Words that ask for a wallet's token approvals (wallet_approvals, 0.4.0). */
+const APPROVAL_WORDS = /\b(approvals?|approved|allowances?|revoke|permit2|spenders?)\b/i;
+/** Words that ask for Toll's open blocklist (0.4.0). */
+const BLOCKLIST_WORDS = /\b(block[ -]?list(?:ed)?|deny[ -]?list(?:ed)?|black[ -]?list(?:ed)?)\b/i;
 /** Words that ask for the call Toll froze at launch. */
 const LAUNCH_RECORD_WORDS = /\b(launch record|call at launch|at launch|frozen call|launch call)\b/i;
 /** Words that ask for the newest coins. */
@@ -229,6 +235,24 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       run: ({ client: c }, t) => c.walletPrivacy(extractWallet(t)!.wallet),
       example: [`how exposed is my wallet ${DEV}? what can anyone learn?`, "Here is Toll's privacy read of that wallet."],
       missing: "No wallet in the message for TOLL_WALLET_PRIVACY: send the 0x wallet (40 hex characters) with a word like privacy.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_WALLET_APPROVALS",
+      similes: ["WALLET_APPROVALS", "TOKEN_APPROVALS", "CHECK_ALLOWANCES", "WHAT_TO_REVOKE"],
+      description: `${LIVE_DESCRIPTIONS.wallet_approvals} Needs a word like approvals, allowances or revoke and a 0x wallet in the message.`,
+      canRun: (t) => APPROVAL_WORDS.test(t) && extractWallet(t) !== null,
+      run: ({ client: c }, t) => c.walletApprovals(extractWallet(t)!.wallet),
+      example: [`what approvals has ${DEV} given? anything to revoke?`, "Here are that wallet's live approvals Toll read, each with its risk and the revoke call."],
+      missing: "No wallet in the message for TOLL_WALLET_APPROVALS: send the 0x wallet (40 hex characters) with a word like approvals or revoke.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_BLOCKLIST",
+      similes: ["BLOCKLIST", "IS_IT_BLOCKLISTED", "BLOCKLIST_LOOKUP"],
+      description: `Toll's open blocklist of Robinhood Chain tokens, contracts and wallets (free, no key): each entry with its reasons, when it was first seen and last confirmed, and the page with the facts. With a 0x address in the message it says whether that address is listed; without one it lists the newest entries. A coin that is not listed is not cleared: TOLL_CHECK_COIN reads it. Runs when the message says blocklist. Full list: ${BLOCKLIST_URL}`,
+      canRun: (t) => BLOCKLIST_WORDS.test(t),
+      run: ({ client: c }, t) => blocklistText(c, extractWallet(t)?.wallet),
+      example: [`is ${CA} on the Toll blocklist?`, "Here is what Toll's open blocklist says about that address."],
+      missing: "TOLL_BLOCKLIST runs when the message says blocklist (with a 0x address to look one up).",
     }),
     makeAction(resolve, {
       name: "TOLL_LAUNCH_RECORD",
@@ -427,7 +451,7 @@ export function createTollPlugin(opts: TollPluginOptions = {}): Plugin {
   return {
     name: "toll",
     description:
-      "Toll's checks on Robinhood Chain (4663): who is behind a coin, the dev's record, whether there is a real product, a wallet's privacy, ERC-8004 agents, a pre-sign check before signing (ALLOW / WARN / BLOCK) and the signed pre-sign report; and Robinhood Stock Token facts, the companies' SEC fundamentals, insider trades, 13F holders and earnings guidance, the Stock Token event feed and US macro, with their sources. Information only, not advice.",
+      "Toll's checks on Robinhood Chain (4663): who is behind a coin, the dev's record, whether there is a real product, a wallet's privacy and its token approvals, Toll's open blocklist, ERC-8004 agents, a pre-sign check before signing (ALLOW / WARN / BLOCK) and the signed pre-sign report; and Robinhood Stock Token facts, the companies' SEC fundamentals, insider trades, 13F holders and earnings guidance, the Stock Token event feed and US macro, with their sources. Information only, not advice.",
     actions: createTollActions(client, rest),
     providers: [createTollProvider()],
   };

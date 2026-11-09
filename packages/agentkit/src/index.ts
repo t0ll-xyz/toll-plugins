@@ -41,7 +41,13 @@ import {
   StockEventsSchema,
   StockTokenSchema,
   StockTokensSchema,
+  UnwatchCoinSchema,
+  UnwatchWalletSchema,
+  WalletApprovalsSchema,
   WalletPrivacySchema,
+  WatchCoinSchema,
+  WatchWalletSchema,
+  MyWatchesSchema,
 } from "./schemas.js";
 
 export { formatResult } from "./format.js";
@@ -66,8 +72,8 @@ export {
   type MarketsOptions,
   type PaidMarketsKind,
 } from "./markets.js";
-export { Toll, TollError } from "@tollxyz/sdk";
-export type { TollResult } from "@tollxyz/sdk";
+export { Toll, TollError, verifyWebhook, readWebhook } from "@tollxyz/sdk";
+export type { TollResult, WatchEvent } from "@tollxyz/sdk";
 
 export interface TollActionProviderOptions {
   /** A ready Toll client for the MCP actions (its own fetch). Default: a client that sends tollKey. */
@@ -101,7 +107,7 @@ export class TollActionProvider extends ActionProvider {
     const o: TollActionProviderOptions = clientOrOptions instanceof Toll ? { client: clientOrOptions } : clientOrOptions;
     this.tollKey = o.tollKey;
     this.fetchFn = o.fetch ?? ((input, init) => globalThis.fetch(input, init));
-    this.client = o.client ?? new Toll({ fetch: withTollKey(this.fetchFn, o.tollKey) });
+    this.client = o.client ?? new Toll({ fetch: withTollKey(this.fetchFn, o.tollKey), ...(o.tollKey ? { tollKey: o.tollKey } : {}) });
   }
 
   private get markets() {
@@ -151,6 +157,11 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({ name: "wallet_privacy", description: LIVE_DESCRIPTIONS.wallet_privacy, schema: WalletPrivacySchema })
   async walletPrivacy(args: z.infer<typeof WalletPrivacySchema>): Promise<string> {
     return run(() => this.client.walletPrivacy(args.wallet));
+  }
+
+  @CreateAction({ name: "wallet_approvals", description: LIVE_DESCRIPTIONS.wallet_approvals, schema: WalletApprovalsSchema })
+  async walletApprovals(args: z.infer<typeof WalletApprovalsSchema>): Promise<string> {
+    return run(() => this.client.walletApprovals(args.wallet));
   }
 
   @CreateAction({
@@ -259,6 +270,31 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({ name: "stock_events", description: `${LIVE_DESCRIPTIONS.stock_events} ${MARKETS_NOTE}`, schema: StockEventsSchema })
   async stockEvents(args: z.infer<typeof StockEventsSchema>): Promise<string> {
     return run(() => this.client.stockEvents(args));
+  }
+
+  @CreateAction({ name: "watch_coin", description: LIVE_DESCRIPTIONS.watch_coin, schema: WatchCoinSchema })
+  async watchCoin(args: z.infer<typeof WatchCoinSchema>): Promise<string> {
+    return run(() => this.client.watchCoin(args.address, args.url));
+  }
+
+  @CreateAction({ name: "my_watches", description: LIVE_DESCRIPTIONS.my_watches, schema: MyWatchesSchema })
+  async myWatches(_args: z.infer<typeof MyWatchesSchema>): Promise<string> {
+    return run(() => this.client.myWatches());
+  }
+
+  @CreateAction({ name: "unwatch_coin", description: LIVE_DESCRIPTIONS.unwatch_coin, schema: UnwatchCoinSchema })
+  async unwatchCoin(args: z.infer<typeof UnwatchCoinSchema>): Promise<string> {
+    return run(() => this.client.unwatchCoin(args.id));
+  }
+
+  @CreateAction({ name: "watch_wallet", description: LIVE_DESCRIPTIONS.watch_wallet, schema: WatchWalletSchema })
+  async watchWallet(args: z.infer<typeof WatchWalletSchema>): Promise<string> {
+    return run(() => this.client.watchWallet(args.address, args.url));
+  }
+
+  @CreateAction({ name: "unwatch_wallet", description: LIVE_DESCRIPTIONS.unwatch_wallet, schema: UnwatchWalletSchema })
+  async unwatchWallet(args: z.infer<typeof UnwatchWalletSchema>): Promise<string> {
+    return run(() => this.client.unwatchWallet(args.id));
   }
 
   /** Toll reads public chain data, so it works whatever network the agent's wallet is on. */

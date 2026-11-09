@@ -100,3 +100,45 @@ test("check_hook (11-05): the live description, calls the MCP tool with the key"
   assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [["check_hook", { address: HOOK }]]);
   assert.equal(calls[0].headers.get("x-toll-pass"), "tk_9");
 });
+
+const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
+const HOOK_URL = "https://example.com/toll-hook";
+test("0.4.0: wallet_approvals, watches and check_tx ticket carry the live descriptions and call the MCP tools with the key", async () => {
+  const p0 = new TollActionProvider();
+  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+    assert.equal(getAction(p0, n).description, LIVE_DESCRIPTIONS[n]);
+  }
+  assert.ok(getAction(p0, "check_tx").schema.safeParse({ to: TOKEN, from: TOKEN, ticket: true }).success);
+  assert.ok(getAction(p0, "check_tx").schema.safeParse({ to: TOKEN, from: TOKEN, ticket: { scope: "v4swap" } }).success);
+  assert.ok(!getAction(p0, "check_tx").schema.safeParse({ to: TOKEN, ticket: { scope: "any" } }).success);
+  assert.ok(!getAction(p0, "watch_wallet").schema.safeParse({ address: WALLET }).success);
+  const watch = JSON.stringify({ id: "w1", secret: "s1" });
+  const { p, calls } = provider(["a", watch, "[]", "{}", watch, "{}", "t"].map((t) => ({ body: ok(t) })), "tk_9");
+  assert.equal(await getAction(p, "wallet_approvals").invoke({ wallet: WALLET }), "a");
+  assert.equal(await getAction(p, "watch_coin").invoke({ address: TOKEN, url: HOOK_URL }), watch);
+  assert.equal(await getAction(p, "my_watches").invoke({}), "[]");
+  assert.equal(await getAction(p, "unwatch_coin").invoke({ id: "w1" }), "{}");
+  assert.equal(await getAction(p, "watch_wallet").invoke({ address: WALLET, url: HOOK_URL }), watch);
+  assert.equal(await getAction(p, "unwatch_wallet").invoke({ id: "w2" }), "{}");
+  assert.equal(await getAction(p, "check_tx").invoke({ to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: true }), "t");
+  assert.deepEqual(
+    calls.map((c) => [c.body.params.name, c.body.params.arguments]),
+    [
+      ["wallet_approvals", { wallet: WALLET }],
+      ["watch_coin", { address: TOKEN, url: HOOK_URL }],
+      ["my_watches", {}],
+      ["unwatch_coin", { id: "w1" }],
+      ["watch_wallet", { address: WALLET, url: HOOK_URL }],
+      ["unwatch_wallet", { id: "w2" }],
+      ["check_tx", { to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: {} }],
+    ],
+  );
+  for (const c of calls) assert.equal(c.headers.get("x-toll-pass"), "tk_9");
+});
+
+test("0.4.0: a watch without a Toll key is answered as text, never sent", async () => {
+  const { p, calls } = provider([]);
+  const out = await getAction(p, "watch_wallet").invoke({ address: WALLET, url: HOOK_URL });
+  assert.match(out, /needs a Toll key/);
+  assert.equal(calls.length, 0);
+});

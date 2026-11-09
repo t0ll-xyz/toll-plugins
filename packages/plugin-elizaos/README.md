@@ -4,11 +4,11 @@ An [elizaOS](https://docs.elizaos.ai) plugin for [Toll](https://t0ll.xyz/agents/
 
 Toll reads Robinhood Chain only right now: actions read 0x addresses only; a message with only a Solana mint or another chain's address gets "Toll reads Robinhood Chain only right now." and nothing is sent.
 
-18 actions, one per live Toll tool, each run when the message text holds what it needs:
+23 actions, each run when the message text holds what it needs:
 
-- `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK`: a token's 0x address. `TOLL_DEV_RECORD`: a deployer wallet. `TOLL_WALLET_PRIVACY`: a word like privacy or exposed and a wallet. `TOLL_LAUNCH_RECORD`: the words launch record or at launch and a token. `TOLL_FRESH_LAUNCHES`: new coins or fresh launches (`top 5` sets how many). `TOLL_CHAIN_PULSE`: how busy the chain is. These answer with Toll's text.
+- `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK`: a token's 0x address. `TOLL_DEV_RECORD`: a deployer wallet. `TOLL_WALLET_PRIVACY`: a word like privacy or exposed and a wallet. `TOLL_WALLET_APPROVALS`: a word like approvals, allowances or revoke and a wallet. `TOLL_BLOCKLIST`: the word blocklist (with a 0x address to look one up). `TOLL_LAUNCH_RECORD`: the words launch record or at launch and a token. `TOLL_FRESH_LAUNCHES`: new coins or fresh launches (`top 5` sets how many). `TOLL_CHAIN_PULSE`: how busy the chain is. These answer with Toll's text.
 - `TOLL_CHECK_AGENT`: an ERC-8004 agent id (`agent 20030` or `agent #20030`).
-- `TOLL_CHECK_TX`: the request pasted as JSON in the message: `{to, data, value, from}`, `{typedData: {...}}`, `{x402: {...}}` or a 402 body with `accepts`. `TOLL_PRESIGN_RISK_REPORT`: a PresignRequest pasted as JSON with `"version": "erc-presign/1"`.
+- `TOLL_CHECK_TX`: the request pasted as JSON in the message: `{to, data, value, from}`, `{typedData: {...}}`, `{x402: {...}}` or a 402 body with `accepts`; add `"ticket": true` for an ALLOW ticket. `TOLL_PRESIGN_RISK_REPORT`: a PresignRequest pasted as JSON with `"version": "erc-presign/1"`.
 - For Robinhood Stock Tokens: `TOLL_STOCK_TOKEN` (the word stock and a ticker, `$NVDA` or `NVDA`, or the token's contract) and `TOLL_STOCK_TOKENS` (the list); for the companies behind them `TOLL_FUNDAMENTALS` (a word like fundamentals, financials, revenue, earnings or P/E, and a ticker), `TOLL_INSIDER_TRADES` (insider or Form 4, and a ticker), `TOLL_INSTITUTIONS` (13F or institutions, and a ticker) and `TOLL_GUIDANCE` (guidance, outlook or KPIs, and a ticker); `TOLL_STOCK_EVENTS` (stock token events, listings, multiplier changes, corporate actions or filings; a kind named in the message filters); and `TOLL_MACRO` (macro, rates, inflation, the yield curve or jobs). The Markets ones answer with Toll's JSON.
 
 A provider adds a one-line hint to the context only when a message contains a token address.
@@ -49,7 +49,7 @@ const project: Project = { agents: [agent] };
 export default project;
 ```
 
-With a Toll key (your $TOLL tier): set `TOLL_KEY` in the agent's settings or secrets, or `createTollPlugin({ tollKey })`. With your own client (for example a custom `fetch`): `createTollPlugin({ client: new Toll({ fetch }) })`, or `createTollPlugin({ fetch, tollKey })`. `Toll` and `TollError` are re-exported from `@tollxyz/sdk`.
+With a Toll key (your $TOLL tier): set `TOLL_KEY` in the agent's settings or secrets, or `createTollPlugin({ tollKey })`. With your own client (for example a custom `fetch`): `createTollPlugin({ client: new Toll({ fetch }) })`, or `createTollPlugin({ fetch, tollKey })`. `Toll`, `TollError`, `verifyWebhook` and `readWebhook` are re-exported from `@tollxyz/sdk`.
 
 ## Robinhood Stock Tokens (Toll Markets)
 
@@ -68,6 +68,19 @@ Facts with their sources, not advice. The EFFR is subject to the Terms of Use po
 ## Before signing: TOLL_CHECK_TX and TOLL_PRESIGN_RISK_REPORT
 
 `TOLL_CHECK_TX` sends the pasted transaction, EIP-712 signature request or x402 payment to Toll's `check_tx`, which answers ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment. Pass on every warning; on BLOCK do not sign without the owner's say. `TOLL_PRESIGN_RISK_REPORT` sends a PresignRequest (ERC draft, ethereum/ERCs PR #2134) to `presign_risk_report`, which returns typed facts about the unsigned request, EIP-712 signed by Toll, with no verdict.
+
+## Wallet approvals, the blocklist and ALLOW tickets (0.4.0)
+
+`TOLL_WALLET_APPROVALS` runs Toll's `wallet_approvals` for the wallet in the message: its live token approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2), each with the spender, the amount (unlimited flagged), a risk (high / medium / low) and the revoke transaction with check_tx's answer on it. `TOLL_BLOCKLIST` reads Toll's open blocklist (<https://t0ll.xyz/api/blocklist>, free, no key): with a 0x address it says whether that address is listed, with its reasons, dates and evidence page; without one it lists the 10 newest entries. A coin that is not listed is not cleared. `TOLL_CHECK_TX` passes `"ticket": true` (or `{"consumer", "scope"}`) through to `check_tx`, which then returns a signed single-use ALLOW ticket in the RiskAssessment's `x-toll.ticket` (never for a BLOCK).
+
+```text
+user:  what approvals has 0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc given? anything to revoke?
+agent: (TOLL_WALLET_APPROVALS) Here are that wallet's live approvals Toll read, each with its risk and the revoke call.
+user:  is 0xff9e86e6b21fd688027981bee4b64c8b6b804ed3 on the Toll blocklist?
+agent: (TOLL_BLOCKLIST) ... is not on the list. A coin that is not listed is not cleared: check it with TOLL_CHECK_COIN.
+```
+
+The same blocklist is a function too: `blocklistText(new Toll(), address?)`. Webhook watches are in the SDK (`new Toll({ tollKey }).watchWallet(address, url)`, events checked with the re-exported `verifyWebhook`).
 
 ## Free limit and the paid path
 

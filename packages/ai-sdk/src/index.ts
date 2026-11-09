@@ -43,8 +43,8 @@ export {
   type MarketsOptions,
   type PaidMarketsKind,
 } from "./markets.js";
-export { Toll, TollError } from "@tollxyz/sdk";
-export type { TollResult } from "@tollxyz/sdk";
+export { Toll, TollError, verifyWebhook, readWebhook } from "@tollxyz/sdk";
+export type { TollResult, WatchEvent } from "@tollxyz/sdk";
 
 export interface TollToolsOptions {
   /** A ready Toll client for the MCP tools (for example with a custom fetch). Default: a client that sends tollKey. */
@@ -53,7 +53,7 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all twenty-one. */
+  /** Which tools to return. Default: all twenty-seven. */
   only?: TollToolName[];
 }
 
@@ -64,6 +64,7 @@ export type TollToolName =
   | "larp_check"
   | "dev_record"
   | "wallet_privacy"
+  | "wallet_approvals"
   | "launch_record"
   | "fresh_launches"
   | "chain_pulse"
@@ -78,7 +79,12 @@ export type TollToolName =
   | "institutions"
   | "guidance"
   | "macro"
-  | "stock_events";
+  | "stock_events"
+  | "watch_coin"
+  | "my_watches"
+  | "unwatch_coin"
+  | "watch_wallet"
+  | "unwatch_wallet";
 
 async function run(fn: () => Promise<TollResult>): Promise<string> {
   try {
@@ -94,7 +100,7 @@ async function run(fn: () => Promise<TollResult>): Promise<string> {
  */
 export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolName, Tool>> {
   const fetchFn: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
-  const toll = opts.client ?? new Toll({ fetch: withTollKey(fetchFn, opts.tollKey) });
+  const toll = opts.client ?? new Toll({ fetch: withTollKey(fetchFn, opts.tollKey), ...(opts.tollKey ? { tollKey: opts.tollKey } : {}) });
   const markets = { fetch: fetchFn, tollKey: opts.tollKey };
   const all = {
     check_coin: tool({
@@ -129,6 +135,11 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: LIVE_DESCRIPTIONS.wallet_privacy,
       inputSchema: SCHEMAS.wallet_privacy,
       execute: async ({ wallet }) => run(() => toll.walletPrivacy(wallet)),
+    }),
+    wallet_approvals: tool({
+      description: LIVE_DESCRIPTIONS.wallet_approvals,
+      inputSchema: SCHEMAS.wallet_approvals,
+      execute: async ({ wallet }) => run(() => toll.walletApprovals(wallet)),
     }),
     launch_record: tool({
       description:
@@ -205,6 +216,31 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: `${LIVE_DESCRIPTIONS.stock_events} ${MARKETS_NOTE}`,
       inputSchema: SCHEMAS.stock_events,
       execute: async (args) => run(() => toll.stockEvents(args)),
+    }),
+    watch_coin: tool({
+      description: LIVE_DESCRIPTIONS.watch_coin,
+      inputSchema: SCHEMAS.watch_coin,
+      execute: async ({ address, url }) => run(() => toll.watchCoin(address, url)),
+    }),
+    my_watches: tool({
+      description: LIVE_DESCRIPTIONS.my_watches,
+      inputSchema: SCHEMAS.my_watches,
+      execute: async () => run(() => toll.myWatches()),
+    }),
+    unwatch_coin: tool({
+      description: LIVE_DESCRIPTIONS.unwatch_coin,
+      inputSchema: SCHEMAS.unwatch_coin,
+      execute: async ({ id }) => run(() => toll.unwatchCoin(id)),
+    }),
+    watch_wallet: tool({
+      description: LIVE_DESCRIPTIONS.watch_wallet,
+      inputSchema: SCHEMAS.watch_wallet,
+      execute: async ({ address, url }) => run(() => toll.watchWallet(address, url)),
+    }),
+    unwatch_wallet: tool({
+      description: LIVE_DESCRIPTIONS.unwatch_wallet,
+      inputSchema: SCHEMAS.unwatch_wallet,
+      execute: async ({ id }) => run(() => toll.unwatchWallet(id)),
     }),
   };
   if (!opts.only) return all;

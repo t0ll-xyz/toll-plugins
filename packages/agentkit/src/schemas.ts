@@ -1,5 +1,5 @@
 /**
- * Input schemas for Toll's 21 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-06). Robinhood Chain only.
+ * Input schemas for Toll's 27 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-08). Robinhood Chain only.
  * The same file ships in every @tollxyz plugin package (only the zod import differs).
  */
 import { z } from "zod";
@@ -27,6 +27,7 @@ export const DevRecordSchema = z.object({
   chain,
 });
 export const WalletPrivacySchema = z.object({ wallet });
+export const WalletApprovalsSchema = z.object({ wallet });
 export const FreshLaunchesSchema = z.object({ limit: z.number().int().min(1).max(20).optional().describe("How many coins, 1 to 20 (default 10).") });
 export const ChainPulseSchema = z.object({});
 export const LaunchRecordSchema = z.object({ address });
@@ -54,6 +55,18 @@ export const CheckTxSchema = z.object({
     .max(80)
     .optional()
     .describe("The identity registry agentId is in, CAIP-10 (default eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432, Robinhood Chain)."),
+  ticket: z
+    .union([
+      z.boolean(),
+      z.object({
+        consumer: z.string().max(42).optional().describe("The contract that will check the ticket (0x + 40 hex); leave it out for any contract."),
+        scope: z.enum(["call", "v4swap"]).optional().describe('"call" (default): bound to this exact call; "v4swap": bound to the swap a HookrRouter call makes.'),
+      }),
+    ])
+    .optional()
+    .describe(
+      "Optional: ask for a single-use ALLOW ticket a contract can require: true, or {consumer?, scope?}. It comes back in the answer's RiskAssessment (x-toll.ticket): signed, or why none was issued. A BLOCK is never signed; no ticket without from.",
+    ),
   strict: z
     .boolean()
     .optional()
@@ -105,6 +118,18 @@ export const StockEventsSchema = z.object({
     .optional()
     .describe("How many events, 1 to 100 (default 25; the keyless preview is always the last 10)."),
 });
+const webhook = z.string().max(300).describe("Your webhook: a public https URL on the default port.");
+export const WatchCoinSchema = z.object({
+  address: z.string().describe("The token contract address to watch on Robinhood Chain: 0x followed by 40 hex characters."),
+  url: webhook,
+});
+export const MyWatchesSchema = z.object({});
+export const UnwatchCoinSchema = z.object({ id: z.string().max(40).describe("The watch id (a uuid) from my_watches.") });
+export const WatchWalletSchema = z.object({
+  address: z.string().describe("The wallet address to watch on Robinhood Chain: 0x followed by 40 hex characters."),
+  url: webhook,
+});
+export const UnwatchWalletSchema = z.object({ id: z.string().max(40).describe("The wallet watch id (a uuid) from my_watches.") });
 
 /** Every schema, keyed by Toll's tool name. */
 export const SCHEMAS = {
@@ -114,6 +139,7 @@ export const SCHEMAS = {
   larp_check: LarpCheckSchema,
   dev_record: DevRecordSchema,
   wallet_privacy: WalletPrivacySchema,
+  wallet_approvals: WalletApprovalsSchema,
   fresh_launches: FreshLaunchesSchema,
   chain_pulse: ChainPulseSchema,
   launch_record: LaunchRecordSchema,
@@ -129,4 +155,9 @@ export const SCHEMAS = {
   guidance: GuidanceSchema,
   macro: MacroSchema,
   stock_events: StockEventsSchema,
+  watch_coin: WatchCoinSchema,
+  my_watches: MyWatchesSchema,
+  unwatch_coin: UnwatchCoinSchema,
+  watch_wallet: WatchWalletSchema,
+  unwatch_wallet: UnwatchWalletSchema,
 };
