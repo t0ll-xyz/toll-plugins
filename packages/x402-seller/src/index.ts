@@ -28,13 +28,60 @@ export const USDG = {
 /** the ERC-8004 identity registry on Robinhood Chain (CAIP-10) */
 export const ERC8004_REGISTRY = "eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
 
+/**
+ * toll-screen: Toll's facilitator reads every payment it verifies or settles with check_tx and puts its word in
+ * extensions.screen. "not-read" means it was not read in time, never a refusal. For the seller only: it is not
+ * forwarded to the buyer.
+ */
+export type Screen = { outcome: "allow" | "warn" | "block" | "not-read"; codes: string[] };
+
+const SCREEN_OUTCOMES: readonly string[] = ["allow", "warn", "block", "not-read"];
+/** extensions.screen of a facilitator answer, checked; undefined when absent or malformed (another facilitator) */
+export function screenOf(answer: unknown): Screen | undefined {
+  const ext = answer && typeof answer === "object" ? (answer as Record<string, unknown>).extensions : undefined;
+  const s = ext && typeof ext === "object" ? (ext as Record<string, unknown>).screen as Record<string, unknown> | undefined : undefined;
+  if (!s || typeof s !== "object" || typeof s.outcome !== "string" || !SCREEN_OUTCOMES.includes(s.outcome)) return undefined;
+  return { outcome: s.outcome as Screen["outcome"], codes: Array.isArray(s.codes) ? s.codes.filter((c): c is string => typeof c === "string") : [] };
+}
+
 export type Settlement = {
   success: true;
   transaction: string;
   network: string;
   payer?: string;
-  /** the facilitator's extensions: erc8478 (the payee check) and receipt (Toll's signed EIP-712 receipt) */
+  /** the facilitator's extensions: erc8478 (the payee check), receipt (Toll's signed EIP-712 receipt), screen */
   extensions?: Record<string, unknown>;
+  /** the settle answer's extensions.screen (toll-screen), when the facilitator sent one */
+  screen?: Screen;
+};
+
+/** HTTP methods the x402 bazaar extension describes */
+export type BazaarMethod = "GET" | "HEAD" | "DELETE" | "POST" | "PUT" | "PATCH";
+
+/**
+ * The x402 bazaar extension (specs/extensions/bazaar.md): describe the endpoint so facilitators list it in discovery
+ * (Toll's: x402.t0ll.xyz/discovery/resources, the find_paid_api tool, t0ll.xyz/x402/discover). Toll's facilitator
+ * records it from a payment that settles, after `info` validates against the `schema` built here.
+ */
+export type BazaarOptions = {
+  /** what the endpoint sells, in the 402's resource.description (default: the description option) */
+  description?: string;
+  /** the method buyers call; default: the request's method (GET when it is not one of these) */
+  method?: BazaarMethod;
+  /** POST / PUT / PATCH: the body's type; default "json" */
+  bodyType?: "json" | "form-data" | "text";
+  /** an example input: the query parameters (GET, HEAD, DELETE) or the body (POST, PUT, PATCH) */
+  input?: Record<string, unknown>;
+  /** JSON Schema (2020-12, only "#..." $refs) of the query parameters or the body; the example must match it */
+  inputSchema?: Record<string, unknown>;
+  /** what the endpoint answers: its type (default "json"), an example, and a JSON Schema of the example */
+  output?: { type?: string; example?: unknown; schema?: Record<string, unknown> };
+  /** catalog metadata on resource (soft-dropped when invalid, as the spec says): a name of at most 32 printable ASCII */
+  serviceName?: string;
+  /** up to 5 tags, each at most 32 printable ASCII */
+  tags?: string[];
+  /** an absolute http(s) icon URL (no IP or localhost host) */
+  iconUrl?: string;
 };
 
 export type SellerOptions = {
@@ -56,9 +103,21 @@ export type SellerOptions = {
   fetch?: typeof fetch;
   /** facilitator timeout per call, ms; default 15000 */
   timeoutMs?: number;
+  /**
+   * your ERC-8021 app code (^[a-z0-9_]{1,32}$), sent as extensions["builder-code"].info.a: Toll's facilitator writes it
+   * into the settlement's calldata suffix, so each sale is attributed to your app on chain
+   */
+  appCode?: string;
+  /** describe the endpoint (x402 bazaar) so it is listed in discovery once a payment settles */
+  bazaar?: BazaarOptions;
 };
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const BUILDER_CODE = /^[a-z0-9_]{1,32}$/;
+const METHODS: readonly BazaarMethod[] = ["GET", "HEAD", "DELETE", "POST", "PUT", "PATCH"];
+const BODY_METHODS: readonly string[] = ["POST", "PUT", "PATCH"];
+const DRAFT_2020 = "https://json-schema.org/draft/2020-12/schema";
+const MAX_SCHEMA_BYTES = 64 * 1024;
 const MAX_HEADER = 16_384;
 const EXPOSE = { "access-control-expose-headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE" } as const;
 const NO_STORE = { "cache-control": "no-store" } as const;
@@ -112,13 +171,156 @@ export function requirementV1(o: SellerOptions, resource: string) {
   };
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** a $ref / $id / $dynamicRef that is not a same-document "#..." fragment, anywhere in a schema */
+function externalRef(schema: unknown): boolean {
+  const stack: unknown[] = [schema];
+  while (stack.length) {
+    const n = stack.pop();
+    if (Array.isArray(n)) { stack.push(...n); continue; }
+    if (!isObj(n)) continue;
+    for (const [k, v] of Object.entries(n)) {
+      if ((k === "$ref" || k === "$id" || k === "$dynamicRef") && (typeof v !== "string" || !v.startsWith("#"))) return true;
+      stack.push(v);
+    }
+  }
+  return false;
+}
+
+/** the app code, checked; throws on a bad one (at startup, from paywall) */
+export function validAppCode(code: unknown): string {
+  if (typeof code !== "string" || !BUILDER_CODE.test(code)) throw new Error(`appCode must match ^[a-z0-9_]{1,32}$, got "${String(code)}"`);
+  return code;
+}
+
+/** the bazaar options, checked; throws on a bad method, body type, schema or example (at startup, from paywall) */
+export function checkBazaar(b: BazaarOptions): void {
+  if (!isObj(b)) throw new Error("bazaar must be an object");
+  if (b.method !== undefined && !METHODS.includes(b.method)) throw new Error(`bazaar.method must be one of ${METHODS.join(", ")}`);
+  if (b.bodyType !== undefined && !["json", "form-data", "text"].includes(b.bodyType)) throw new Error('bazaar.bodyType must be "json", "form-data" or "text"');
+  if (b.bodyType !== undefined && b.method !== undefined && !BODY_METHODS.includes(b.method)) throw new Error("bazaar.bodyType goes with POST, PUT or PATCH only");
+  if (b.description !== undefined && typeof b.description !== "string") throw new Error("bazaar.description must be text");
+  if (b.input !== undefined && !isObj(b.input)) throw new Error("bazaar.input must be an object (the example query parameters or body)");
+  for (const [k, s] of [["inputSchema", b.inputSchema], ["output.schema", b.output?.schema]] as const) {
+    if (s === undefined) continue;
+    if (!isObj(s)) throw new Error(`bazaar.${k} must be a JSON Schema object`);
+    if (externalRef(s)) throw new Error(`bazaar.${k} may only use "#..." $refs (facilitators never fetch a schema)`);
+  }
+  if (b.output !== undefined && (!isObj(b.output) || (b.output.type !== undefined && typeof b.output.type !== "string"))) throw new Error("bazaar.output must be { type?, example?, schema? }");
+  const size = new TextEncoder().encode(JSON.stringify(bazaarExtension(b, b.method ?? "GET"))).length;
+  if (size > MAX_SCHEMA_BYTES) throw new Error("bazaar is over 64 KB");
+}
+
+const PRINTABLE = /^[\x20-\x7e]+$/;
+const serviceNameOf = (v: unknown) => (typeof v === "string" && v.length <= 32 && PRINTABLE.test(v) ? v : undefined);
+function tagsOf(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [], seen = new Set<string>();
+  for (const t of v) {
+    if (typeof t !== "string" || !t || t.length > 32 || !PRINTABLE.test(t) || seen.has(t.toLowerCase())) continue;
+    seen.add(t.toLowerCase());
+    out.push(t);
+    if (out.length === 5) break;
+  }
+  return out;
+}
+/** bazaar.md's iconUrl rule: absolute http(s), at most 2048, no userinfo, no IP literal, localhost, all-digit or hex host */
+export function validIconUrl(v: unknown): v is string {
+  if (typeof v !== "string" || !v || v.length > 2048 || /[\u0000-\u001f\u007f]/.test(v)) return false;
+  let u: URL;
+  try { u = new URL(v); } catch { return false; }
+  if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password) return false;
+  let host: string;
+  try { host = decodeURIComponent(u.hostname).toLowerCase().replace(/\.$/, ""); } catch { return false; }
+  if (!host || host.startsWith("[") || /^[\d.]+$/.test(host) || /^0x[0-9a-f]+$/.test(host)) return false;
+  return !["localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"].includes(host);
+}
+
+/** the resource's catalog metadata (serviceName, tags, iconUrl), invalid fields dropped */
+function serviceMetadata(b: BazaarOptions | undefined) {
+  if (!b) return {};
+  const name = serviceNameOf(b.serviceName), tags = tagsOf(b.tags);
+  return { ...(name ? { serviceName: name } : {}), ...(tags.length ? { tags } : {}), ...(validIconUrl(b.iconUrl) ? { iconUrl: b.iconUrl } : {}) };
+}
+
+/**
+ * The bazaar extension ({ info, schema }) for one method: info describes the call, schema (JSON Schema 2020-12) is
+ * the spec's template with your input / output schemas inside, so info always validates against it when your
+ * examples match your schemas.
+ */
+export function bazaarExtension(b: BazaarOptions, requestMethod = "GET") {
+  const method = (b.method ?? (METHODS.includes(requestMethod.toUpperCase() as BazaarMethod) ? requestMethod.toUpperCase() : "GET")) as BazaarMethod;
+  const body = BODY_METHODS.includes(method);
+  const headers = { type: "object", additionalProperties: { type: "string" } };
+  const input = body
+    ? { type: "http", method, bodyType: b.bodyType ?? "json", body: b.input ?? {} }
+    : { type: "http", method, ...(b.input ? { queryParams: b.input } : {}) };
+  const inputSchema = body
+    ? {
+      type: "object",
+      properties: {
+        type: { type: "string", const: "http" },
+        method: { type: "string", enum: ["POST", "PUT", "PATCH"] },
+        bodyType: { type: "string", enum: ["json", "form-data", "text"] },
+        body: b.inputSchema ?? {},
+        queryParams: { type: "object", additionalProperties: { type: "string" } },
+        headers,
+      },
+      required: ["type", "method", "bodyType", "body"],
+      additionalProperties: false,
+    }
+    : {
+      type: "object",
+      properties: {
+        type: { type: "string", const: "http" },
+        method: { type: "string", enum: ["GET", "HEAD", "DELETE"] },
+        queryParams: b.inputSchema ?? { type: "object" },
+        headers,
+      },
+      required: ["type", "method"],
+      additionalProperties: false,
+    };
+  const out = b.output;
+  return {
+    info: {
+      input,
+      ...(out ? { output: { type: out.type ?? "json", ...(out.example !== undefined ? { example: out.example } : {}) } } : {}),
+    },
+    schema: {
+      $schema: DRAFT_2020,
+      type: "object",
+      properties: {
+        input: inputSchema,
+        output: { type: "object", properties: { type: { type: "string" }, example: out?.schema ?? {} }, required: ["type"] },
+      },
+      required: ["input"],
+    },
+  };
+}
+
+/** the extensions a 402 declares: builder-code (appCode) and bazaar; empty when neither option is set */
+export function declaredExtensions(o: SellerOptions, method = "GET"): Record<string, unknown> {
+  return {
+    ...(o.appCode !== undefined ? { "builder-code": { info: { a: validAppCode(o.appCode) } } } : {}),
+    ...(o.bazaar ? { bazaar: bazaarExtension(o.bazaar, method) } : {}),
+  };
+}
+
 /** x402 v2 PaymentRequired (what rides base64 in the PAYMENT-REQUIRED header) */
-export function paymentRequired(o: SellerOptions, resource: string, error?: string) {
+export function paymentRequired(o: SellerOptions, resource: string, error?: string, method = "GET") {
+  const ext = declaredExtensions(o, method);
   return {
     x402Version: 2 as const,
     ...(error ? { error } : {}),
-    resource: { url: resource, description: o.description ?? "", mimeType: o.mimeType ?? "application/json" },
+    resource: {
+      url: resource,
+      description: o.bazaar?.description ?? o.description ?? "",
+      mimeType: o.mimeType ?? "application/json",
+      ...serviceMetadata(o.bazaar),
+    },
     accepts: [requirement(o)],
+    ...(Object.keys(ext).length ? { extensions: ext } : {}),
   };
 }
 
@@ -137,12 +339,41 @@ const json = (body: unknown, status: number, headers: Record<string, string> = {
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...NO_STORE, ...headers } });
 
 /** the 402 a request without (or with a refused) payment gets */
-export function need402(o: SellerOptions, resource: string, error = "payment_required"): Response {
+export function need402(o: SellerOptions, resource: string, error = "payment_required", method = "GET"): Response {
   return json({ x402Version: 1, error, accepts: [requirementV1(o, resource)] }, 402,
-    { ...EXPOSE, "PAYMENT-REQUIRED": b64(paymentRequired(o, resource, error)) });
+    { ...EXPOSE, "PAYMENT-REQUIRED": b64(paymentRequired(o, resource, error, method)) });
 }
 
-export type Payment = { version: 1 | 2; payload: Record<string, unknown>; requirements: Record<string, unknown> };
+export type Payment = {
+  version: 1 | 2;
+  payload: Record<string, unknown>;
+  requirements: Record<string, unknown>;
+  /** the verify answer's extensions.screen (toll-screen), set before your handler runs; refuse on "block" if you like */
+  screen?: Screen;
+};
+
+/**
+ * The v2 payload sent to the facilitator, with what this seller declared: the bazaar extension and the resource (so
+ * the endpoint is cataloged even when the buyer's client does not echo extensions) and the builder-code app code
+ * (the buyer's own service codes `s` kept). The payer's signature covers only the authorization, never these.
+ * v1 payloads and sellers without appCode / bazaar go unchanged.
+ */
+export function withDeclared(pay: Payment, o: SellerOptions, resource: string, method = "GET"): Payment {
+  if (pay.version !== 2 || (o.appCode === undefined && !o.bazaar)) return pay;
+  const p = pay.payload;
+  const ext: Record<string, unknown> = isObj(p.extensions) ? { ...p.extensions } : {};
+  if (o.appCode !== undefined) {
+    const theirs = isObj(ext["builder-code"]) ? ext["builder-code"] as Record<string, unknown> : {};
+    const s = (isObj(theirs.info) ? theirs.info : theirs).s;
+    ext["builder-code"] = { a: validAppCode(o.appCode), ...(typeof s === "string" || Array.isArray(s) ? { s } : {}) };
+  }
+  let res = p.resource;
+  if (o.bazaar) {
+    ext.bazaar = bazaarExtension(o.bazaar, method);
+    res = paymentRequired(o, resource, undefined, method).resource;
+  }
+  return { ...pay, payload: { ...p, ...(res !== undefined ? { resource: res } : {}), extensions: ext } };
+}
 
 /** the payment header, decoded and matched to what was asked; null = none sent; a string = refused (the reason) */
 export function readPayment(req: Request, o: SellerOptions, resource: string): Payment | null | string {
@@ -203,31 +434,38 @@ const unavailable = () => json({ error: "The payment could not be checked right 
  */
 export function paywall(o: SellerOptions, handler: (req: Request, payment: Payment) => Response | Promise<Response>) {
   requirement(o); // a bad payTo or price fails at startup, not on the first buyer
+  if (o.appCode !== undefined) validAppCode(o.appCode);
+  if (o.bazaar !== undefined) checkBazaar(o.bazaar);
   return async (req: Request): Promise<Response> => {
     const u = new URL(req.url);
     const resource = `${u.origin}${u.pathname}`;
-    const pay = readPayment(req, o, resource);
-    if (pay === null) return need402(o, resource);
-    if (typeof pay === "string") return need402(o, resource, pay);
+    const method = req.method;
+    const read = readPayment(req, o, resource);
+    if (read === null) return need402(o, resource, undefined, method);
+    if (typeof read === "string") return need402(o, resource, read, method);
+    const pay = withDeclared(read, o, resource, method);
 
     let v: Record<string, unknown>;
     try { v = await call(o, "verify", pay); } catch { return unavailable(); }
-    if (v.isValid !== true) return need402(o, resource, reason(v, "invalidReason", "invalid_payment"));
+    if (v.isValid !== true) return need402(o, resource, reason(v, "invalidReason", "invalid_payment"), method);
 
-    const res = await handler(req, pay);
+    const vScreen = screenOf(v);
+    const res = await handler(req, vScreen ? { ...pay, screen: vScreen } : pay);
     if (res.status >= 400) return res;
 
     let s: Record<string, unknown>;
     try { s = await call(o, "settle", pay); } catch { return unavailable(); }
-    if (s.success !== true) return need402(o, resource, reason(s, "errorReason", "settlement_failed"));
+    if (s.success !== true) return need402(o, resource, reason(s, "errorReason", "settlement_failed"), method);
 
     const ext = (s.extensions && typeof s.extensions === "object" ? s.extensions : {}) as Record<string, unknown>;
+    const sScreen = screenOf(s);
     const settled: Settlement = {
       success: true,
       transaction: typeof s.transaction === "string" ? s.transaction : "",
       network: typeof s.network === "string" ? s.network : USDG.network,
       ...(typeof s.payer === "string" ? { payer: s.payer } : {}),
       ...(Object.keys(ext).length ? { extensions: ext } : {}),
+      ...(sScreen ? { screen: sScreen } : {}),
     };
     if (o.onSettled) {
       try { await o.onSettled(settled, req); } catch { /* the seller's hook never costs the buyer the answer */ }
