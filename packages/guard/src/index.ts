@@ -58,3 +58,5 @@ export { MemorySpendStore, dayStart } from "./store.js";
 export type { SpendStore } from "./store.js";
 export { appendTicketSuffix, encodeTicketAndSig, ticketAskOf, ticketOfAnswer, TICKET_SUFFIX_MAGIC, TOLL_ALLOW_SIGNER, ALLOW_DOCS } from "./ticket.js";
 export type { TicketAsk, AllowTicket, TicketResult } from "./ticket.js";
+export { guardBudget, BUDGET_DOMAIN, BUDGET_TYPES, BUDGET_MAX_PAYTOS } from "./budget.js";
+export type { GuardBudget, GuardBudgetOptions, GuardBudgetMessage } from "./budget.js";

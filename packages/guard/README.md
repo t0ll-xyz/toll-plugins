@@ -342,6 +342,46 @@ export const redisStore: SpendStore = {
 const wallet = guard(walletClient, { spend: { /* ... */ }, store: redisStore });
 ```
 
+## 0.5.0: mirror the caps into the facilitator budget (coming)
+
+guard's caps live in the agent's process. Toll's x402 facilitator (https://x402.t0ll.xyz) is adding per-payer budgets: the
+payer wallet signs its limits once and the facilitator refuses any payment past them where it settles, so a second
+process, a key used elsewhere or a bug in the agent cannot spend past them through it. Budgets are **coming**: the
+facilitator answers `404 budgets_off` until they are switched on. `guardBudget` builds that budget from your `spend`
+policy; guard itself behaves exactly as before.
+
+```ts
+import { guardBudget, USDG } from "@tollxyz/guard";
+import { Toll } from "@tollxyz/sdk"; // 0.7.0 or later
+
+const spend = {
+  assets: { [USDG]: { perCall: 100_000n, perDay: 1_000_000n } },           // 0.10 / 1.00 USDG
+  perEndpoint: { "https://api.example/quotes": { perDay: 250_000n } },
+  allow: { payTo: ["0xSellerA...", "0xSellerB..."] },
+};
+const { budget, typedData, notMirrored } = guardBudget(spend, {
+  payer: account.address,
+  nonce: BigInt(Date.now()),                                               // newer wins
+  endpointPayTo: { "https://api.example/quotes": "0xSellerA..." },        // the facilitator sees a payTo, not a URL
+});
+console.log(notMirrored); // guard rules the facilitator cannot hold (they stay enforced by guard)
+await new Toll().setBudget({ budget, signature: await account.signTypedData(typedData) });
+```
+
+| guard | facilitator budget |
+| --- | --- |
+| `assets[USDG].perCall` | `perPayment` (required: pass `perPayment` if the policy has none; 0 refuses everything) |
+| `assets[USDG].perDay` | `perDay` (required, same rule) |
+| `perEndpoint[prefix].perDay` | `payToCaps` entry for that endpoint's payTo (`endpointPayTo`, or a key that is an address); two endpoints on one payTo take the stricter cap |
+| `allow.payTo` | `allowedPayTos` |
+| `perEndpoint[prefix].perCall`, other assets, `allow.to`, `allow.spender`, `approveAbove` | not mirrored, listed in `notMirrored` |
+
+`perPayTo` (one day cap for every payTo) and `validUntil` (unix seconds) are options. Days are UTC on both sides. The
+typed data is the facilitator's EIP-712 `Budget` (domain `Toll Facilitator Budget` / `1` / chain 4663, no
+verifyingContract); `BUDGET_DOMAIN` and `BUDGET_TYPES` are exported. guard has no runtime dependencies: posting it is
+`@tollxyz/sdk`'s `setBudget` (or `POST https://x402.t0ll.xyz/budget` with `{ budget, signature }`, amounts as decimal
+strings).
+
 ## ALLOW tickets
 
 A contract can require a Toll ALLOW ticket before a sensitive call (a router, a module, a Uniswap v4 hook, a
