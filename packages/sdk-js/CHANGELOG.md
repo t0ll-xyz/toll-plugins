@@ -1,5 +1,11 @@
 # Changelog: @tollxyz/sdk
 
+## 0.7.0 (2026-11-10)
+
+- `paidBefore({ payer, payTo, resource?, since? })`: `GET /paid` on Toll's facilitator, whether a wallet already paid a payTo through it (settlements, escrow captures, batch charges). Typed `PaidAnswer`, `PaidEntry`, `PaidSource`.
+- Offer-receipt (the x402 extension): types `TollOfferReceipt`, `OfferFacts`, `ReceiptPayload`, `ReceiptRowOfferReceipt`, `SignedReceipt`; `tollOfferReceiptOf(answer)` reads `extensions["toll-offer-receipt"]`; `receiptTypedData(payload)` builds the spec's EIP-712 receipt for the seller to sign; `RECEIPT_DOMAIN`, `RECEIPT_TYPES`. `FacilitatorExtensions` names `toll-offer-receipt`.
+- Per-payer budgets (coming; the facilitator answers 404 `budgets_off` until they are switched on): `budgetTypedData(budget)`, `revokeTypedData({ payer, nonce })`, `setBudget({ budget, signature })`, `revokeBudget({ payer, nonce, signature })`, `getBudget(payer)`; `BUDGET_DOMAIN`, `BUDGET_TYPES`, `REVOKE_TYPES`, `BUDGET_MAX_PAYTOS`; types `BudgetInput`, `BudgetMessage`, `BudgetState`, `BudgetSetAnswer`, `PayToCap`, `TypedData`.
+
 ## 0.6.0 (2026-11-10)
 
 - `findPaidApi({ query?, limit? })`: the new `find_paid_api` MCP tool (paid x402 APIs on Robinhood Chain, verified payTo first), as text. `TOOL_NAMES` lists 28.

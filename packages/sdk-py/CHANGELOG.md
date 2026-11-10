@@ -1,5 +1,11 @@
 # Changelog: toll-sdk
 
+## 0.7.0 (2026-11-10)
+
+- `paid_before(payer, pay_to, resource=None, since=None)`: `GET /paid` on Toll's facilitator, whether a wallet already paid a payTo through it.
+- Offer-receipt: `toll_offer_receipt_of(answer)` reads `extensions["toll-offer-receipt"]`; `receipt_typed_data(payload)` builds the spec's EIP-712 receipt for the seller to sign; `RECEIPT_DOMAIN`, `RECEIPT_TYPES`.
+- Per-payer budgets (coming; 404 `budgets_off` until switched on): `budget_typed_data(budget)`, `revoke_typed_data(payer, nonce)`, `set_budget(budget, signature)`, `revoke_budget(payer, nonce, signature)`, `get_budget(payer)`; `BUDGET_DOMAIN`, `BUDGET_TYPES`, `REVOKE_TYPES`, `BUDGET_MAX_PAYTOS`. Signs the same bytes as `@tollxyz/sdk` 0.7.0.
+
 ## 0.6.0 (2026-11-10)
 
 - `find_paid_api(query=None, limit=None)`: the new `find_paid_api` MCP tool, as text. `TOOL_NAMES` lists 28.

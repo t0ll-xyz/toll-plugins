@@ -35,6 +35,7 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
 - `checkAgent(id)` - an ERC-8004 agent on Robinhood Chain by its agent id
 - `findPaidApi({ query?, limit? })` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `findPaidApis()` for the JSON
+- `paidBefore({ payer, payTo, resource?, since? })` - whether a wallet already paid you through Toll's facilitator; `setBudget`, `revokeBudget`, `getBudget` - a payer's spending limits with it (coming); see 0.7.0 below
 - `checkHook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `checkTx({ chainId?, from?, to?, data?, value?, typedData?, x402?, agentId?, registry?, strict? })` - the pre-sign check for a transaction (`to`, `data`, `value`, `from`), an EIP-712 signature (`typedData`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chainId` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presignRiskReport({ version: "erc-presign/1", subject, context?, kinds? })` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
@@ -45,6 +46,38 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)
 - `isValidAddress(x)`, `isValidWallet(x)`, `isValidStockId(x)` - the same checks the SDK runs before anything is sent
 - Errors (HTTP, JSON-RPC, timeouts, server-side input errors) are thrown as `TollError`.
+
+## 0.7.0 (2026-11-10): paid before, seller receipts, budgets (coming)
+
+Three more reads and writes on Toll's x402 facilitator (https://x402.t0ll.xyz).
+
+```ts
+import { Toll, budgetTypedData, revokeTypedData, receiptTypedData, tollOfferReceiptOf } from "@tollxyz/sdk";
+const toll = new Toll();
+
+// 1. paid before: has this wallet already paid me through Toll's facilitator? (for sign-in-with-x sellers)
+const p = await toll.paidBefore({ payer: wallet, payTo: myWallet, resource: "https://api.example/quote", since: 1794000000 });
+if (p.paid) { /* let the returning wallet in without charging again; p.last = { tx, ts, amount, receiptId, via } */ }
+
+// 2. offer-receipt: the seller signs the spec's receipt payload the facilitator hands it, with its own key
+const x = tollOfferReceiptOf(settleAnswer); // extensions["toll-offer-receipt"]: { offer, receiptPayload } or null
+if (x?.receiptPayload) {
+  const signature = await sellerAccount.signTypedData(receiptTypedData(x.receiptPayload)); // domain "x402 receipt" / 1 / chainId 1
+  // return { format: "eip712", payload: x.receiptPayload, signature } as extensions["offer-receipt"].info.receipt
+}
+
+// 3. budgets (COMING: the facilitator answers 404 budgets_off until they are switched on)
+const td = budgetTypedData({ payer: account.address, perPayment: 100_000n, perDay: 1_000_000n,   // USDG base units (6 decimals)
+  payToCaps: [{ payTo: "0x...", perDay: 250_000n }], nonce: BigInt(Date.now()) });
+await toll.setBudget({ budget: td.message, signature: await account.signTypedData(td) });
+await toll.getBudget(account.address);   // { budget, spentToday, spentByPayTo, remainingToday, day }
+const rv = revokeTypedData({ payer: account.address, nonce: BigInt(Date.now()) });
+await toll.revokeBudget({ ...rv.message, signature: await account.signTypedData(rv) });
+```
+
+- `paidBefore({ payer, payTo, resource?, since? })` -> `GET /paid`: `{ paid, count, last: { tx, ts, amount, receiptId, via } | null, network, sources }`. `via` is `settlement`, `escrow` or `batch` (a batch charge has `tx: null`); `sources` counts each record (`"not-read"` when one could not be read, `"not-applicable"` for batch with a resource). Only facts already public on chain. A 503 (the record could not be read) throws, never a false "not paid". `since` is unix seconds or a `Date`.
+- Offer-receipt (x402 `specs/extensions/extension-offer-and-receipt.md`): `TollOfferReceipt` (`{ offer: OfferFacts, receiptPayload: ReceiptPayload | null }`, settle answers only, when the payment carried `extensions["offer-receipt"]`), `tollOfferReceiptOf(answer)`, `ReceiptRowOfferReceipt` (the `offerReceipt` field of `GET /receipt/<id|tx>` on a settled row), `SignedReceipt`, `receiptTypedData(payload)`, `RECEIPT_DOMAIN`, `RECEIPT_TYPES`. The spec's receipt says "paid and delivered", so the seller signs it; Toll never does. `@tollxyz/x402-seller` 0.3.0 does it for you with `signReceipt`.
+- Budgets (coming): `budgetTypedData(budget)` and `revokeTypedData({ payer, nonce })` build the EIP-712 typed data the payer signs (domain `Toll Facilitator Budget` / `1` / chain 4663, no verifyingContract; types `Budget` + `PayToCap`, `Revoke`; uints as bigint, ready for viem or ethers). `setBudget({ budget, signature })`, `revokeBudget({ payer, nonce, signature })`, `getBudget(payer)`. perPayment and perDay always apply (0 = nothing passes), perPayTo 0 = not set, payToCaps a day cap per payTo, allowedPayTos empty = any (each at most 50), validUntil 0 = no end, UTC days; a newer nonce replaces the budget. Once set, the facilitator refuses payments past it (`budget_exceeded_per_payment`, `budget_exceeded_per_day`, `budget_exceeded_per_payto`, `budget_payto_not_allowed`, `budget_expired`, `budget_revoked`). Errors come back as `TollError` with the facilitator's code (`budgets_off`, `budget_nonce_stale`, `invalid_budget_signature`). `@tollxyz/guard`'s `guardBudget` builds the budget from guard's own caps.
 
 ## 0.6.0 (2026-11-10): find paid APIs, the facilitator's safety screen
 

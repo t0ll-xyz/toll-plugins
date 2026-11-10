@@ -400,6 +400,8 @@ export interface FacilitatorExtensions {
   receipt?: Record<string, unknown> | null;
   /** toll-screen */
   screen?: FacilitatorScreen;
+  /** the offer-receipt helper (settle only, when the payment carried extensions["offer-receipt"]); see tollOfferReceiptOf */
+  "toll-offer-receipt"?: TollOfferReceipt;
   [key: string]: unknown;
 }
 /** POST /verify's answer. */
@@ -484,6 +486,188 @@ export interface PaidApiList {
   /** search only: true when more matches were left out */
   partialResults?: boolean;
 }
+
+/* ------------------------------------------------------------------ paid before (GET /paid), for sign-in-with-x sellers */
+
+/** One earlier payment: transaction (null for a batch charge), unix seconds, base units, Toll's receipt id, how it was paid. */
+export interface PaidEntry {
+  tx: string | null;
+  ts: number;
+  amount: string;
+  receiptId: string;
+  via: "settlement" | "escrow" | "batch";
+}
+/** A source count, or why it was not counted ("not-read": its table could not be read; "not-applicable": batch with a resource). */
+export type PaidSource = number | "not-read" | "not-applicable";
+/** GET /paid's answer: whether the payer already paid this payTo through Toll's facilitator. Facts already public on chain. */
+export interface PaidAnswer {
+  paid: boolean;
+  /** payments found (each source reads at most 1,000 rows) */
+  count: number;
+  /** the latest one, or null */
+  last: PaidEntry | null;
+  network: string;
+  sources: { settlements: number; escrow: PaidSource; batch: PaidSource };
+}
+export interface PaidBeforeOptions {
+  /** the wallet that proved it is the caller (sign-in-with-x) */
+  payer: string;
+  /** the wallet the seller is paid at */
+  payTo: string;
+  /** only payments for this resource URL, exactly as the payment named it */
+  resource?: string;
+  /** only payments after this time: unix seconds, or a Date */
+  since?: number | Date;
+}
+
+/* ------------------------------------------------------------------ the x402 offer-receipt extension (seller-signed receipts) */
+
+/** The x402 offer-receipt spec's receipt payload (v1): what the seller signs once it has delivered. */
+export interface ReceiptPayload {
+  version: number;
+  /** CAIP-2, "eip155:4663" */
+  network: string;
+  resourceUrl: string;
+  payer: string;
+  /** unix seconds */
+  issuedAt: number;
+  /** the settlement transaction, or "" (the spec's privacy-minimal form) */
+  transaction: string;
+}
+/** What Toll's facilitator read from the seller's signed offer the payment carried (facts, never a refusal). */
+export type OfferFacts =
+  | { read: "ok"; format: "eip712"; signer: string; signerIsPayTo: boolean; amount: string; amountMatches: boolean; resourceMatches: boolean; validUntil: number; expired: boolean }
+  | { read: "none" | "no-match" | "invalid" }
+  | { read: "unsupported"; format: string };
+/**
+ * extensions["toll-offer-receipt"] of a settle answer (only when the payment carried extensions["offer-receipt"]):
+ * the offer check, and the receipt payload for the seller to sign (null when nothing settled).
+ */
+export interface TollOfferReceipt {
+  offer: OfferFacts;
+  receiptPayload: ReceiptPayload | null;
+}
+/** GET /receipt/<id|tx>'s offerReceipt on a settled row: the payload, the domain to sign it under, and who signs it. */
+export interface ReceiptRowOfferReceipt {
+  payload: ReceiptPayload;
+  domain: { name: string; version: string; chainId: number };
+  /** "the resource server": Toll never signs the spec's receipt */
+  signer: string;
+}
+/** The spec's signed receipt, as the seller returns it in extensions["offer-receipt"].info.receipt. */
+export interface SignedReceipt {
+  format: "eip712";
+  payload: ReceiptPayload;
+  signature: string;
+}
+
+/** The offer-receipt spec's EIP-712 receipt domain (chainId 1 by the spec, whatever the payment network). */
+export const RECEIPT_DOMAIN = { name: "x402 receipt", version: "1", chainId: 1 } as const;
+/** The spec's canonical receipt types (v1). */
+export const RECEIPT_TYPES = {
+  Receipt: [
+    { name: "version", type: "uint256" },
+    { name: "network", type: "string" },
+    { name: "resourceUrl", type: "string" },
+    { name: "payer", type: "string" },
+    { name: "issuedAt", type: "uint256" },
+    { name: "transaction", type: "string" },
+  ],
+} as const;
+
+/* ------------------------------------------------------------------ per-payer budgets (POST/GET /budget), coming */
+
+/** A day cap for one payTo, USDG base units. */
+export interface PayToCap {
+  payTo: string;
+  perDay: bigint | number | string;
+}
+/**
+ * A payer's spending limits with Toll's facilitator, in USDG base units (6 decimals). perPayment and perDay always
+ * apply (0 = nothing passes); perPayTo 0 = not set; payToCaps a day cap per payTo (at most 50); allowedPayTos empty =
+ * any (at most 50); validUntil unix seconds, 0 = no end; days are UTC. A newer nonce replaces the stored budget.
+ */
+export interface BudgetInput {
+  payer: string;
+  perPayment: bigint | number | string;
+  perDay: bigint | number | string;
+  perPayTo?: bigint | number | string;
+  payToCaps?: PayToCap[];
+  allowedPayTos?: string[];
+  validUntil?: bigint | number | string;
+  nonce: bigint | number | string;
+}
+/** EIP-712 typed data, ready for viem's signTypedData / ethers' signer.signTypedData (uint fields as bigint). */
+export interface TypedData<M> {
+  domain: { name: string; version: string; chainId: number };
+  types: Record<string, ReadonlyArray<{ name: string; type: string }>>;
+  primaryType: string;
+  message: M;
+}
+export interface BudgetMessage {
+  payer: string;
+  perPayment: bigint;
+  perDay: bigint;
+  perPayTo: bigint;
+  payToCaps: Array<{ payTo: string; perDay: bigint }>;
+  allowedPayTos: string[];
+  validUntil: bigint;
+  nonce: bigint;
+}
+/** GET /budget?payer=: the stored budget (decimal strings) and today's (UTC) spend. */
+export interface BudgetState {
+  payer: string;
+  network: string;
+  day: string;
+  budget: {
+    perPayment: string;
+    perDay: string;
+    perPayTo: string;
+    payToCaps: Array<{ payTo: string; perDay: string }>;
+    allowedPayTos: string[];
+    validUntil: string;
+    nonce: string;
+    revoked: boolean;
+  } | null;
+  spentToday: string;
+  spentByPayTo: Record<string, string>;
+  /** null without a budget; "0" once revoked, expired or spent */
+  remainingToday: string | null;
+}
+/** POST /budget's answer. */
+export interface BudgetSetAnswer {
+  ok: true;
+  payer: string;
+  nonce: string;
+  revoked: boolean;
+}
+
+/** The budget's EIP-712 domain: no verifyingContract (nothing on chain checks it). */
+export const BUDGET_DOMAIN = { name: "Toll Facilitator Budget", version: "1", chainId: 4663 } as const;
+export const BUDGET_TYPES = {
+  Budget: [
+    { name: "payer", type: "address" },
+    { name: "perPayment", type: "uint256" },
+    { name: "perDay", type: "uint256" },
+    { name: "perPayTo", type: "uint256" },
+    { name: "payToCaps", type: "PayToCap[]" },
+    { name: "allowedPayTos", type: "address[]" },
+    { name: "validUntil", type: "uint64" },
+    { name: "nonce", type: "uint256" },
+  ],
+  PayToCap: [
+    { name: "payTo", type: "address" },
+    { name: "perDay", type: "uint256" },
+  ],
+} as const;
+export const REVOKE_TYPES = {
+  Revoke: [
+    { name: "payer", type: "address" },
+    { name: "nonce", type: "uint256" },
+  ],
+} as const;
+/** At most this many payToCaps and allowedPayTos. */
+export const BUDGET_MAX_PAYTOS = 50;
 
 /** What a paid URL asks for, read from its 402 answer. */
 export interface PaymentRequirements {
@@ -1233,6 +1417,74 @@ export class Toll {
     };
   }
 
+  /**
+   * GET /paid on the facilitator: whether `payer` already paid `payTo` through Toll's facilitator (settlements, escrow
+   * captures, batch charges), optionally for one resource and after `since`. For sellers using sign-in-with-x: once a
+   * wallet has proved it is the caller, a returning payer can be let in without a second charge. Facts already public on
+   * chain (transaction, time, amount, receipt id). A 503 (the record could not be read) throws: never a false "not paid".
+   */
+  async paidBefore(opts: PaidBeforeOptions): Promise<PaidAnswer> {
+    if (!isObject(opts)) throw new TollError("Invalid options: pass { payer, payTo, resource?, since? }.");
+    const payer = addressOf(opts.payer, "payer");
+    const payTo = addressOf(opts.payTo, "payTo");
+    const q = new URLSearchParams({ payer: payer.toLowerCase(), payTo: payTo.toLowerCase() });
+    if (opts.resource !== undefined) {
+      if (typeof opts.resource !== "string" || opts.resource.length > 2048 || !/^https?:\/\/[^\s"\\]+$/.test(opts.resource)) {
+        throw new TollError("Invalid resource: an http(s) URL of at most 2048 characters, exactly as the payment named it.");
+      }
+      q.set("resource", opts.resource);
+    }
+    if (opts.since !== undefined) {
+      const s = opts.since instanceof Date ? Math.floor(opts.since.getTime() / 1000) : opts.since;
+      if (!Number.isSafeInteger(s) || s < 0 || s > 9_999_999_999) throw new TollError("Invalid since: unix seconds (a whole number) or a Date.");
+      q.set("since", String(s));
+    }
+    const { res, raw } = await this.request(`${this.facilitatorUrl}/paid?${q.toString()}`, { method: "GET", headers: this.restHeaders(false) });
+    const json = tryJson(raw);
+    if (!res.ok || !isObject(json) || typeof json.paid !== "boolean" || typeof json.count !== "number") throw facError(res, raw);
+    return json as unknown as PaidAnswer;
+  }
+
+  /**
+   * COMING (the facilitator's FAC_BUDGETS is off until launch; until then this throws HTTP 404 budgets_off).
+   * POST /budget: set or replace (newer nonce) the payer's spending limits with Toll's facilitator. `signature` is the
+   * payer's own EIP-712 signature of `budgetTypedData(budget)`; anyone may relay it. Once set, /verify and /settle refuse
+   * any payment past it (budget_exceeded_per_payment, _per_day, _per_payto, budget_payto_not_allowed, ...).
+   * 409 budget_nonce_stale: sign with a higher nonce. 403 invalid_budget_signature: not the payer's signature.
+   */
+  async setBudget(opts: { budget: BudgetInput; signature: string }): Promise<BudgetSetAnswer> {
+    if (!isObject(opts)) throw new TollError("Invalid options: pass { budget, signature }.");
+    const m = budgetMessageOf(opts.budget);
+    return this.postBudget({ budget: budgetBody(m), signature: signatureOf(opts.signature) });
+  }
+
+  /** COMING (see setBudget). POST /budget { revoke }: refuse every payment until the payer signs a budget with a newer nonce. */
+  async revokeBudget(opts: { payer: string; nonce: bigint | number | string; signature: string }): Promise<BudgetSetAnswer> {
+    if (!isObject(opts)) throw new TollError("Invalid options: pass { payer, nonce, signature }.");
+    const { message } = revokeTypedData(opts);
+    return this.postBudget({ revoke: { payer: message.payer, nonce: message.nonce.toString() }, signature: signatureOf(opts.signature) });
+  }
+
+  /** COMING (see setBudget). GET /budget?payer=: the stored budget and today's (UTC) spend, USDG base units as decimal strings. */
+  async getBudget(payer: string): Promise<BudgetState> {
+    const p = addressOf(payer, "payer");
+    const { res, raw } = await this.request(`${this.facilitatorUrl}/budget?payer=${p.toLowerCase()}`, { method: "GET", headers: this.restHeaders(false) });
+    const json = tryJson(raw);
+    if (!res.ok || !isObject(json) || typeof json.payer !== "string" || !("budget" in json)) throw facError(res, raw);
+    return json as unknown as BudgetState;
+  }
+
+  private async postBudget(body: unknown): Promise<BudgetSetAnswer> {
+    const { res, raw } = await this.request(`${this.facilitatorUrl}/budget`, {
+      method: "POST",
+      headers: this.restHeaders(false, { "content-type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const json = tryJson(raw);
+    if (!res.ok || !isObject(json) || json.ok !== true) throw facError(res, raw);
+    return json as unknown as BudgetSetAnswer;
+  }
+
   /** The "Checked by Toll" badge URL for a coin on this client's base URL (see coinBadgeUrl). */
   badgeUrl(token: string, opts: { size?: CoinBadgeSize } = {}): string {
     return coinBadgeUrl(token, { ...opts, baseUrl: this.baseUrl });
@@ -1606,4 +1858,123 @@ export async function readWebhook(secret: string, rawBody: string | Uint8Array, 
   const json = tryJson(text);
   if (!isObject(json) || (json.type !== "toll.watch" && json.type !== "toll.wallet_watch")) throw new TollError("Not a Toll watch event.");
   return json as unknown as WatchEvent;
+}
+
+/* ------------------------------------------------------------------ facilitator: budgets and offer-receipt helpers */
+
+const MAX_U256 = (1n << 256n) - 1n;
+const MAX_U64 = (1n << 64n) - 1n;
+
+/** a uint as bigint (bigint, safe whole number or decimal string), checked against max */
+function uintOf(v: unknown, name: string, max: bigint = MAX_U256): bigint {
+  let n: bigint | null = null;
+  if (typeof v === "bigint") n = v;
+  else if (typeof v === "number" && Number.isSafeInteger(v)) n = BigInt(v);
+  else if (typeof v === "string" && /^\d{1,78}$/.test(v.trim())) n = BigInt(v.trim());
+  if (n === null || n < 0n || n > max) throw new TollError(`Invalid ${name}: use a whole number of USDG base units (bigint or decimal string) from 0.`);
+  return n;
+}
+
+function addressOf(v: unknown, name: string): string {
+  if (typeof v !== "string" || !EVM.test(v)) throw new TollError(`Invalid ${name}: expected 0x + 40 hex characters.`);
+  return v;
+}
+
+/** the budget as the typed message, checked (caps in the order given: the signature covers that order) */
+function budgetMessageOf(b: BudgetInput): BudgetMessage {
+  if (!isObject(b)) throw new TollError("Invalid budget: pass { payer, perPayment, perDay, nonce, ... }.");
+  const caps = b.payToCaps ?? [];
+  const allowed = b.allowedPayTos ?? [];
+  if (!Array.isArray(caps) || caps.length > BUDGET_MAX_PAYTOS) throw new TollError(`Invalid payToCaps: a list of at most ${BUDGET_MAX_PAYTOS}.`);
+  if (!Array.isArray(allowed) || allowed.length > BUDGET_MAX_PAYTOS) throw new TollError(`Invalid allowedPayTos: a list of at most ${BUDGET_MAX_PAYTOS}.`);
+  const seen = new Set<string>();
+  const payToCaps = caps.map((c, i) => {
+    if (!isObject(c)) throw new TollError(`Invalid payToCaps[${i}]: use { payTo, perDay }.`);
+    const payTo = addressOf(c.payTo, `payToCaps[${i}].payTo`);
+    if (seen.has(payTo.toLowerCase())) throw new TollError(`Invalid payToCaps: ${payTo} is listed twice (one cap per payTo).`);
+    seen.add(payTo.toLowerCase());
+    return { payTo, perDay: uintOf(c.perDay, `payToCaps[${i}].perDay`) };
+  });
+  return {
+    payer: addressOf(b.payer, "payer"),
+    perPayment: uintOf(b.perPayment, "perPayment"),
+    perDay: uintOf(b.perDay, "perDay"),
+    perPayTo: uintOf(b.perPayTo ?? 0, "perPayTo"),
+    payToCaps,
+    allowedPayTos: allowed.map((a, i) => addressOf(a, `allowedPayTos[${i}]`)),
+    validUntil: uintOf(b.validUntil ?? 0, "validUntil", MAX_U64),
+    nonce: uintOf(b.nonce, "nonce"),
+  };
+}
+
+/**
+ * The EIP-712 typed data of a per-payer budget, for the payer wallet to sign (viem: `account.signTypedData(td)`;
+ * ethers: `signer.signTypedData(td.domain, td.types, td.message)`). Then `toll.setBudget({ budget, signature })`.
+ * Throws TollError on a malformed budget, before anything is signed.
+ */
+export function budgetTypedData(budget: BudgetInput): TypedData<BudgetMessage> & { primaryType: "Budget" } {
+  return { domain: { ...BUDGET_DOMAIN }, types: BUDGET_TYPES, primaryType: "Budget", message: budgetMessageOf(budget) };
+}
+
+/** The EIP-712 typed data of a budget revoke (refuses every payment until a budget with a newer nonce is set). */
+export function revokeTypedData(r: { payer: string; nonce: bigint | number | string }): TypedData<{ payer: string; nonce: bigint }> & { primaryType: "Revoke" } {
+  if (!isObject(r)) throw new TollError("Invalid revoke: pass { payer, nonce }.");
+  return { domain: { ...BUDGET_DOMAIN }, types: REVOKE_TYPES, primaryType: "Revoke", message: { payer: addressOf(r.payer, "payer"), nonce: uintOf(r.nonce, "nonce") } };
+}
+
+/**
+ * The EIP-712 typed data of the offer-receipt spec's receipt (domain "x402 receipt" / "1" / chainId 1), for the SELLER
+ * to sign with its own key once it has delivered. The payload is used exactly as given (the spec forbids rebuilding it).
+ */
+export function receiptTypedData(payload: ReceiptPayload): TypedData<{ version: bigint; network: string; resourceUrl: string; payer: string; issuedAt: bigint; transaction: string }> & { primaryType: "Receipt" } {
+  if (!isObject(payload)) throw new TollError("Invalid receipt payload.");
+  for (const k of ["network", "resourceUrl", "payer"] as const) {
+    if (typeof payload[k] !== "string") throw new TollError(`Invalid receipt payload: ${k} must be text.`);
+  }
+  if (payload.transaction !== undefined && typeof payload.transaction !== "string") throw new TollError("Invalid receipt payload: transaction must be text.");
+  if (!Number.isSafeInteger(payload.version) || payload.version < 1) throw new TollError("Invalid receipt payload: version must be a whole number (1).");
+  if (!Number.isSafeInteger(payload.issuedAt) || payload.issuedAt < 0) throw new TollError("Invalid receipt payload: issuedAt must be unix seconds.");
+  return {
+    domain: { ...RECEIPT_DOMAIN },
+    types: RECEIPT_TYPES,
+    primaryType: "Receipt",
+    message: { version: BigInt(payload.version), network: payload.network, resourceUrl: payload.resourceUrl, payer: payload.payer,
+      issuedAt: BigInt(payload.issuedAt), transaction: payload.transaction ?? "" },
+  };
+}
+
+/** extensions["toll-offer-receipt"] of a settle answer, checked; null when absent or malformed (another facilitator). */
+export function tollOfferReceiptOf(answer: unknown): TollOfferReceipt | null {
+  const ext = isObject(answer) ? answer.extensions : null;
+  const x = isObject(ext) ? ext["toll-offer-receipt"] : null;
+  if (!isObject(x) || !isObject(x.offer) || typeof x.offer.read !== "string") return null;
+  const p = x.receiptPayload;
+  const ok = isObject(p) && typeof p.network === "string" && typeof p.resourceUrl === "string" && typeof p.payer === "string"
+    && Number.isSafeInteger(p.version) && Number.isSafeInteger(p.issuedAt) && (p.transaction === undefined || typeof p.transaction === "string");
+  return { offer: x.offer as OfferFacts, receiptPayload: ok ? (p as unknown as ReceiptPayload) : null };
+}
+
+/** the budget as POST /budget takes it: amounts as decimal strings, caps in the signed order */
+function budgetBody(m: BudgetMessage) {
+  return {
+    payer: m.payer, perPayment: m.perPayment.toString(), perDay: m.perDay.toString(), perPayTo: m.perPayTo.toString(),
+    payToCaps: m.payToCaps.map((c) => ({ payTo: c.payTo, perDay: c.perDay.toString() })), allowedPayTos: m.allowedPayTos,
+    validUntil: m.validUntil.toString(), nonce: m.nonce.toString(),
+  };
+}
+
+function signatureOf(v: unknown): string {
+  if (typeof v !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(v)) throw new TollError("Invalid signature: expected a 65-byte 0x hex signature from the payer.");
+  return v;
+}
+
+/** a facilitator { error, message } answer as a TollError (404 budgets_off says so) */
+function facError(res: Response, raw: string): TollError {
+  const json = tryJson(raw);
+  const code = isObject(json) && typeof json.error === "string" ? json.error : "";
+  const msg = isObject(json) && typeof json.message === "string" ? json.message : "";
+  const s = retryAfterOf(res);
+  const note = code === "budgets_off" ? " Budgets are not switched on at this facilitator yet." : "";
+  return new TollError(`Toll's facilitator answered HTTP ${res.status}${code ? `: ${code}` : raw ? `: ${raw.slice(0, 200)}` : ""}${msg ? ` (${msg})` : ""}.${note}`,
+    { status: res.status, ...(s !== undefined ? { retryAfterS: s } : {}) });
 }

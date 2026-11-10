@@ -28,6 +28,16 @@ __all__ = [
     "TOLL_FACILITATOR",
     "SCREEN_OUTCOMES",
     "screen_of",
+    "BUDGET_DOMAIN",
+    "BUDGET_MAX_PAYTOS",
+    "BUDGET_TYPES",
+    "RECEIPT_DOMAIN",
+    "RECEIPT_TYPES",
+    "REVOKE_TYPES",
+    "budget_typed_data",
+    "receipt_typed_data",
+    "revoke_typed_data",
+    "toll_offer_receipt_of",
     "append_ticket_suffix",
     "assessment_of",
     "coin_badge_embed",
@@ -842,6 +852,66 @@ class Toll:
             out["partialResults"] = data["partialResults"]
         return out
 
+    def _fac(self, method: str, path: str, body: Any = None) -> tuple:
+        h = {"accept": "application/json", "x-toll-client": self._client_id}
+        data = None
+        if body is not None:
+            h["content-type"] = "application/json"
+            data = json.dumps(body).encode()
+        req = urllib.request.Request(f"{self.facilitator_url}{path}", data=data, method=method, headers=h)
+        return self._http(req, self.timeout)
+
+    def paid_before(self, payer: str, pay_to: str, resource: Optional[str] = None, since: Optional[Union[int, float]] = None) -> Dict[str, Any]:
+        """GET /paid on the facilitator: whether payer already paid pay_to through Toll's facilitator (settlements, escrow
+        captures, batch charges), optionally for one resource and after since (unix seconds). For sellers using
+        sign-in-with-x: a returning wallet can be let in without a second charge. Returns {"paid", "count", "last":
+        {"tx", "ts", "amount", "receiptId", "via"} | None, "network", "sources"}. A 503 raises: never a false "not paid"."""
+        q = {"payer": _address(payer, "payer").lower(), "payTo": _address(pay_to, "pay_to").lower()}
+        if resource is not None:
+            if not isinstance(resource, str) or len(resource) > 2048 or not _RESOURCE.fullmatch(resource):
+                raise TollError("Invalid resource: an http(s) URL of at most 2048 characters, exactly as the payment named it.")
+            q["resource"] = resource
+        if since is not None:
+            if hasattr(since, "timestamp"):
+                since = int(since.timestamp())
+            if isinstance(since, bool) or not isinstance(since, int) or not 0 <= since <= 9_999_999_999:
+                raise TollError("Invalid since: unix seconds (a whole number) or a datetime.")
+            q["since"] = str(since)
+        status, headers, raw = self._fac("GET", f"/paid?{urlencode(q)}")
+        data = _try_json(raw)
+        if not 200 <= status < 300 or not isinstance(data, dict) or not isinstance(data.get("paid"), bool) or not isinstance(data.get("count"), int):
+            raise _fac_error(status, headers, raw)
+        return data
+
+    def set_budget(self, budget: Dict[str, Any], signature: str) -> Dict[str, Any]:
+        """COMING (the facilitator answers HTTP 404 budgets_off until budgets are switched on). POST /budget: set or replace
+        (newer nonce) the payer's spending limits with Toll's facilitator. signature is the payer's own EIP-712 signature of
+        budget_typed_data(budget); anyone may relay it. Returns {"ok", "payer", "nonce", "revoked"}."""
+        m = _budget_message(budget)
+        return self._post_budget({"budget": _budget_body(m), "signature": _signature(signature)})
+
+    def revoke_budget(self, payer: str, nonce: Union[int, str], signature: str) -> Dict[str, Any]:
+        """COMING (see set_budget). POST /budget {revoke}: refuse every payment until a budget with a newer nonce is set."""
+        m = revoke_typed_data(payer, nonce)["message"]
+        return self._post_budget({"revoke": {"payer": m["payer"], "nonce": str(m["nonce"])}, "signature": _signature(signature)})
+
+    def get_budget(self, payer: str) -> Dict[str, Any]:
+        """COMING (see set_budget). GET /budget?payer=: {"payer", "network", "day", "budget" | None, "spentToday",
+        "spentByPayTo", "remainingToday"}, USDG base units as decimal strings, UTC day."""
+        p = _address(payer, "payer").lower()
+        status, headers, raw = self._fac("GET", f"/budget?payer={p}")
+        data = _try_json(raw)
+        if not 200 <= status < 300 or not isinstance(data, dict) or not isinstance(data.get("payer"), str) or "budget" not in data:
+            raise _fac_error(status, headers, raw)
+        return data
+
+    def _post_budget(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        status, headers, raw = self._fac("POST", "/budget", body)
+        data = _try_json(raw)
+        if not 200 <= status < 300 or not isinstance(data, dict) or data.get("ok") is not True:
+            raise _fac_error(status, headers, raw)
+        return data
+
     def badge_url(self, token: str, size: Optional[str] = None) -> str:
         """The "Checked by Toll" badge URL for a coin on this client's base URL (see coin_badge_url)."""
         return coin_badge_url(token, size=size, base_url=self.base_url)
@@ -1058,6 +1128,189 @@ def _rest_error(status: int, headers: Any, raw: str) -> TollError:
     data = _try_json(raw)
     msg = data["error"] if isinstance(data, dict) and isinstance(data.get("error"), str) else raw[:200]
     return TollError(f"Toll answered HTTP {status}" + (f": {msg}" if msg else ""), status=status, retry_after_s=_retry_after(headers))
+
+
+# -- the facilitator: offer-receipt and per-payer budgets ----------------------
+_EIP712_DOMAIN_TYPE = [
+    {"name": "name", "type": "string"},
+    {"name": "version", "type": "string"},
+    {"name": "chainId", "type": "uint256"},
+]
+
+RECEIPT_DOMAIN = {"name": "x402 receipt", "version": "1", "chainId": 1}
+"""The x402 offer-receipt spec's EIP-712 receipt domain (chainId 1 by the spec, whatever the payment network)."""
+RECEIPT_TYPES = {
+    "Receipt": [
+        {"name": "version", "type": "uint256"},
+        {"name": "network", "type": "string"},
+        {"name": "resourceUrl", "type": "string"},
+        {"name": "payer", "type": "string"},
+        {"name": "issuedAt", "type": "uint256"},
+        {"name": "transaction", "type": "string"},
+    ],
+}
+"""The spec's canonical receipt types (v1)."""
+
+BUDGET_DOMAIN = {"name": "Toll Facilitator Budget", "version": "1", "chainId": 4663}
+"""The budget's EIP-712 domain: no verifyingContract (nothing on chain checks it)."""
+BUDGET_TYPES = {
+    "Budget": [
+        {"name": "payer", "type": "address"},
+        {"name": "perPayment", "type": "uint256"},
+        {"name": "perDay", "type": "uint256"},
+        {"name": "perPayTo", "type": "uint256"},
+        {"name": "payToCaps", "type": "PayToCap[]"},
+        {"name": "allowedPayTos", "type": "address[]"},
+        {"name": "validUntil", "type": "uint64"},
+        {"name": "nonce", "type": "uint256"},
+    ],
+    "PayToCap": [
+        {"name": "payTo", "type": "address"},
+        {"name": "perDay", "type": "uint256"},
+    ],
+}
+REVOKE_TYPES = {"Revoke": [{"name": "payer", "type": "address"}, {"name": "nonce", "type": "uint256"}]}
+BUDGET_MAX_PAYTOS = 50
+"""At most this many pay_to_caps and allowed_pay_tos."""
+
+_MAX_U256 = (1 << 256) - 1
+_MAX_U64 = (1 << 64) - 1
+_SIG65 = re.compile(r"0x[0-9a-fA-F]{130}")
+_RESOURCE = re.compile(r'https?://[^\s"\\]+')
+
+
+def _uint(v: Any, name: str, top: int = _MAX_U256) -> int:
+    n: Optional[int] = None
+    if isinstance(v, int) and not isinstance(v, bool):
+        n = v
+    elif isinstance(v, str) and re.fullmatch(r"\d{1,78}", v.strip()):
+        n = int(v.strip())
+    if n is None or n < 0 or n > top:
+        raise TollError(f"Invalid {name}: use a whole number of USDG base units (int or decimal string) from 0.")
+    return n
+
+
+def _address(v: Any, name: str) -> str:
+    if not is_valid_wallet(v):
+        raise TollError(f"Invalid {name}: expected 0x + 40 hex characters.")
+    return v
+
+
+def _typed(domain: Dict[str, Any], types: Dict[str, Any], primary: str, message: Dict[str, Any]) -> Dict[str, Any]:
+    """EIP-712 typed data in the full-message form (EIP712Domain in types): eth_account's
+    encode_typed_data(full_message=...) and eth_signTypedData_v4 take it as is."""
+    return {"domain": dict(domain), "types": {"EIP712Domain": list(_EIP712_DOMAIN_TYPE), **types}, "primaryType": primary, "message": message}
+
+
+def _budget_message(budget: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(budget, dict):
+        raise TollError("Invalid budget: pass {payer, perPayment, perDay, nonce, ...}.")
+    caps = budget.get("payToCaps", budget.get("pay_to_caps")) or []
+    allowed = budget.get("allowedPayTos", budget.get("allowed_pay_tos")) or []
+    if not isinstance(caps, list) or len(caps) > BUDGET_MAX_PAYTOS:
+        raise TollError(f"Invalid payToCaps: a list of at most {BUDGET_MAX_PAYTOS}.")
+    if not isinstance(allowed, list) or len(allowed) > BUDGET_MAX_PAYTOS:
+        raise TollError(f"Invalid allowedPayTos: a list of at most {BUDGET_MAX_PAYTOS}.")
+    seen = set()
+    out_caps = []
+    for i, c in enumerate(caps):
+        if not isinstance(c, dict):
+            raise TollError(f"Invalid payToCaps[{i}]: use {{payTo, perDay}}.")
+        pt = _address(c.get("payTo", c.get("pay_to")), f"payToCaps[{i}].payTo")
+        if pt.lower() in seen:
+            raise TollError(f"Invalid payToCaps: {pt} is listed twice (one cap per payTo).")
+        seen.add(pt.lower())
+        out_caps.append({"payTo": pt, "perDay": _uint(c.get("perDay", c.get("per_day")), f"payToCaps[{i}].perDay")})
+
+    def g(camel: str, snake: str, default: Any = None) -> Any:
+        v = budget.get(camel, budget.get(snake))
+        return default if v is None else v
+
+    return {
+        "payer": _address(budget.get("payer"), "payer"),
+        "perPayment": _uint(g("perPayment", "per_payment"), "perPayment"),
+        "perDay": _uint(g("perDay", "per_day"), "perDay"),
+        "perPayTo": _uint(g("perPayTo", "per_pay_to", 0), "perPayTo"),
+        "payToCaps": out_caps,
+        "allowedPayTos": [_address(a, f"allowedPayTos[{i}]") for i, a in enumerate(allowed)],
+        "validUntil": _uint(g("validUntil", "valid_until", 0), "validUntil", _MAX_U64),
+        "nonce": _uint(budget.get("nonce"), "nonce"),
+    }
+
+
+def budget_typed_data(budget: Dict[str, Any]) -> Dict[str, Any]:
+    """The EIP-712 typed data of a per-payer budget, for the payer wallet to sign (eth_account:
+    Account.sign_typed_data(key, full_message=td)). Then Toll().set_budget(td["message"], signature). Amounts are USDG base
+    units (6 decimals); keys camelCase or snake_case. Raises TollError on a malformed budget, before anything is signed."""
+    return _typed(BUDGET_DOMAIN, BUDGET_TYPES, "Budget", _budget_message(budget))
+
+
+def revoke_typed_data(payer: str, nonce: Union[int, str]) -> Dict[str, Any]:
+    """The EIP-712 typed data of a budget revoke (refuses every payment until a budget with a newer nonce is set)."""
+    return _typed(BUDGET_DOMAIN, REVOKE_TYPES, "Revoke", {"payer": _address(payer, "payer"), "nonce": _uint(nonce, "nonce")})
+
+
+def receipt_typed_data(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The EIP-712 typed data of the x402 offer-receipt spec's receipt (domain "x402 receipt" / "1" / chainId 1), for the
+    SELLER to sign with its own key once it has delivered. The payload is used exactly as given."""
+    if not isinstance(payload, dict):
+        raise TollError("Invalid receipt payload.")
+    for k in ("network", "resourceUrl", "payer"):
+        if not isinstance(payload.get(k), str):
+            raise TollError(f"Invalid receipt payload: {k} must be text.")
+    tx = payload.get("transaction", "")
+    if not isinstance(tx, str):
+        raise TollError("Invalid receipt payload: transaction must be text.")
+    ver, at = payload.get("version"), payload.get("issuedAt")
+    if isinstance(ver, bool) or not isinstance(ver, int) or ver < 1:
+        raise TollError("Invalid receipt payload: version must be a whole number (1).")
+    if isinstance(at, bool) or not isinstance(at, int) or at < 0:
+        raise TollError("Invalid receipt payload: issuedAt must be unix seconds.")
+    return _typed(RECEIPT_DOMAIN, RECEIPT_TYPES, "Receipt",
+                  {"version": ver, "network": payload["network"], "resourceUrl": payload["resourceUrl"], "payer": payload["payer"],
+                   "issuedAt": at, "transaction": tx})
+
+
+def toll_offer_receipt_of(answer: Any) -> Optional[Dict[str, Any]]:
+    """extensions["toll-offer-receipt"] of a facilitator /settle answer, checked: {"offer", "receiptPayload"} (receiptPayload
+    None when nothing settled or it is malformed), or None when absent (no offer-receipt extension, another facilitator)."""
+    ext = answer.get("extensions") if isinstance(answer, dict) else None
+    x = ext.get("toll-offer-receipt") if isinstance(ext, dict) else None
+    if not isinstance(x, dict) or not isinstance(x.get("offer"), dict) or not isinstance(x["offer"].get("read"), str):
+        return None
+    p = x.get("receiptPayload")
+    ok = (isinstance(p, dict) and all(isinstance(p.get(k), str) for k in ("network", "resourceUrl", "payer"))
+          and all(isinstance(p.get(k), int) and not isinstance(p.get(k), bool) for k in ("version", "issuedAt"))
+          and isinstance(p.get("transaction", ""), str))
+    return {"offer": x["offer"], "receiptPayload": p if ok else None}
+
+
+def _budget_body(m: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "payer": m["payer"], "perPayment": str(m["perPayment"]), "perDay": str(m["perDay"]), "perPayTo": str(m["perPayTo"]),
+        "payToCaps": [{"payTo": c["payTo"], "perDay": str(c["perDay"])} for c in m["payToCaps"]],
+        "allowedPayTos": list(m["allowedPayTos"]), "validUntil": str(m["validUntil"]), "nonce": str(m["nonce"]),
+    }
+
+
+def _signature(v: Any) -> str:
+    if isinstance(v, (bytes, bytearray)) and len(v) == 65:
+        v = "0x" + bytes(v).hex()
+    if isinstance(v, str) and len(v) == 130 and not v.startswith("0x"):
+        v = "0x" + v  # HexBytes.hex() drops the 0x in newer eth_account
+    if not isinstance(v, str) or not _SIG65.fullmatch(v):
+        raise TollError("Invalid signature: expected a 65-byte 0x hex signature from the payer.")
+    return v
+
+
+def _fac_error(status: int, headers: Any, raw: str) -> TollError:
+    data = _try_json(raw)
+    code = data.get("error") if isinstance(data, dict) and isinstance(data.get("error"), str) else ""
+    msg = data.get("message") if isinstance(data, dict) and isinstance(data.get("message"), str) else ""
+    note = " Budgets are not switched on at this facilitator yet." if code == "budgets_off" else ""
+    head = f": {code}" if code else (f": {raw[:200]}" if raw else "")
+    return TollError(f"Toll's facilitator answered HTTP {status}{head}" + (f" ({msg})" if msg else "") + "." + note,
+                     status=status, retry_after_s=_retry_after(headers))
 
 
 # -- check_tx: the RiskAssessment and the ALLOW ticket -------------------------

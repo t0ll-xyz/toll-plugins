@@ -33,6 +33,7 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
 - `check_agent(agent_id)` - an ERC-8004 agent on Robinhood Chain by its agent id
 - `find_paid_api(query=None, limit=None)` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `find_paid_apis()` for the JSON
+- `paid_before(payer, pay_to, resource=None, since=None)` - whether a wallet already paid you through Toll's facilitator; `set_budget`, `revoke_budget`, `get_budget` - a payer's spending limits with it (coming); see 0.7.0 below
 - `check_hook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `check_tx(to=, data=, value=, from_=, typed_data=, x402=, agent_id=, registry=, strict=, chain_id=)` - the pre-sign check for a transaction, an EIP-712 signature (`typed_data`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chain_id` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presign_risk_report(subject, context=None, kinds=None)` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134, version `erc-presign/1`): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
@@ -43,6 +44,38 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
+
+## 0.7.0 (2026-11-10): paid before, seller receipts, budgets (coming)
+
+```python
+import time
+from toll_sdk import Toll, budget_typed_data, revoke_typed_data, receipt_typed_data, toll_offer_receipt_of
+toll = Toll()
+
+# 1. paid before: has this wallet already paid me through Toll's facilitator? (for sign-in-with-x sellers)
+p = toll.paid_before(wallet, my_wallet, resource="https://api.example/quote", since=1794000000)
+if p["paid"]:
+    ...  # let the returning wallet in without charging again; p["last"] = {"tx", "ts", "amount", "receiptId", "via"}
+
+# 2. offer-receipt: the seller signs the spec's receipt payload the facilitator hands it, with its own key
+x = toll_offer_receipt_of(settle_answer)  # extensions["toll-offer-receipt"]: {"offer", "receiptPayload"} or None
+if x and x["receiptPayload"]:
+    td = receipt_typed_data(x["receiptPayload"])  # domain "x402 receipt" / 1 / chainId 1, full-message form
+
+# 3. budgets (COMING: the facilitator answers 404 budgets_off until they are switched on)
+from eth_account import Account
+from eth_account.messages import encode_typed_data
+td = budget_typed_data({"payer": acct.address, "perPayment": 100_000, "perDay": 1_000_000,   # USDG base units (6 decimals)
+                        "payToCaps": [{"payTo": "0x...", "perDay": 250_000}], "nonce": int(time.time() * 1000)})
+toll.set_budget(td["message"], acct.sign_message(encode_typed_data(full_message=td)).signature)
+toll.get_budget(acct.address)  # {"budget", "spentToday", "spentByPayTo", "remainingToday", "day"}
+rv = revoke_typed_data(acct.address, int(time.time() * 1000))
+toll.revoke_budget(acct.address, rv["message"]["nonce"], acct.sign_message(encode_typed_data(full_message=rv)).signature)
+```
+
+- `paid_before(payer, pay_to, resource=None, since=None)` -> `GET /paid`: `{"paid", "count", "last", "network", "sources"}` (`via`: `settlement`, `escrow`, `batch`). Only facts already public on chain; a 503 raises, never a false "not paid". `since` is unix seconds or a `datetime`.
+- Offer-receipt: `toll_offer_receipt_of(answer)`, `receipt_typed_data(payload)`, `RECEIPT_DOMAIN`, `RECEIPT_TYPES`. The spec's receipt says "paid and delivered", so the seller signs it; Toll never does.
+- Budgets (coming): `budget_typed_data(budget)` (camelCase or snake_case keys) and `revoke_typed_data(payer, nonce)` return EIP-712 typed data in the full-message form (`EIP712Domain` in `types`, ints in `message`), for `eth_account`'s `encode_typed_data(full_message=...)` or `eth_signTypedData_v4`. Domain `Toll Facilitator Budget` / `1` / chain 4663, no verifyingContract. `set_budget(budget, signature)`, `revoke_budget(payer, nonce, signature)`, `get_budget(payer)`; a signature may be 0x hex, hex without 0x, or 65 bytes. Rules: perPayment and perDay always apply (0 = nothing passes), perPayTo 0 = not set, payToCaps a day cap per payTo, allowedPayTos empty = any (each at most 50), validUntil 0 = no end, UTC days, a newer nonce replaces. Errors raise `TollError` with the facilitator's code (`budgets_off`, `budget_nonce_stale`, `invalid_budget_signature`).
 
 ## 0.6.0 (2026-11-10): find paid APIs, the facilitator's safety screen
 
