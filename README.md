@@ -55,6 +55,23 @@ What it does (its `/supported` lists them):
   `GET /discovery/search?query=` list the paid APIs an agent can buy on Robinhood Chain, verified payTo first; also
   the `find_paid_api` MCP tool, `findPaidApis()` / `find_paid_apis()` in the SDKs and <https://t0ll.xyz/x402/discover>.
   A seller is listed once a payment settles with the bazaar extension (`bazaar` in `@tollxyz/x402-seller`).
+- **Paid before:** `GET /paid?payer=&payTo=[&resource=][&since=]` answers `{ paid, count, last: { tx, ts, amount,
+  receiptId, via }, network, sources }`: whether a wallet already paid a seller through the facilitator (settlements,
+  escrow captures, batch charges), facts already public on chain. With x402
+  [sign-in-with-x](https://github.com/x402-foundation/x402/blob/main/specs/extensions/sign-in-with-x.md) a seller lets a
+  returning wallet in without a second charge (`paidBefore()` in `@tollxyz/x402-seller` and `@tollxyz/sdk`,
+  `paid_before()` in `toll-sdk`).
+- **Seller-signed receipts (x402 offer-receipt):** a payment carrying `extensions["offer-receipt"]` gets
+  `extensions["toll-offer-receipt"] = { offer, receiptPayload }` in the settle answer: the seller's signed offer checked
+  (facts, never a refusal) and the spec's receipt payload for the **seller** to sign with its own key (domain
+  `x402 receipt` / `1` / chainId 1); `/receipt/<id or tx>` carries it as `offerReceipt` on a settled row. Toll never signs
+  the spec's receipt (it attests delivery). `signReceipt` in `@tollxyz/x402-seller` signs it and returns it to the buyer
+  as `extensions["offer-receipt"].info.receipt`; `receiptTypedData()` in the SDKs.
+- **Per-payer budgets (coming, off until launch):** a payer signs its own spending limits (EIP-712 `Budget`, domain
+  `Toll Facilitator Budget` / `1` / 4663: perPayment, perDay, per-payTo day caps, allowed payTos, expiry) with
+  `POST /budget`, reads them with `GET /budget?payer=`, and `/verify` and `/settle` refuse any payment past them, across
+  every scheme. `budgetTypedData()`, `setBudget()`, `revokeBudget()`, `getBudget()` in the SDKs; `guardBudget()` in
+  `@tollxyz/guard` mirrors guard's caps into one. Until it launches the facilitator answers `404 budgets_off`.
 
 Start from the template: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api` ([templates/x402-starter](templates/x402-starter), a Next.js API with one paid route).
 Or add [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
@@ -78,7 +95,7 @@ no default for chain 4663):
 ```
 
 Endpoints: `/verify`, `/settle`, `/supported`, `/stats`, `/receipt/<id or tx>`, `/discovery/resources`,
-`/discovery/search`. The
+`/discovery/search`, `/paid`, `/budget` (coming). The
 [x402 Register](https://x402.t0ll.xyz/#register) lists every agent on Robinhood Chain that sells over x402 and whether
 its payTo is bound to its identity.
 
@@ -89,7 +106,7 @@ its payTo is bound to its identity.
 | [`@tollxyz/sdk`](packages/sdk-js) | TypeScript client, zero dependencies, `pay()` for the x402 paid path | `npm install @tollxyz/sdk` |
 | [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`) | `pip install toll-sdk` |
 | [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing | `npm install @tollxyz/guard` |
-| [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check, signed receipt, builder code, safety screen and a discovery listing | `npm install @tollxyz/x402-seller` |
+| [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check, signed receipt, builder code, safety screen, a discovery listing, seller-signed offer-receipt receipts and `paidBefore` | `npm install @tollxyz/x402-seller` |
 | [`@tollxyz/mcp`](packages/mcp) | Local stdio MCP server, Toll's tools 1:1 (bin `toll-mcp`) | `npx -y @tollxyz/mcp` |
 | [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |
 | [`@tollxyz/agentkit`](packages/agentkit) | Coinbase AgentKit action provider | `npm install @tollxyz/agentkit @coinbase/agentkit zod@3` |

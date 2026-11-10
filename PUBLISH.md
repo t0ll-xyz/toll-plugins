@@ -1,3 +1,61 @@
+# Release 0.7.0 (2026-11-10): paid before, seller-signed receipts, per-payer budgets (coming)
+
+Branch `fac-sdk-0.7`. Server side: `GET /paid` and the offer-receipt helper (`extensions["toll-offer-receipt"]` in
+settle answers, `offerReceipt` on `/receipt/<id>`) are built; per-payer budgets (`POST/GET /budget`) are built behind
+`FAC_BUDGETS` (off). The packages document budgets as coming: until the flag is on, `setBudget` / `getBudget` throw
+HTTP 404 `budgets_off`.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/sdk` (packages/sdk-js) | 0.6.0 | 0.7.0 (`paidBefore`; offer-receipt types, `tollOfferReceiptOf`, `receiptTypedData`; budgets: `budgetTypedData`, `revokeTypedData`, `setBudget`, `revokeBudget`, `getBudget`) |
+| `toll-sdk` (PyPI, packages/sdk-py) | 0.6.0 | 0.7.0 (`paid_before`, `toll_offer_receipt_of`, `receipt_typed_data`, `budget_typed_data`, `revoke_typed_data`, `set_budget`, `revoke_budget`, `get_budget`) |
+| `@tollxyz/x402-seller` | 0.2.0 | 0.3.0 (`signReceipt`, `paidBefore`, `receiptTypedData`, `receiptPayloadOf`) |
+| `@tollxyz/guard` | 0.4.1 | 0.5.0 (`guardBudget`: guard's caps as a facilitator budget; nothing else changes) |
+| mcp, agentkit, ai-sdk, langchain, mastra, plugin-elizaos, goat, priors-guard | | unchanged, do not publish |
+
+The wrappers stay on `@tollxyz/sdk ^0.6.0` (they call nothing new). The three SDK builds sign the same bytes for the same
+budget and key (checked in the tests: viem in sdk-js and guard, eth_account in sdk-py when installed).
+
+Before publishing, check the server answers what the packages call (both were 404 on 2026-11-10 while these commits
+were made: the site deploy with `/paid` was not live yet):
+
+```sh
+curl -s "https://x402.t0ll.xyz/paid?payer=0x1111111111111111111111111111111111111111&payTo=0x3954ff905bdb481ad5814d5be3cc32c3166122ac"
+# JSON { "paid": false, "count": 0, ... }, not a redirect or HTML
+curl -s "https://x402.t0ll.xyz/budget?payer=0x1111111111111111111111111111111111111111"
+# 404 { "error": "budgets_off" } is expected until FAC_BUDGETS=1 (the packages say "coming")
+```
+
+```sh
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                                             # tollxyz
+
+# build + test, one at a time
+for d in sdk-js x402-seller guard; do
+  (cd packages/$d && npm run build && npm test) || { echo "STOP: $d"; break; }
+done
+(cd packages/sdk-py && uv run --with pytest pytest -q)
+(cd packages/sdk-py && uv run --with pytest --with eth-account pytest -q tests/test_facilitator07.py)   # the signing checks
+node scripts/check-skills.mjs
+
+# 1. npm (no order needed: none of the three depends on another's new version)
+for d in sdk-js x402-seller guard; do
+  (cd packages/$d && npm publish --access public) || { echo "STOP: $d"; break; }
+done
+for p in sdk x402-seller guard; do npm view @tollxyz/$p version; done   # 0.7.0, 0.3.0, 0.5.0
+
+# 2. PyPI
+(cd packages/sdk-py && rm -rf dist && uv build && uvx twine check dist/* && uvx twine upload dist/*)   # toll_sdk-0.7.0
+
+# 3. GitHub
+git push origin fac-sdk-0.7
+git checkout main && git merge --ff-only fac-sdk-0.7 && git push origin main
+```
+
+`packages/sdk-py/uv.lock` may show as modified (its toll-sdk version line); leave it.
+
+---
+
 # Release 0.6.0 (2026-11-10): the x402 facilitator's discovery, builder code and safety screen
 
 Server first (live since 2026-11-10): `find_paid_api` on https://t0ll.xyz/mcp (28 tools), and on
