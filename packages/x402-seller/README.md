@@ -52,6 +52,7 @@ app.get("/forecast", (c) => forecast(c.req.raw));
 | `onSettled(settlement, req)` | called after each settlement: the transaction, the payer, the payee check, the receipt, `screen` |
 | `appCode` | your ERC-8021 builder code (`^[a-z0-9_]{1,32}$`): each settlement's calldata names your app (0.2.0) |
 | `bazaar` | describe the endpoint so it is listed in discovery (0.2.0, see below) |
+| `signReceipt(typedData)` | sign the x402 offer-receipt spec's receipt with your own key, returned to the buyer (0.3.0, see below) |
 | `facilitator` | another facilitator URL (default `https://x402.t0ll.xyz`) |
 
 ## Get listed: `bazaar` (0.2.0)
@@ -107,6 +108,61 @@ export const GET = paywall({ payTo, price: "0.05", onSettled: (s) => log(s.trans
   return Response.json({ forecast: "sunny" });
 });
 ```
+
+## Signed receipts: `signReceipt` (0.3.0)
+
+The [x402 offer-receipt extension](https://github.com/x402-foundation/x402/blob/main/specs/extensions/extension-offer-and-receipt.md)
+lets a seller hand the buyer a signed receipt: "payment received and service delivered". The seller signs it, never the
+facilitator (a facilitator cannot attest delivery). With `signReceipt`, the payment sent to Toll's facilitator carries
+`extensions["offer-receipt"]`; the settle answer hands back this settlement's receipt payload
+(`extensions["toll-offer-receipt"].receiptPayload`: version 1, `eip155:4663`, your resource URL, the payer, issuedAt, the
+transaction). The package checks it is this settlement's, signs it with your function and returns it to the buyer in
+`PAYMENT-RESPONSE` as `extensions["offer-receipt"].info.receipt = { format: "eip712", payload, signature }`.
+
+```ts
+import { privateKeyToAccount } from "viem/accounts";
+const receiptKey = privateKeyToAccount(process.env.RECEIPT_KEY as `0x${string}`); // a dedicated key, not your payTo key
+
+export const GET = paywall(
+  { payTo: "0xYourAgentWallet", price: "0.05", signReceipt: (td) => receiptKey.signTypedData(td) },
+  async (req) => Response.json({ forecast: "sunny" }),
+);
+```
+
+`typedData` is the spec's EIP-712 receipt (domain `x402 receipt` / `1` / chainId 1, type `Receipt`), uints as bigint.
+Signing happens only after your handler answered below 400 and the payment settled; a signer that throws only means no
+receipt. Verifiers must know your signing key belongs to your service (the spec's signer authorization: sign with the
+payTo key, or publish the dedicated key). `settlement.offerReceipt` (in `onSettled`) holds what was sent.
+`receiptTypedData()`, `receiptPayloadOf()`, `RECEIPT_DOMAIN`, `RECEIPT_TYPES` are exported for other stacks.
+
+## Returning wallets: `paidBefore` with sign-in-with-x (0.3.0)
+
+With the x402 [sign-in-with-x](https://github.com/x402-foundation/x402/blob/main/specs/extensions/sign-in-with-x.md)
+extension a client proves which wallet it is (the `SIGN-IN-WITH-X` header, CAIP-122). Step 4 of the spec, "check payment
+history", is `paidBefore`: it asks Toll's facilitator (`GET https://x402.t0ll.xyz/paid`) whether that wallet already paid
+you, so a returning wallet gets in without a second charge.
+
+```ts
+import { paidBefore, paywall } from "@tollxyz/x402-seller";
+
+const opts = { payTo: "0xYourAgentWallet", price: "0.05" };
+const handler = async (req: Request) => Response.json({ forecast: "sunny" });
+const paid = paywall(opts, handler);
+
+export async function GET(req: Request) {
+  const wallet = await verifySiwx(req); // YOUR check of the SIGN-IN-WITH-X header (domain, uri, nonce, expiry, signature)
+  if (wallet) {
+    const p = await paidBefore({ payer: wallet, payTo: opts.payTo, resource: "https://your.site/api/forecast" }).catch(() => null);
+    if (p?.paid) return handler(req); // paid before: no second charge
+  }
+  return paid(req); // everyone else pays
+}
+```
+
+Call it only with a wallet the request proved it controls, never with an address it merely names. The answer is
+`{ paid, count, last: { tx, ts, amount, receiptId, via }, network, sources }`, facts already public on chain;
+`resource` (exactly as the payment named it) and `since` (unix seconds or a Date) narrow it. It throws when the
+facilitator cannot answer: charge as usual then. This package does not verify `SIGN-IN-WITH-X` itself.
 
 ## Using a stock x402 library instead
 

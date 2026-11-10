@@ -1,5 +1,10 @@
 # Changelog: @tollxyz/x402-seller
 
+## 0.3.0 (2026-11-10)
+
+- `signReceipt(typedData)`: sign the x402 offer-receipt spec's receipt with your own key. The forwarded payment carries `extensions["offer-receipt"]` and the resource; when the settle answer's `extensions["toll-offer-receipt"].receiptPayload` is this settlement's (version 1, eip155:4663, this resource, the settled payer and transaction), it is signed and sent to the buyer in `PAYMENT-RESPONSE` as `extensions["offer-receipt"].info.receipt = { format: "eip712", payload, signature }`, and kept in `settlement.offerReceipt`. A signer that throws only means no receipt. `receiptTypedData()`, `receiptPayloadOf()`, `RECEIPT_DOMAIN`, `RECEIPT_TYPES`, types `ReceiptPayload`, `SignedReceipt`, `ReceiptTypedData`.
+- `paidBefore({ payer, payTo, resource?, since?, facilitator?, fetch? })`: `GET /paid` on Toll's facilitator, whether a wallet already paid you, for letting a sign-in-with-x verified returning wallet in without a second charge. Type `PaidAnswer`.
+
 ## 0.2.0 (2026-11-10)
 
 - `appCode`: your ERC-8021 builder code (`^[a-z0-9_]{1,32}$`, checked when the route loads), sent in the 402 as `extensions["builder-code"].info.a` and in the payment forwarded to the facilitator (the buyer's service codes kept), so Toll's facilitator names your app in each settlement's calldata.

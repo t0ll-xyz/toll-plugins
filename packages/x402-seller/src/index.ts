@@ -53,7 +53,108 @@ export type Settlement = {
   extensions?: Record<string, unknown>;
   /** the settle answer's extensions.screen (toll-screen), when the facilitator sent one */
   screen?: Screen;
+  /** the offer-receipt spec's receipt you signed with signReceipt (also sent to the buyer), when one was signed */
+  offerReceipt?: SignedReceipt;
 };
+
+/* ---------------------------------------------------------------- offer-receipt (x402 extension-offer-and-receipt.md) */
+
+/** the spec's receipt payload (v1): what Toll's facilitator hands the seller in extensions["toll-offer-receipt"] */
+export type ReceiptPayload = { version: number; network: string; resourceUrl: string; payer: string; issuedAt: number; transaction: string };
+/** the spec's signed receipt, as the buyer gets it in extensions["offer-receipt"].info.receipt */
+export type SignedReceipt = { format: "eip712"; payload: ReceiptPayload; signature: string };
+/** the spec's EIP-712 receipt domain: chainId 1 by the spec, whatever the payment network */
+export const RECEIPT_DOMAIN = { name: "x402 receipt", version: "1", chainId: 1 } as const;
+/** the spec's canonical receipt types (v1) */
+export const RECEIPT_TYPES = {
+  Receipt: [
+    { name: "version", type: "uint256" },
+    { name: "network", type: "string" },
+    { name: "resourceUrl", type: "string" },
+    { name: "payer", type: "string" },
+    { name: "issuedAt", type: "uint256" },
+    { name: "transaction", type: "string" },
+  ],
+} as const;
+/** what signReceipt gets: EIP-712 typed data ready for viem's account.signTypedData (uints as bigint) */
+export type ReceiptTypedData = {
+  domain: { name: string; version: string; chainId: number };
+  types: typeof RECEIPT_TYPES;
+  primaryType: "Receipt";
+  message: { version: bigint; network: string; resourceUrl: string; payer: string; issuedAt: bigint; transaction: string };
+};
+
+/** the receipt payload as typed data, exactly as given (the spec forbids rebuilding it) */
+export function receiptTypedData(p: ReceiptPayload): ReceiptTypedData {
+  return {
+    domain: { ...RECEIPT_DOMAIN },
+    types: RECEIPT_TYPES,
+    primaryType: "Receipt",
+    message: { version: BigInt(p.version), network: p.network, resourceUrl: p.resourceUrl, payer: p.payer, issuedAt: BigInt(p.issuedAt), transaction: p.transaction },
+  };
+}
+
+/**
+ * extensions["toll-offer-receipt"].receiptPayload of a settle answer, only when it is this settlement's: version 1, this
+ * network, this resource, the settled payer and transaction. Anything else is null: a seller never signs a receipt for a
+ * payment it did not get.
+ */
+export function receiptPayloadOf(answer: unknown, want: { resource: string; payer?: string; transaction: string }): ReceiptPayload | null {
+  const ext = isObj(answer) ? answer.extensions : null;
+  const x = isObj(ext) ? ext["toll-offer-receipt"] : null;
+  const p = isObj(x) ? x.receiptPayload : null;
+  if (!isObj(p) || p.version !== 1 || p.network !== USDG.network || p.resourceUrl !== want.resource) return null;
+  if (typeof p.payer !== "string" || !want.payer || p.payer.toLowerCase() !== want.payer.toLowerCase()) return null;
+  if (typeof p.transaction !== "string" || (p.transaction !== "" && p.transaction.toLowerCase() !== want.transaction.toLowerCase())) return null;
+  if (typeof p.issuedAt !== "number" || !Number.isSafeInteger(p.issuedAt) || p.issuedAt < 0) return null;
+  return { version: 1, network: p.network, resourceUrl: p.resourceUrl, payer: p.payer, issuedAt: p.issuedAt, transaction: p.transaction };
+}
+
+/* ---------------------------------------------------------------- paid before (sign-in-with-x) */
+
+/** GET /paid's answer: whether the payer already paid payTo through Toll's facilitator (facts public on chain) */
+export type PaidAnswer = {
+  paid: boolean;
+  count: number;
+  last: { tx: string | null; ts: number; amount: string; receiptId: string; via: "settlement" | "escrow" | "batch" } | null;
+  network: string;
+  sources: { settlements: number; escrow: number | "not-read" | "not-applicable"; batch: number | "not-read" | "not-applicable" };
+};
+
+/**
+ * Whether `payer` already paid `payTo` through Toll's facilitator (GET /paid: settlements, escrow captures, batch
+ * charges), optionally for one resource and after `since` (unix seconds or a Date). For sign-in-with-x: call it only
+ * with a wallet the request PROVED it controls (a verified SIGN-IN-WITH-X header), never with an address it merely
+ * names. Throws when the facilitator cannot answer: charge as usual then.
+ */
+export async function paidBefore(q: {
+  payer: string;
+  payTo: string;
+  resource?: string;
+  since?: number | Date;
+  facilitator?: string;
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+}): Promise<PaidAnswer> {
+  if (!ADDRESS.test(q.payer)) throw new Error(`payer must be a 0x address, got "${q.payer}"`);
+  if (!ADDRESS.test(q.payTo)) throw new Error(`payTo must be a 0x address, got "${q.payTo}"`);
+  const p = new URLSearchParams({ payer: q.payer.toLowerCase(), payTo: q.payTo.toLowerCase() });
+  if (q.resource !== undefined) {
+    if (q.resource.length > 2048 || !/^https?:\/\/[^\s"\\]+$/.test(q.resource)) throw new Error("resource must be an http(s) URL of at most 2048 characters");
+    p.set("resource", q.resource);
+  }
+  if (q.since !== undefined) {
+    const s = q.since instanceof Date ? Math.floor(q.since.getTime() / 1000) : q.since;
+    if (!Number.isSafeInteger(s) || s < 0 || s > 9_999_999_999) throw new Error("since must be unix seconds or a Date");
+    p.set("since", String(s));
+  }
+  const base = (q.facilitator ?? TOLL_FACILITATOR).replace(/\/+$/, "");
+  const r = await (q.fetch ?? fetch)(`${base}/paid?${p.toString()}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(q.timeoutMs ?? 15_000) });
+  let j: unknown = null;
+  try { j = await r.json(); } catch { /* not JSON */ }
+  if (!r.ok || !isObj(j) || typeof j.paid !== "boolean" || typeof j.count !== "number") throw new Error(`facilitator paid answered ${r.status}`);
+  return j as PaidAnswer;
+}
 
 /** HTTP methods the x402 bazaar extension describes */
 export type BazaarMethod = "GET" | "HEAD" | "DELETE" | "POST" | "PUT" | "PATCH";
@@ -110,6 +211,14 @@ export type SellerOptions = {
   appCode?: string;
   /** describe the endpoint (x402 bazaar) so it is listed in discovery once a payment settles */
   bazaar?: BazaarOptions;
+  /**
+   * sign the x402 offer-receipt spec's receipt with your own key (viem: `(td) => account.signTypedData(td)`). The payment
+   * sent to Toll's facilitator then carries extensions["offer-receipt"]; when the settle answer hands back this
+   * settlement's receipt payload (extensions["toll-offer-receipt"].receiptPayload), it is signed and returned to the
+   * buyer as extensions["offer-receipt"].info.receipt = { format: "eip712", payload, signature }. A signer that throws
+   * only means no receipt: the buyer still gets the answer.
+   */
+  signReceipt?: (typedData: ReceiptTypedData) => Promise<string> | string;
 };
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -354,12 +463,13 @@ export type Payment = {
 
 /**
  * The v2 payload sent to the facilitator, with what this seller declared: the bazaar extension and the resource (so
- * the endpoint is cataloged even when the buyer's client does not echo extensions) and the builder-code app code
- * (the buyer's own service codes `s` kept). The payer's signature covers only the authorization, never these.
- * v1 payloads and sellers without appCode / bazaar go unchanged.
+ * the endpoint is cataloged even when the buyer's client does not echo extensions), the builder-code app code
+ * (the buyer's own service codes `s` kept) and, with signReceipt, extensions["offer-receipt"] (so the facilitator hands
+ * back the receipt payload) and the resource. The payer's signature covers only the authorization, never these.
+ * v1 payloads and sellers without appCode / bazaar / signReceipt go unchanged.
  */
 export function withDeclared(pay: Payment, o: SellerOptions, resource: string, method = "GET"): Payment {
-  if (pay.version !== 2 || (o.appCode === undefined && !o.bazaar)) return pay;
+  if (pay.version !== 2 || (o.appCode === undefined && !o.bazaar && !o.signReceipt)) return pay;
   const p = pay.payload;
   const ext: Record<string, unknown> = isObj(p.extensions) ? { ...p.extensions } : {};
   if (o.appCode !== undefined) {
@@ -368,10 +478,10 @@ export function withDeclared(pay: Payment, o: SellerOptions, resource: string, m
     ext["builder-code"] = { a: validAppCode(o.appCode), ...(typeof s === "string" || Array.isArray(s) ? { s } : {}) };
   }
   let res = p.resource;
-  if (o.bazaar) {
-    ext.bazaar = bazaarExtension(o.bazaar, method);
-    res = paymentRequired(o, resource, undefined, method).resource;
-  }
+  if (o.bazaar) ext.bazaar = bazaarExtension(o.bazaar, method);
+  if (o.signReceipt && !isObj(ext["offer-receipt"])) ext["offer-receipt"] = { info: {} };
+  // the resource as this seller names it: the bazaar listing and the receipt's resourceUrl both come from it
+  if (o.bazaar || o.signReceipt) res = paymentRequired(o, resource, undefined, method).resource;
   return { ...pay, payload: { ...p, ...(res !== undefined ? { resource: res } : {}), extensions: ext } };
 }
 
@@ -436,6 +546,7 @@ export function paywall(o: SellerOptions, handler: (req: Request, payment: Payme
   requirement(o); // a bad payTo or price fails at startup, not on the first buyer
   if (o.appCode !== undefined) validAppCode(o.appCode);
   if (o.bazaar !== undefined) checkBazaar(o.bazaar);
+  if (o.signReceipt !== undefined && typeof o.signReceipt !== "function") throw new Error("signReceipt must be a function (typedData) => signature");
   return async (req: Request): Promise<Response> => {
     const u = new URL(req.url);
     const resource = `${u.origin}${u.pathname}`;
@@ -467,11 +578,21 @@ export function paywall(o: SellerOptions, handler: (req: Request, payment: Payme
       ...(Object.keys(ext).length ? { extensions: ext } : {}),
       ...(sScreen ? { screen: sScreen } : {}),
     };
+    if (o.signReceipt && pay.version === 2) {
+      const payload = receiptPayloadOf(s, { resource, payer: settled.payer, transaction: settled.transaction });
+      if (payload) {
+        try {
+          const signature = await o.signReceipt(receiptTypedData(payload));
+          if (typeof signature === "string" && /^0x[0-9a-fA-F]{130}$/.test(signature)) settled.offerReceipt = { format: "eip712", payload, signature };
+        } catch { /* no receipt; the buyer still gets the answer */ }
+      }
+    }
     if (o.onSettled) {
       try { await o.onSettled(settled, req); } catch { /* the seller's hook never costs the buyer the answer */ }
     }
     const receipt = b64({ success: true, transaction: settled.transaction, network: settled.network,
-      ...(settled.payer ? { payer: settled.payer } : {}), ...(ext.receipt ? { receipt: ext.receipt } : {}) });
+      ...(settled.payer ? { payer: settled.payer } : {}), ...(ext.receipt ? { receipt: ext.receipt } : {}),
+      ...(settled.offerReceipt ? { extensions: { "offer-receipt": { info: { receipt: settled.offerReceipt } } } } : {}) });
     const headers = new Headers(res.headers);
     headers.set("PAYMENT-RESPONSE", receipt);
     headers.set("X-PAYMENT-RESPONSE", receipt);
