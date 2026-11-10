@@ -101,6 +101,14 @@ test("check_hook (11-05): the live description, calls the MCP tool with the key"
   assert.equal(calls[0].headers.get("x-toll-pass"), "tk_9");
 });
 
+test("find_paid_api (0.5.0): the live description, calls the MCP tool with query and limit", async () => {
+  const { p, calls } = provider([{ body: ok("f") }, { body: ok("g") }]);
+  assert.equal(getAction(p, "find_paid_api").description, LIVE_DESCRIPTIONS.find_paid_api);
+  assert.equal(await getAction(p, "find_paid_api").invoke({ query: "stock quotes", limit: 3 }), "f");
+  assert.equal(await getAction(p, "find_paid_api").invoke({}), "g");
+  assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [["find_paid_api", { query: "stock quotes", limit: 3 }], ["find_paid_api", {}]]);
+});
+
 const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
 const HOOK_URL = "https://example.com/toll-hook";
 test("0.4.0: wallet_approvals, watches and check_tx ticket carry the live descriptions and call the MCP tools with the key", async () => {

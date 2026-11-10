@@ -4,10 +4,11 @@ An [elizaOS](https://docs.elizaos.ai) plugin for [Toll](https://t0ll.xyz/agents/
 
 Toll reads Robinhood Chain only right now: actions read 0x addresses only; a message with only a Solana mint or another chain's address gets "Toll reads Robinhood Chain only right now." and nothing is sent.
 
-23 actions, each run when the message text holds what it needs:
+24 actions, each run when the message text holds what it needs:
 
 - `TOLL_CHECK_COIN`, `TOLL_LARP_CHECK`: a token's 0x address. `TOLL_DEV_RECORD`: a deployer wallet. `TOLL_WALLET_PRIVACY`: a word like privacy or exposed and a wallet. `TOLL_WALLET_APPROVALS`: a word like approvals, allowances or revoke and a wallet. `TOLL_BLOCKLIST`: the word blocklist (with a 0x address to look one up). `TOLL_LAUNCH_RECORD`: the words launch record or at launch and a token. `TOLL_FRESH_LAUNCHES`: new coins or fresh launches (`top 5` sets how many). `TOLL_CHAIN_PULSE`: how busy the chain is. These answer with Toll's text.
 - `TOLL_CHECK_AGENT`: an ERC-8004 agent id (`agent 20030` or `agent #20030`).
+- `TOLL_FIND_PAID_API` (0.5.0): words like paid API or x402 endpoints; a quoted phrase or the words after "for" are the query (`find a paid API for "stock quotes"`). Lists paid x402 APIs on Robinhood Chain, verified payTo first; verified does not say the seller delivers.
 - `TOLL_CHECK_TX`: the request pasted as JSON in the message: `{to, data, value, from}`, `{typedData: {...}}`, `{x402: {...}}` or a 402 body with `accepts`; add `"ticket": true` for an ALLOW ticket. `TOLL_PRESIGN_RISK_REPORT`: a PresignRequest pasted as JSON with `"version": "erc-presign/1"`.
 - For Robinhood Stock Tokens: `TOLL_STOCK_TOKEN` (the word stock and a ticker, `$NVDA` or `NVDA`, or the token's contract) and `TOLL_STOCK_TOKENS` (the list); for the companies behind them `TOLL_FUNDAMENTALS` (a word like fundamentals, financials, revenue, earnings or P/E, and a ticker), `TOLL_INSIDER_TRADES` (insider or Form 4, and a ticker), `TOLL_INSTITUTIONS` (13F or institutions, and a ticker) and `TOLL_GUIDANCE` (guidance, outlook or KPIs, and a ticker); `TOLL_STOCK_EVENTS` (stock token events, listings, multiplier changes, corporate actions or filings; a kind named in the message filters); and `TOLL_MACRO` (macro, rates, inflation, the yield curve or jobs). The Markets ones answer with Toll's JSON.
 

@@ -53,7 +53,7 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all twenty-seven. */
+  /** Which tools to return. Default: all twenty-eight. */
   only?: TollToolName[];
 }
 
@@ -69,6 +69,7 @@ export type TollToolName =
   | "fresh_launches"
   | "chain_pulse"
   | "check_agent"
+  | "find_paid_api"
   | "check_hook"
   | "check_tx"
   | "presign_risk_report"
@@ -161,6 +162,11 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: LIVE_DESCRIPTIONS.check_agent,
       inputSchema: SCHEMAS.check_agent,
       execute: async ({ id }) => run(() => toll.checkAgent(id)),
+    }),
+    find_paid_api: tool({
+      description: LIVE_DESCRIPTIONS.find_paid_api,
+      inputSchema: SCHEMAS.find_paid_api,
+      execute: async ({ query, limit }) => run(() => toll.findPaidApi({ query, limit })),
     }),
     check_hook: tool({
       description: LIVE_DESCRIPTIONS.check_hook,

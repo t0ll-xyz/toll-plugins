@@ -1,5 +1,5 @@
 /**
- * Input schemas for Toll's 27 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-08). Robinhood Chain only.
+ * Input schemas for Toll's 28 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-10). Robinhood Chain only.
  * The same file ships in every @tollxyz plugin package (only the zod import differs).
  */
 import { z } from "zod/v4";
@@ -35,6 +35,14 @@ export const CheckAgentSchema = z.object({
   id: z
     .union([z.number().int().min(0).max(1_000_000_000), z.string().regex(/^[0-9]{1,10}$/)])
     .describe("The agent id: its ERC-8004 token id in the Robinhood Chain identity registry (for example 20030)."),
+});
+export const FindPaidApiSchema = z.object({
+  query: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('What you want to buy, in a few words (for example "weather" or "stock quotes"); leave it out to list every operator\'s best endpoint.'),
+  limit: z.number().int().min(1).max(20).optional().describe("How many rows, 1 to 20 (default 10)."),
 });
 export const CheckHookSchema = z.object({
   address: z.string().describe("The hook contract's address on Robinhood Chain: 0x followed by 40 hex characters."),
@@ -144,6 +152,7 @@ export const SCHEMAS = {
   chain_pulse: ChainPulseSchema,
   launch_record: LaunchRecordSchema,
   check_agent: CheckAgentSchema,
+  find_paid_api: FindPaidApiSchema,
   check_hook: CheckHookSchema,
   check_tx: CheckTxSchema,
   presign_risk_report: PresignRiskReportSchema,

@@ -5,7 +5,7 @@
 SDKs, agent plugins and skills for [Toll](https://t0ll.xyz/agents/plugins), the safety check for agents on Robinhood
 Chain (chain id 4663, the only chain Toll reads): who is behind a coin, the dev's record, whether there is a real
 product behind it, what a transaction, signature or x402 payment does before it is signed (`check_tx`, ALLOW / WARN /
-BLOCK), what an ERC-8004 agent's registration and payment terms say, what a Uniswap v4 hook can do (`check_hook`), and Robinhood Stock Token data (SEC fundamentals,
+BLOCK), what an ERC-8004 agent's registration and payment terms say, which paid APIs an agent can buy over x402 (`find_paid_api`), what a Uniswap v4 hook can do (`check_hook`), and Robinhood Stock Token data (SEC fundamentals,
 insider trades, 13F holders, earnings guidance, the event feed, US macro), read over Toll's MCP server. Every package
 exposes the server's tools.
 
@@ -38,6 +38,24 @@ Before it settles, it checks the payTo against the seller's ERC-8004 identity
 ([ERC-8478](https://github.com/ethereum/ERCs/pull/2132)), and every settlement comes back with a Toll-signed EIP-712
 receipt (who paid whom, how much, which transaction, what the payee check said).
 
+What it does (its `/supported` lists them):
+
+- **Schemes:** `exact` (EIP-3009 `transferWithAuthorization`) and `upto` (Permit2 through the x402UptoPermit2Proxy
+  `0x4020a4f3b7b90cca423b9fabcc0ce57c6c240002`: the buyer signs a ceiling, the seller charges what was used), both on
+  `eip155:4663` USDG.
+- **Payee check (`erc8478`, enforced):** payTo must be the agentWallet the seller's ERC-8004 identity registered.
+- **Signed receipt (`toll-receipt`)** with every settlement.
+- **Builder code (`builder-code`, ERC-8021):** each settlement's calldata names who settled it and, when the seller sends
+  its app code in the 402 (`extensions["builder-code"].info.a`, `^[a-z0-9_]{1,32}$`; `appCode` in
+  `@tollxyz/x402-seller`), the app that sold it.
+- **Safety screen (`toll-screen`):** every `/verify` and `/settle` answer carries `extensions.screen = { outcome:
+  "allow" | "warn" | "block" | "not-read", codes }`, `check_tx`'s word on the payment, for the seller (`payment.screen`
+  and `settlement.screen` in `@tollxyz/x402-seller`, `screenOf()` in `@tollxyz/sdk`).
+- **Discovery (x402 bazaar):** `GET /discovery/resources?type&payTo&operator&limit&offset` and
+  `GET /discovery/search?query=` list the paid APIs an agent can buy on Robinhood Chain, verified payTo first; also
+  the `find_paid_api` MCP tool, `findPaidApis()` / `find_paid_apis()` in the SDKs and <https://t0ll.xyz/x402/discover>.
+  A seller is listed once a payment settles with the bazaar extension (`bazaar` in `@tollxyz/x402-seller`).
+
 Start from the template: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api` ([templates/x402-starter](templates/x402-starter), a Next.js API with one paid route).
 Or add [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
 With another x402 library, point your server at the facilitator URL and name USDG and its signing domain explicitly (most x402 libraries have
@@ -59,7 +77,8 @@ no default for chain 4663):
 }
 ```
 
-Endpoints: `/verify`, `/settle`, `/supported`, `/stats`, `/receipt/<id or tx>`. The
+Endpoints: `/verify`, `/settle`, `/supported`, `/stats`, `/receipt/<id or tx>`, `/discovery/resources`,
+`/discovery/search`. The
 [x402 Register](https://x402.t0ll.xyz/#register) lists every agent on Robinhood Chain that sells over x402 and whether
 its payTo is bound to its identity.
 
@@ -70,7 +89,7 @@ its payTo is bound to its identity.
 | [`@tollxyz/sdk`](packages/sdk-js) | TypeScript client, zero dependencies, `pay()` for the x402 paid path | `npm install @tollxyz/sdk` |
 | [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`) | `pip install toll-sdk` |
 | [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing | `npm install @tollxyz/guard` |
-| [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check and signed receipt | `npm install @tollxyz/x402-seller` |
+| [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check, signed receipt, builder code, safety screen and a discovery listing | `npm install @tollxyz/x402-seller` |
 | [`@tollxyz/mcp`](packages/mcp) | Local stdio MCP server, Toll's tools 1:1 (bin `toll-mcp`) | `npx -y @tollxyz/mcp` |
 | [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |
 | [`@tollxyz/agentkit`](packages/agentkit) | Coinbase AgentKit action provider | `npm install @tollxyz/agentkit @coinbase/agentkit zod@3` |

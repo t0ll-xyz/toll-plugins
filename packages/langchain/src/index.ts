@@ -20,7 +20,7 @@ export interface TollToolsOptions {
    * (more new coins and Markets calls a day, the live stock_events feed). Ignored when client is given.
    */
   tollKey?: string;
-  /** Which tools to return. Default: all twenty-seven. */
+  /** Which tools to return. Default: all twenty-eight. */
   only?: TollToolName[];
 }
 

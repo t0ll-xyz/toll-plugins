@@ -24,11 +24,11 @@ function setup(responses: string[]) {
   return { tools, by, bodies };
 }
 
-test("all 27 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 28 live tools with Toll's names, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools, by } = setup([]);
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
   assert.deepEqual(TOOL_NAMES, [...SDK_TOOL_NAMES]);
-  assert.equal(tools.length, 27);
+  assert.equal(tools.length, 28);
   assert.match(by.check_coin.description, /^Before buying a token on Robinhood Chain, check who is behind it/);
   assert.match(by.check_agent.description, /^Before paying or trusting an ERC-8004 agent/);
   assert.match(by.larp_check.description, /^Is there a real product behind this coin on Robinhood Chain\?/);
@@ -176,6 +176,14 @@ test("check_hook (11-05): one call with { address }", async () => {
   assert.match(by.check_hook.description, /Uniswap v4 hook/);
   assert.equal(await by.check_hook.invoke({ address: HOOK }), "h");
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+test("find_paid_api (0.5.0): one call with { query, limit }", async () => {
+  const { by, bodies } = setup([ok("f"), ok("g")]);
+  assert.match(by.find_paid_api.description, /Paid APIs \(x402\)/);
+  assert.equal(await by.find_paid_api.invoke({ query: "stock quotes", limit: 3 }), "f");
+  assert.equal(await by.find_paid_api.invoke({}), "g");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["find_paid_api", { query: "stock quotes", limit: 3 }], ["find_paid_api", {}]]);
 });
 
 const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";

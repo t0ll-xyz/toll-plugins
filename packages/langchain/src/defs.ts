@@ -20,6 +20,7 @@ export type TollToolName =
   | "chain_pulse"
   | "launch_record"
   | "check_agent"
+  | "find_paid_api"
   | "check_hook"
   | "check_tx"
   | "presign_risk_report"
@@ -37,7 +38,7 @@ export type TollToolName =
   | "watch_wallet"
   | "unwatch_wallet";
 
-/** All twenty-seven, in the server's order. */
+/** All twenty-eight, in the server's order. */
 export const TOOL_NAMES: TollToolName[] = [
   "check_coin",
   "pre_buy_check",
@@ -50,6 +51,7 @@ export const TOOL_NAMES: TollToolName[] = [
   "chain_pulse",
   "launch_record",
   "check_agent",
+  "find_paid_api",
   "check_hook",
   "check_tx",
   "presign_risk_report",
@@ -97,6 +99,7 @@ export const descriptions: Record<TollToolName, string> = {
     "The call Toll froze a few minutes after a Robinhood Chain coin launched, and how it ended 24 hours later. It is not the coin now (use check_coin for that).",
   check_agent:
     "Before paying or trusting an ERC-8004 agent on Robinhood Chain, check it by agent id: whether its registration card loads, whether it answers over MCP or x402, its x402 payment terms, whether x402 pays to its registered agentWallet, and whether that wallet has sent a transaction. Facts with the date read, not a verdict.",
+  find_paid_api: LIVE_DESCRIPTIONS.find_paid_api,
   check_hook: LIVE_DESCRIPTIONS.check_hook,
   check_tx: LIVE_DESCRIPTIONS.check_tx,
   presign_risk_report: LIVE_DESCRIPTIONS.presign_risk_report,
@@ -131,6 +134,7 @@ export function runners(toll: Toll): { [K in TollToolName]: (input: Inputs[K]) =
     chain_pulse: () => run(() => toll.chainPulse()),
     launch_record: ({ address }) => run(() => toll.launchRecord(address)),
     check_agent: ({ id }) => run(() => toll.checkAgent(id)),
+    find_paid_api: ({ query, limit }) => run(() => toll.findPaidApi({ query, limit })),
     check_hook: ({ address }) => run(() => toll.checkHook(address)),
     check_tx: (input) => run(() => toll.checkTx(input)),
     presign_risk_report: (input) => run(() => toll.presignRiskReport(input)),

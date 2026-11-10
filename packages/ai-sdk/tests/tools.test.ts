@@ -22,7 +22,7 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("all 27 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 28 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools).sort(), [...TOOL_NAMES].sort());
   assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, check who is behind it/);
@@ -169,6 +169,14 @@ test("check_hook (11-05): the live description, one call with { address }", asyn
   assert.equal(tools.check_hook!.description, LIVE_DESCRIPTIONS.check_hook);
   assert.equal(await tools.check_hook!.execute!({ address: HOOK }, opts), "h");
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+test("find_paid_api (0.5.0): the live description, one call with { query, limit }", async () => {
+  const { tools, bodies } = setup([ok("f"), ok("g")]);
+  assert.equal(tools.find_paid_api!.description, LIVE_DESCRIPTIONS.find_paid_api);
+  assert.equal(await tools.find_paid_api!.execute!({ query: "stock quotes", limit: 3 }, opts), "f");
+  assert.equal(await tools.find_paid_api!.execute!({}, opts), "g");
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["find_paid_api", { query: "stock quotes", limit: 3 }], ["find_paid_api", {}]]);
 });
 
 test("pre_buy_check and check_coins (11-06): live descriptions, one call each with Toll's argument names", async () => {

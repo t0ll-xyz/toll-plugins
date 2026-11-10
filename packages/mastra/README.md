@@ -4,7 +4,7 @@
 
 Toll reads Robinhood Chain only right now: `chain` is optional and takes only `rh`; a Solana mint or another chain is answered with "Toll reads Robinhood Chain only right now." and nothing is sent.
 
-All 27 of Toll's live tools, each called over Toll's MCP server (`https://t0ll.xyz/mcp`): `check_coin`, `pre_buy_check`, `check_coins`, `larp_check`, `dev_record`, `wallet_privacy`, `wallet_approvals`, `fresh_launches`, `chain_pulse`, `launch_record`, `check_agent`, `check_hook`, `check_tx`, `presign_risk_report`, for Robinhood Stock Tokens `stock_token` and `stock_tokens`, for the companies behind them `fundamentals`, `insider_trades`, `institutions` and `guidance`, US `macro`, the Stock Token event feed `stock_events`, and the webhook watches `watch_coin`, `my_watches`, `unwatch_coin`, `watch_wallet` and `unwatch_wallet`. Descriptions and input schemas match the live server.
+All 28 of Toll's live tools, each called over Toll's MCP server (`https://t0ll.xyz/mcp`): `check_coin`, `pre_buy_check`, `check_coins`, `larp_check`, `dev_record`, `wallet_privacy`, `wallet_approvals`, `fresh_launches`, `chain_pulse`, `launch_record`, `check_agent`, `find_paid_api` (paid APIs an agent can buy over x402, verified payTo first), `check_hook`, `check_tx`, `presign_risk_report`, for Robinhood Stock Tokens `stock_token` and `stock_tokens`, for the companies behind them `fundamentals`, `insider_trades`, `institutions` and `guidance`, US `macro`, the Stock Token event feed `stock_events`, and the webhook watches `watch_coin`, `my_watches`, `unwatch_coin`, `watch_wallet` and `unwatch_wallet`. Descriptions and input schemas match the live server.
 
 ## Install
 
@@ -59,6 +59,15 @@ if (!bl.notModified) console.log(bl.list.count, bl.list.entries[0]);
 `stock_token` and `stock_tokens` read one Stock Token (by ticker or contract) or the list; `fundamentals` (period `ttm`, `annual` or `quarterly`), `insider_trades` (Form 4, limit 1 to 100), `institutions` (13F holders for the latest quarter, limit 1 to 20) and `guidance` (forward guidance, KPIs and non-GAAP from the last 4 earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, limit 1 to 60 per release) take a Stock Token's ticker or contract as `id`; `macro` takes nothing. `stock_events` takes optional `since` (the last answer's `next`), `kind` and `limit` (1 to 100): what changed on the Stock Tokens, oldest first. Without a Toll key it shows the last 10 events found an hour ago or more; Pro holders read it 15 minutes late, Team holders live.
 
 Facts with their sources, not advice. Robinhood Stock Tokens are debt securities issued by Robinhood Assets (Jersey) Ltd, not shares.
+
+## Find a paid API (0.5.0)
+
+`find_paid_api` takes an optional `query` ("weather", "stock quotes") and `limit` (1 to 20) and lists the paid APIs (x402) an
+agent can buy on Robinhood Chain, from the discovery catalog of Toll's x402 facilitator: each with its resource URL,
+price, payTo, whether that payTo is the agent wallet its ERC-8004 identity registered (verified, ERC-8478) and how many
+payments settled through Toll; verified first. Verified does not say the seller delivers: check the agent
+(`check_agent`) and the payment (`check_tx` with `x402`) before paying, and never pay without the owner's consent.
+For the JSON, use the SDK client: `new Toll().findPaidApis({ query })`.
 
 ## Free limit and the paid path
 

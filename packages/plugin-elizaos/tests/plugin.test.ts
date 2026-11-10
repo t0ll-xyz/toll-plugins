@@ -37,6 +37,7 @@ test("plugin shape", () => {
     "TOLL_FRESH_LAUNCHES",
     "TOLL_CHAIN_PULSE",
     "TOLL_CHECK_AGENT",
+    "TOLL_FIND_PAID_API",
     "TOLL_CHECK_HOOK",
     "TOLL_CHECK_TX",
     "TOLL_PRESIGN_RISK_REPORT",
@@ -283,6 +284,26 @@ test("TOLL_CHECK_HOOK (11-05): a message naming a hook and its address calls che
   assert.equal(await a.validate({}, msg(`check ${HOOK}`)), false);
   assert.equal((await a.handler({}, msg(`what does the hook ${HOOK} do?`))).success, true);
   assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [["check_hook", { address: HOOK }]]);
+});
+
+test("TOLL_FIND_PAID_API (0.5.0): asks for a paid API, the quoted phrase or the words after 'for' are the query", async () => {
+  const { toll, bodies } = client([fx("find_paid_api"), ok("all"), ok("for")]);
+  const p = createTollPlugin({ client: toll });
+  const a = act(p, "TOLL_FIND_PAID_API");
+  assert.equal(await a.validate({}, msg('find a paid API for "stock quotes"')), true);
+  assert.equal(await a.validate({}, msg("which x402 endpoints can I buy?")), true);
+  assert.equal(await a.validate({}, msg(`check ${TOKEN}`)), false);
+  const r = await a.handler({}, msg('find a paid API for "stock quotes"'));
+  assert.equal(r.success, true);
+  assert.match(r.text, /Paid APIs on Robinhood Chain/);
+  await a.handler({}, msg("list the x402 endpoints"));
+  await a.handler({}, msg("any paid apis for weather data?"));
+  assert.deepEqual(bodies.map((b) => [b.params.name, b.params.arguments]), [
+    ["find_paid_api", { query: "stock quotes" }],
+    ["find_paid_api", {}],
+    ["find_paid_api", { query: "weather data" }],
+  ]);
+  assert.equal(Reexported.paidApiQueryOf("nothing here"), undefined);
 });
 
 const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";

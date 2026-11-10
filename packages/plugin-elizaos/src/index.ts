@@ -111,6 +111,17 @@ const LAUNCH_RECORD_WORDS = /\b(launch record|call at launch|at launch|frozen ca
 const FRESH_WORDS = /\b(new(?:est)? (?:coins|launches|tokens)|fresh launches|latest (?:coins|launches)|just launched)\b/i;
 /** Words that ask how busy the chain is. */
 const PULSE_WORDS = /\b(chain pulse|pulse|how busy|activity on (?:the )?chain|launches (?:today|right now))\b/i;
+/** Words that ask for a paid API to buy (find_paid_api, 0.5.0). */
+const PAID_API_WORDS = /\b(paid (?:apis?|endpoints?|services?)|x402 (?:apis?|endpoints?|services?|sellers?)|apis? (?:i|we) can (?:buy|pay for)|(?:find|buy) an? (?:paid )?api)\b/i;
+
+/** What a find-paid-API message asks for: a quoted phrase, else the words after "for" (at most 200 characters). */
+export function paidApiQueryOf(text: string): string | undefined {
+  const quoted = /["“]([^"“”]{1,200})["”]/.exec(text)?.[1];
+  const after = quoted ?? /\bfor\s+([^?.!\n]{1,200})/i.exec(text)?.[1];
+  const q = after?.trim().slice(0, 200);
+  return q ? q : undefined;
+}
+
 /** Words that name a Uniswap v4 hook (check_hook, 11-05). */
 const HOOK_WORDS = /\bhooks?\b/i;
 
@@ -294,6 +305,18 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       run: ({ client: c }, t) => c.checkAgent(extractAgentId(t)!),
       example: ["check agent #20030 before I pay it", "Here is what Toll's agent census read for agent #20030."],
       missing: "No agent id in the message for TOLL_CHECK_AGENT: write agent 20030 or agent #20030.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_FIND_PAID_API",
+      similes: ["FIND_PAID_API", "X402_DISCOVERY", "FIND_X402_API"],
+      description: `${LIVE_DESCRIPTIONS.find_paid_api} Runs when the message asks for a paid API or x402 endpoint; a quoted phrase or the words after "for" are the query.`,
+      canRun: (t) => PAID_API_WORDS.test(t),
+      run: ({ client: c }, t) => {
+        const query = paidApiQueryOf(t);
+        return c.findPaidApi(query ? { query } : {});
+      },
+      example: ['find a paid API for "stock quotes" on Robinhood Chain', "Here are the paid x402 APIs Toll's catalog lists for that, verified payTo first."],
+      missing: "TOLL_FIND_PAID_API runs when the message asks for a paid API or an x402 endpoint.",
     }),
     makeAction(resolve, {
       name: "TOLL_CHECK_HOOK",

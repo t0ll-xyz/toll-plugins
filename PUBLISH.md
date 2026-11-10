@@ -1,3 +1,59 @@
+# Release 0.6.0 (2026-11-10): the x402 facilitator's discovery, builder code and safety screen
+
+Server first (live since 2026-11-10): `find_paid_api` on https://t0ll.xyz/mcp (28 tools), and on
+https://x402.t0ll.xyz (also https://t0ll.xyz/api/facilitator) `GET /discovery/resources`, `GET /discovery/search`,
+the `upto` scheme and the `builder-code` and `toll-screen` extensions (`/supported` lists them). Auth-capture escrow and
+batch settlement are built but off on the server: nothing here names or uses them.
+
+| Package | Old | New |
+| --- | --- | --- |
+| `@tollxyz/sdk` (packages/sdk-js) | 0.5.0 | 0.6.0 (`findPaidApi`, `findPaidApis` + `facilitatorUrl`, facilitator answer types, `screenOf`, 28 tools) |
+| `toll-sdk` (PyPI, packages/sdk-py) | 0.5.0 | 0.6.0 (`find_paid_api`, `find_paid_apis` + `facilitator_url`, `screen_of`) |
+| `@tollxyz/x402-seller` | 0.1.1 | 0.2.0 (`appCode` builder code, `bazaar` discovery listing, `payment.screen` / `settlement.screen`) |
+| `@tollxyz/mcp` | 0.5.0 | 0.6.0 (28-tool snapshot, instructions name `find_paid_api`, server.json 0.6.0) |
+| `@tollxyz/agentkit`, `ai-sdk`, `langchain`, `mastra` | 0.4.0 | 0.5.0 (`find_paid_api` tool; `@tollxyz/sdk ^0.6.0`) |
+| `@tollxyz/plugin-elizaos` | 0.4.0 | 0.5.0 (`TOLL_FIND_PAID_API`; `@tollxyz/sdk ^0.6.0`) |
+| goat (deprecated), guard, priors-guard | | unchanged, do not publish |
+
+The wrappers need `@tollxyz/sdk` 0.6.0 (they call `findPaidApi`), so the SDK goes first. In this repo they resolve the
+workspace SDK (package-lock links it); a stale nested `packages/<wrapper>/node_modules/@tollxyz/sdk` 0.5.0 from an
+earlier install makes their tests fail: `npm ci` (or deleting that folder) fixes it.
+
+```sh
+export NODE_OPTIONS=--max-old-space-size=3072
+npm whoami                                             # tollxyz
+curl -s https://x402.t0ll.xyz/supported                # extensions: erc8478, toll-receipt, builder-code, toll-screen
+
+# build + test, one at a time (the SDK first: the wrappers import its dist)
+for d in sdk-js x402-seller mcp agentkit ai-sdk langchain mastra plugin-elizaos; do
+  (cd packages/$d && npm run build && npm test) || { echo "STOP: $d"; break; }
+done
+(cd packages/sdk-py && uv run --with pytest pytest -q)
+node scripts/check-skills.mjs
+
+# 1. the SDK first (the wrappers need ^0.6.0)
+(cd packages/sdk-js && npm publish --access public)
+npm view @tollxyz/sdk@0.6.0 version                    # wait until it prints 0.6.0
+
+# 2. the seller, the MCP server and the wrappers
+for d in x402-seller mcp agentkit ai-sdk langchain mastra plugin-elizaos; do
+  (cd packages/$d && npm publish --access public) || { echo "STOP: $d"; break; }
+done
+for p in sdk x402-seller mcp agentkit ai-sdk langchain mastra plugin-elizaos; do npm view @tollxyz/$p version; done
+# sdk 0.6.0, x402-seller 0.2.0, mcp 0.6.0, the five wrappers 0.5.0
+
+# 3. PyPI
+(cd packages/sdk-py && rm -rf dist && uv build && uvx twine check dist/* && uvx twine upload dist/*)   # toll_sdk-0.6.0
+
+# 4. MCP registry (server.json 0.6.0; @tollxyz/mcp 0.6.0 must be on npm first)
+(cd packages/mcp && mcp-publisher login github && mcp-publisher publish)
+```
+
+Later (not in this release): `templates/x402-starter` still asks for `@tollxyz/x402-seller ^0.1.0` (works unchanged;
+bump it to `^0.2.0` once 0.2.0 is on npm to get `appCode` / `bazaar`).
+
+---
+
 # Release wrappers 0.4.0 (2026-11-09): the agent-framework packages on `@tollxyz/sdk` 0.5.0
 
 `@tollxyz/sdk` 0.5.0 is on npm. Each wrapper now depends on `^0.5.0` and re-exports `verifyWebhook` and `readWebhook`.

@@ -24,6 +24,7 @@ import {
   ChainPulseSchema,
   CheckAgentSchema,
   CheckHookSchema,
+  FindPaidApiSchema,
   CheckCoinSchema,
   CheckCoinsSchema,
   PreBuyCheckSchema,
@@ -195,6 +196,11 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({ name: "check_agent", description: LIVE_DESCRIPTIONS.check_agent, schema: CheckAgentSchema })
   async checkAgent(args: z.infer<typeof CheckAgentSchema>): Promise<string> {
     return run(() => this.client.checkAgent(args.id));
+  }
+
+  @CreateAction({ name: "find_paid_api", description: LIVE_DESCRIPTIONS.find_paid_api, schema: FindPaidApiSchema })
+  async findPaidApi(args: z.infer<typeof FindPaidApiSchema>): Promise<string> {
+    return run(() => this.client.findPaidApi(args));
   }
 
   @CreateAction({ name: "check_hook", description: LIVE_DESCRIPTIONS.check_hook, schema: CheckHookSchema })
