@@ -20,6 +20,7 @@ export const TOOL_NAMES = [
   "chain_pulse",
   "launch_record",
   "check_agent",
+  "find_paid_api",
   "check_hook",
   "check_tx",
   "presign_risk_report",
@@ -378,6 +379,112 @@ export interface TollResult {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/* ------------------------------------------------------------------ the x402 facilitator (x402.t0ll.xyz) */
+
+/** Toll's x402 facilitator: keyless, USDG on Robinhood Chain (also served at https://t0ll.xyz/api/facilitator). */
+export const TOLL_FACILITATOR = "https://x402.t0ll.xyz";
+
+/** toll-screen: check_tx's word on the payment being verified or settled; "not-read" = not read in time (never a refusal). */
+export type ScreenOutcome = "allow" | "warn" | "block" | "not-read";
+/** extensions.screen of every /verify and /settle answer of Toll's facilitator, for the seller. */
+export interface FacilitatorScreen {
+  outcome: ScreenOutcome;
+  /** check_tx's reason codes, empty when there are none */
+  codes: string[];
+}
+/** The extensions a Toll facilitator answer carries (each one optional: older answers or another facilitator). */
+export interface FacilitatorExtensions {
+  /** ERC-8478: whether payTo is the agentWallet the seller's ERC-8004 identity registered */
+  erc8478?: Record<string, unknown>;
+  /** toll-receipt: Toll's signed EIP-712 receipt (settle only; null when nothing settled) */
+  receipt?: Record<string, unknown> | null;
+  /** toll-screen */
+  screen?: FacilitatorScreen;
+  [key: string]: unknown;
+}
+/** POST /verify's answer. */
+export interface FacilitatorVerifyResponse {
+  isValid: boolean;
+  invalidReason?: string;
+  invalidMessage?: string;
+  payer?: string;
+  extensions?: FacilitatorExtensions;
+}
+/** POST /settle's answer (amount: what an upto payment actually charged). */
+export interface FacilitatorSettleResponse {
+  success: boolean;
+  errorReason?: string;
+  errorMessage?: string;
+  transaction: string;
+  network: string;
+  payer?: string;
+  amount?: string;
+  extensions?: FacilitatorExtensions;
+}
+
+const SCREEN_OUTCOMES: readonly string[] = ["allow", "warn", "block", "not-read"];
+/** extensions.screen of a facilitator answer (verify or settle), checked; null when absent or malformed. */
+export function screenOf(answer: unknown): FacilitatorScreen | null {
+  const ext = isObject(answer) ? answer.extensions : null;
+  const s = isObject(ext) ? ext.screen : null;
+  if (!isObject(s) || typeof s.outcome !== "string" || !SCREEN_OUTCOMES.includes(s.outcome)) return null;
+  const codes = Array.isArray(s.codes) ? s.codes.filter((c): c is string => typeof c === "string") : [];
+  return { outcome: s.outcome as ScreenOutcome, codes };
+}
+
+/** Who sells a discovered resource: one row per operator unless the query names it. */
+export interface DiscoveryOperator {
+  key: string;
+  label: string;
+  entries: number;
+}
+/** One paid API in the facilitator's discovery catalog (the x402 v2 bazaar item plus Toll's fields). */
+export interface PaidApi {
+  /** the resource URL (an MCP server URL when type is "mcp") */
+  resource: string;
+  /** "http" or "mcp" */
+  type: string;
+  x402Version: number;
+  /** what it accepts: network, amount, asset, payTo, extra */
+  accepts: Array<Record<string, unknown>>;
+  lastUpdated?: string;
+  /** payTo is the agentWallet its ERC-8004 identity registered (ERC-8478); not a word on whether it delivers */
+  verified: boolean;
+  /** payments settled through Toll's facilitator */
+  settledViaToll: number;
+  /** "census" (the agent census) or "bazaar" (recorded from a payment settled with the bazaar extension) */
+  source?: string;
+  payTo: string | null;
+  /** "0.05 USDG" */
+  price: string | null;
+  name: string | null;
+  agentId: number | null;
+  operator: DiscoveryOperator | null;
+  [key: string]: unknown;
+}
+export interface FindPaidApisOptions {
+  /** what to buy, in a few words ("weather", "stock quotes"): given = /discovery/search, else /discovery/resources */
+  query?: string;
+  /** "http" or "mcp" */
+  type?: "http" | "mcp";
+  /** only resources that pay this wallet */
+  payTo?: string;
+  /** only this operator's resources (an operator key from a listing, for example "agent:8654") */
+  operator?: string;
+  /** 1 to 100 */
+  limit?: number;
+  /** skip this many (the list only) */
+  offset?: number;
+}
+export interface PaidApiList {
+  x402Version: number;
+  items: PaidApi[];
+  /** the list: { limit, offset, total }; search: null */
+  pagination: { limit: number; offset?: number; total?: number; cursor?: string | null } | null;
+  /** search only: true when more matches were left out */
+  partialResults?: boolean;
+}
+
 /** What a paid URL asks for, read from its 402 answer. */
 export interface PaymentRequirements {
   /** 2 when the 402 carried a PAYMENT-REQUIRED header (the SDK then sends PAYMENT-SIGNATURE), else 1 (X-PAYMENT). */
@@ -510,6 +617,11 @@ export interface TollOptions {
    * there, else random per process.
    */
   clientId?: string;
+  /**
+   * The x402 facilitator findPaidApis() reads. Default: https://x402.t0ll.xyz with the default baseUrl, else
+   * `${baseUrl}/api/facilitator`.
+   */
+  facilitatorUrl?: string;
   /** Plain fetch used for MCP calls. Default: global fetch. */
   fetch?: FetchLike;
   /** Signs the payment pay() sends (see SignPayment). Without it pay() throws before any request. */
@@ -590,6 +702,15 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/** a find-paid-API query: trimmed, at most 200 characters; empty = none */
+function assertQuery(query: unknown): string {
+  if (query === undefined || query === null) return "";
+  if (typeof query !== "string") throw new TollError("Invalid query: use a few words of text.");
+  const q = query.trim();
+  if (q.length > 200) throw new TollError("Invalid query: at most 200 characters.");
+  return q;
+}
+
 // Only the upsell line counts: a finished LARP answer also lists Toll's own x402 endpoint as a "working part".
 const PAID_URL = /paid (?:LARP )?check of this coin \(x402\):\s*(https:\/\/t0ll\.xyz\/api\/x402\/[^\s)"'<>]+)/i;
 const AGAIN = /again in (?:about )?(\d+)\s*(?:s\b|sec)/i;
@@ -618,6 +739,7 @@ export class Toll {
   private readonly fetchFn: FetchLike;
   private readonly tollKey?: string;
   private readonly clientId: string;
+  private readonly facilitatorUrl: string;
   private readonly signFn?: SignPayment;
   private readonly timeoutMs: number;
   private readonly payTimeoutMs: number;
@@ -629,6 +751,7 @@ export class Toll {
     this.fetchFn = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.tollKey = opts.tollKey?.trim() || undefined;
     this.clientId = resolveClientId(opts.clientId);
+    this.facilitatorUrl = (opts.facilitatorUrl ?? (this.baseUrl === "https://t0ll.xyz" ? TOLL_FACILITATOR : `${this.baseUrl}/api/facilitator`)).replace(/\/+$/, "");
     this.signFn = opts.sign;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.payTimeoutMs = opts.payTimeoutMs ?? 300_000;
@@ -862,6 +985,16 @@ export class Toll {
    * its owner can change its code, how many pools use it, and whether sells through it fail. A $TOLL holder's key
    * (apiKey) adds the measured cut and how its latest coins ended.
    */
+  /**
+   * find_paid_api: paid APIs (x402) an agent can buy on Robinhood Chain, by what it needs ("weather", "stock quotes", or
+   * nothing for every operator's best endpoint), verified payTo first. The answer as text; findPaidApis() for the JSON.
+   */
+  async findPaidApi(opts: { query?: string; limit?: number } = {}): Promise<TollResult> {
+    const query = assertQuery(opts.query);
+    assertLimit(opts.limit, 20);
+    return this.call("find_paid_api", { ...(query ? { query } : {}), ...(opts.limit !== undefined ? { limit: opts.limit } : {}) });
+  }
+
   async checkHook(address: string): Promise<TollResult> {
     assertAddress(address, "hook address");
     return this.call("check_hook", { address });
@@ -1061,6 +1194,43 @@ export class Toll {
     const json = tryJson(raw);
     if (!res.ok || !isObject(json) || !Array.isArray(json.actions)) throw restError(res, raw);
     return json as unknown as TxRecord;
+  }
+
+  /**
+   * The facilitator's discovery catalog (x402 bazaar): GET /discovery/search?query= when `query` is given, else
+   * GET /discovery/resources. Each item: resource, accepts, price, payTo, verified (payTo is its ERC-8004 agentWallet,
+   * ERC-8478), settledViaToll, name, agentId, operator. Facts, not a recommendation: verified does not say it delivers.
+   */
+  async findPaidApis(opts: FindPaidApisOptions = {}): Promise<PaidApiList> {
+    const query = assertQuery(opts.query);
+    if (opts.type !== undefined && opts.type !== "http" && opts.type !== "mcp") throw new TollError('Invalid type: use "http" or "mcp".');
+    if (opts.payTo !== undefined && !EVM.test(String(opts.payTo))) throw new TollError("Invalid payTo: expected 0x + 40 hex characters.");
+    if (opts.operator !== undefined && (typeof opts.operator !== "string" || !/^[\x21-\x7e]{1,128}$/.test(opts.operator))) {
+      throw new TollError("Invalid operator: use an operator key from a listing (for example agent:8654).");
+    }
+    assertLimit(opts.limit, 100);
+    if (opts.offset !== undefined && (!Number.isInteger(opts.offset) || opts.offset < 0)) throw new TollError("Invalid offset: use a whole number from 0.");
+    if (query && opts.offset) throw new TollError("Invalid offset: offset pages the list only, leave it out with query.");
+    const q = new URLSearchParams();
+    if (query) q.set("query", query);
+    if (opts.type) q.set("type", opts.type);
+    if (opts.payTo) q.set("payTo", opts.payTo.toLowerCase());
+    if (opts.operator) q.set("operator", opts.operator);
+    if (opts.limit !== undefined) q.set("limit", String(opts.limit));
+    if (!query && opts.offset !== undefined) q.set("offset", String(opts.offset));
+    const s = q.toString();
+    const url = `${this.facilitatorUrl}/discovery/${query ? "search" : "resources"}${s ? `?${s}` : ""}`;
+    const { res, raw } = await this.request(url, { method: "GET", headers: this.restHeaders(false) });
+    const json = tryJson(raw);
+    const items: unknown = isObject(json) ? (query ? json.resources : json.items) : null;
+    if (!res.ok || !Array.isArray(items)) throw restError(res, raw);
+    const p = json.pagination;
+    return {
+      x402Version: typeof json.x402Version === "number" ? json.x402Version : 2,
+      items: items.filter(isObject) as PaidApi[],
+      pagination: isObject(p) ? (p as PaidApiList["pagination"]) : null,
+      ...(typeof json.partialResults === "boolean" ? { partialResults: json.partialResults } : {}),
+    };
   }
 
   /** The "Checked by Toll" badge URL for a coin on this client's base URL (see coinBadgeUrl). */

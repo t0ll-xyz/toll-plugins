@@ -28,22 +28,47 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 
 ## API
 
-`new Toll({ baseUrl?, tollKey?, fetch?, sign?, timeoutMs?, payTimeoutMs? })` - `tollKey` (from <https://t0ll.xyz/toll#keys>) is sent as `x-toll-pass` on every MCP call and carries your $TOLL tier
+`new Toll({ baseUrl?, tollKey?, facilitatorUrl?, fetch?, sign?, timeoutMs?, payTimeoutMs? })` - `tollKey` (from <https://t0ll.xyz/toll#keys>) is sent as `x-toll-pass` on every MCP call and carries your $TOLL tier
 
 - `checkCoin(address, { chain?: "rh" })`
 - `larpCheck(token, { chain?: "rh", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
 - `checkAgent(id)` - an ERC-8004 agent on Robinhood Chain by its agent id
+- `findPaidApi({ query?, limit? })` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `findPaidApis()` for the JSON
 - `checkHook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `checkTx({ chainId?, from?, to?, data?, value?, typedData?, x402?, agentId?, registry?, strict? })` - the pre-sign check for a transaction (`to`, `data`, `value`, `from`), an EIP-712 signature (`typedData`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chainId` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presignRiskReport({ version: "erc-presign/1", subject, context?, kinds? })` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
 - `stockToken(id)`, `stockTokens({ query?, limit? })` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, { period? })` (`ttm`, `annual`, `quarterly`), `insiderTrades(id, { limit? })` (1 to 100), `institutions(id, { limit? })` (13F holders, 1 to 20), `guidance(id, { limit? })` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stockEvents({ since?, kind?, limit? })` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 27
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 28
 - `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)
 - `isValidAddress(x)`, `isValidWallet(x)`, `isValidStockId(x)` - the same checks the SDK runs before anything is sent
 - Errors (HTTP, JSON-RPC, timeouts, server-side input errors) are thrown as `TollError`.
+
+## 0.6.0 (2026-11-10): find paid APIs, the facilitator's safety screen
+
+All 28 tools of https://t0ll.xyz/mcp (new: `find_paid_api`), and the discovery catalog of Toll's x402 facilitator
+(https://x402.t0ll.xyz, also at https://t0ll.xyz/api/facilitator).
+
+```ts
+import { Toll, screenOf } from "@tollxyz/sdk";
+const toll = new Toll();
+
+// the catalog: GET /discovery/search?query= (with a query) or GET /discovery/resources (without)
+const { items } = await toll.findPaidApis({ query: "stock quotes", limit: 5 });
+for (const api of items) console.log(api.resource, api.price, api.payTo, api.verified ? "payTo is its agent wallet" : "not verified");
+await toll.findPaidApis({ payTo: "0x...", operator: "agent:8654", type: "http", limit: 20, offset: 20 }); // the list, paged
+
+// the same as text, for an agent's answer
+(await toll.findPaidApi({ query: "weather" })).text;
+
+// every /verify and /settle answer of Toll's facilitator carries extensions.screen (check_tx's word on the payment)
+screenOf(settleAnswer); // { outcome: "allow" | "warn" | "block" | "not-read", codes: [...] } or null
+```
+
+- `findPaidApis({ query?, type?, payTo?, operator?, limit?, offset? })` -> `{ x402Version, items, pagination, partialResults? }`. Each item (`PaidApi`): `resource`, `type`, `accepts`, `price`, `payTo`, `verified` (the payTo is the agentWallet its ERC-8004 identity registered, ERC-8478), `settledViaToll`, `name`, `agentId`, `operator { key, label, entries }`. Verified does not say the seller delivers. `offset` pages the list only. `facilitatorUrl` overrides where it reads (default https://x402.t0ll.xyz, or `${baseUrl}/api/facilitator` with another `baseUrl`).
+- Facilitator answer types: `FacilitatorVerifyResponse`, `FacilitatorSettleResponse` (`amount` = what an upto payment charged), `FacilitatorExtensions` (`erc8478`, `receipt`, `screen`), `FacilitatorScreen`; `screenOf(answer)` reads and checks `extensions.screen`. `not-read` means the screen did not finish in time, never a refusal. `TOLL_FACILITATOR` is the facilitator URL.
 
 ## 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
 

@@ -25,6 +25,9 @@ __all__ = [
     "WALLET_WATCH_EVENTS",
     "TICKET_SUFFIX_MAGIC",
     "TOLL_ALLOW_SIGNER",
+    "TOLL_FACILITATOR",
+    "SCREEN_OUTCOMES",
+    "screen_of",
     "append_ticket_suffix",
     "assessment_of",
     "coin_badge_embed",
@@ -70,6 +73,7 @@ TOOL_NAMES = (
     "chain_pulse",
     "launch_record",
     "check_agent",
+    "find_paid_api",
     "check_hook",
     "check_tx",
     "presign_risk_report",
@@ -296,6 +300,37 @@ def _opt(**kw: Any) -> Dict[str, Any]:
     return {k: v for k, v in kw.items() if v is not None}
 
 
+def _query(query: Any) -> str:
+    """A find-paid-API query: trimmed, at most 200 characters; "" = none."""
+    if query is None:
+        return ""
+    if not isinstance(query, str):
+        raise TollError("Invalid query: use a few words of text.")
+    q = query.strip()
+    if len(q) > 200:
+        raise TollError("Invalid query: at most 200 characters.")
+    return q
+
+
+# -- the x402 facilitator (x402.t0ll.xyz) ------------------------------------
+TOLL_FACILITATOR = "https://x402.t0ll.xyz"
+"""Toll's x402 facilitator: keyless, USDG on Robinhood Chain (also at https://t0ll.xyz/api/facilitator)."""
+
+SCREEN_OUTCOMES = ("allow", "warn", "block", "not-read")
+"""toll-screen outcomes: check_tx's word on a payment at /verify and /settle; not-read is never a refusal."""
+
+
+def screen_of(answer: Any) -> Optional[Dict[str, Any]]:
+    """extensions.screen of a facilitator /verify or /settle answer, checked: {"outcome", "codes": [str]}, or None
+    when it is absent or malformed."""
+    ext = answer.get("extensions") if isinstance(answer, dict) else None
+    s = ext.get("screen") if isinstance(ext, dict) else None
+    if not isinstance(s, dict) or s.get("outcome") not in SCREEN_OUTCOMES:
+        return None
+    codes = s.get("codes")
+    return {"outcome": s["outcome"], "codes": [c for c in codes if isinstance(c, str)] if isinstance(codes, list) else []}
+
+
 def _parse_body(raw: str) -> Any:
     t = raw.strip()
     if t.startswith("{"):
@@ -319,12 +354,17 @@ class Toll:
         pay_timeout: float = 300.0,
         toll_key: Optional[str] = None,
         client_id: Optional[str] = None,
+        facilitator_url: Optional[str] = None,
     ) -> None:
         """toll_key: a Toll key (https://t0ll.xyz/toll#keys), sent as x-toll-pass on every MCP call: carries the key
         wallet's daily tier (more new coins and Markets calls a day, the live stock_events feed).
         client_id: a stable install id sent as x-toll-client so Toll can count returning agents (22-64 chars of
-        A-Z a-z 0-9 _ -; anything else is ignored). Default: a random id kept in ~/.toll/client-id, else per process."""
+        A-Z a-z 0-9 _ -; anything else is ignored). Default: a random id kept in ~/.toll/client-id, else per process.
+        facilitator_url: the x402 facilitator find_paid_apis() reads. Default: https://x402.t0ll.xyz with the default
+        base_url, else {base_url}/api/facilitator."""
         self.base_url = base_url.rstrip("/")
+        default_fac = TOLL_FACILITATOR if self.base_url == "https://t0ll.xyz" else f"{self.base_url}/api/facilitator"
+        self.facilitator_url = (facilitator_url or default_fac).rstrip("/")
         self._opener = opener or urllib.request.build_opener()
         self.timeout = timeout
         self.pay_timeout = pay_timeout
@@ -534,6 +574,13 @@ class Toll:
         if not ok:
             raise TollError("Invalid agent id: expected a whole number (its ERC-8004 token id on Robinhood Chain).")
         return self.call("check_agent", {"id": agent_id})
+
+    def find_paid_api(self, query: Optional[str] = None, limit: Optional[int] = None) -> TollResult:
+        """find_paid_api: paid APIs (x402) an agent can buy on Robinhood Chain, by what it needs ("weather", "stock
+        quotes", or nothing for every operator's best endpoint), verified payTo first. Text; find_paid_apis() for JSON."""
+        q = _query(query)
+        _check_limit(limit, 20)
+        return self.call("find_paid_api", _opt(query=q or None, limit=limit))
 
     def check_hook(self, address: str) -> TollResult:
         """One Uniswap v4 hook on Robinhood Chain, by its contract address: its name, what its address lets it do,
@@ -751,6 +798,49 @@ class Toll:
         if not 200 <= status < 300 or not isinstance(data, dict) or not isinstance(data.get("actions"), list):
             raise _rest_error(status, headers, raw)
         return data
+
+    def find_paid_apis(
+        self,
+        query: Optional[str] = None,
+        pay_to: Optional[str] = None,
+        operator: Optional[str] = None,
+        limit: Optional[int] = None,
+        type: Optional[str] = None,
+        offset: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """The facilitator's discovery catalog (x402 bazaar): GET /discovery/search?query= when query is given, else
+        GET /discovery/resources. Returns {"x402Version", "items": [...], "pagination", "partialResults"?}; each item
+        has resource, accepts, price, payTo, verified (payTo is its ERC-8004 agentWallet, ERC-8478), settledViaToll,
+        name, agentId, operator {key, label, entries}. Facts, not a recommendation: verified does not say it delivers."""
+        q = _query(query)
+        if type is not None and type not in ("http", "mcp"):
+            raise TollError('Invalid type: use "http" or "mcp".')
+        if pay_to is not None and not is_valid_wallet(pay_to):
+            raise TollError("Invalid pay_to: expected 0x + 40 hex characters.")
+        if operator is not None and (not isinstance(operator, str) or not re.fullmatch(r"[\x21-\x7e]{1,128}", operator)):
+            raise TollError("Invalid operator: use an operator key from a listing (for example agent:8654).")
+        _check_limit(limit, 100)
+        if offset is not None and (isinstance(offset, bool) or not isinstance(offset, int) or offset < 0):
+            raise TollError("Invalid offset: use a whole number from 0.")
+        if q and offset:
+            raise TollError("Invalid offset: offset pages the list only, leave it out with query.")
+        params = _opt(query=q or None, type=type, payTo=pay_to.lower() if pay_to else None, operator=operator, limit=limit,
+                      offset=None if q else offset)
+        url = f"{self.facilitator_url}/discovery/{'search' if q else 'resources'}" + (f"?{urlencode(params)}" if params else "")
+        req = urllib.request.Request(url, method="GET", headers={"accept": "application/json", "x-toll-client": self._client_id})
+        status, headers, raw = self._http(req, self.timeout)
+        data = _try_json(raw)
+        items = (data.get("resources") if q else data.get("items")) if isinstance(data, dict) else None
+        if not 200 <= status < 300 or not isinstance(items, list):
+            raise _rest_error(status, headers, raw)
+        out: Dict[str, Any] = {
+            "x402Version": data.get("x402Version") if isinstance(data.get("x402Version"), int) else 2,
+            "items": [i for i in items if isinstance(i, dict)],
+            "pagination": data.get("pagination") if isinstance(data.get("pagination"), dict) else None,
+        }
+        if isinstance(data.get("partialResults"), bool):
+            out["partialResults"] = data["partialResults"]
+        return out
 
     def badge_url(self, token: str, size: Optional[str] = None) -> str:
         """The "Checked by Toll" badge URL for a coin on this client's base URL (see coin_badge_url)."""

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toll-sdk"
-version = "0.5.0"
+version = "0.6.0"
 description = "Client for Toll's checks on Robinhood Chain over MCP: coins, dev records, LARP, ERC-8004 agents, pre-sign checks (check_tx, ERC-8265, ALLOW tickets), wallet approvals, the open blocklist, coin and wallet watches with webhook verification, and Robinhood Stock Token data. Standard library only."
 readme = "README.md"
 license = "MIT"

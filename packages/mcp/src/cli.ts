@@ -13,7 +13,7 @@ if (arg === "--version" || arg === "-v") {
 }
 if (arg === "--help" || arg === "-h") {
   process.stdout.write(
-    "toll-mcp: Toll's 27 tools for Robinhood Chain (coins, LARP, devs, wallet approvals, agents, v4 hooks, pre-sign check, Stock Token data, watches) as a local MCP server over stdio.\n" +
+    "toll-mcp: Toll's 28 tools for Robinhood Chain (coins, LARP, devs, wallet approvals, agents, paid APIs, v4 hooks, pre-sign check, Stock Token data, watches) as a local MCP server over stdio.\n" +
       "Add it to an MCP client as: npx -y @tollxyz/mcp\n" +
       "Env: TOLL_BASE_URL (default https://t0ll.xyz). Free tier only: 10 new coins a day per caller.\n" +
       "Docs: https://t0ll.xyz/agents/plugins\n",

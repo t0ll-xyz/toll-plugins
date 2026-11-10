@@ -26,22 +26,44 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 
 ## API
 
-`Toll(base_url="https://t0ll.xyz", opener=None, timeout=30.0, sign=None, pay_timeout=300.0, toll_key=None)` - `toll_key` (from <https://t0ll.xyz/toll#keys>) is sent as `x-toll-pass` on every MCP call and carries your $TOLL tier
+`Toll(base_url="https://t0ll.xyz", opener=None, timeout=30.0, sign=None, pay_timeout=300.0, toll_key=None, client_id=None, facilitator_url=None)` - `toll_key` (from <https://t0ll.xyz/toll#keys>) is sent as `x-toll-pass` on every MCP call and carries your $TOLL tier
 
 - `check_coin(address, chain=None)` - chain is `rh` or left out
 - `larp_check(token, chain=None, wait=False)` - `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
 - `check_agent(agent_id)` - an ERC-8004 agent on Robinhood Chain by its agent id
+- `find_paid_api(query=None, limit=None)` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `find_paid_apis()` for the JSON
 - `check_hook(address)` - one Uniswap v4 hook on Robinhood Chain: name, permissions, upgradeable, pools, sells fail (a holder key adds the measured cut and its latest coins)
 - `check_tx(to=, data=, value=, from_=, typed_data=, x402=, agent_id=, registry=, strict=, chain_id=)` - the pre-sign check for a transaction, an EIP-712 signature (`typed_data`) or an x402 payment (`x402`): ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment (`chain_id` only 4663). Pass on every warning; on BLOCK do not sign without the owner's say.
 - `presign_risk_report(subject, context=None, kinds=None)` - the Agent Pre-Sign Risk Report (ERC draft, ethereum/ERCs PR #2134, version `erc-presign/1`): typed facts about the unsigned request, EIP-712 signed by Toll, no verdict
 - `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, period=None)` (`ttm`, `annual`, `quarterly`), `insider_trades(id, limit=None)` (1 to 100), `institutions(id, limit=None)` (13F holders, 1 to 20), `guidance(id, limit=None)` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stock_events(since=None, kind=None, limit=None)` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 27
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 28
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
+
+## 0.6.0 (2026-11-10): find paid APIs, the facilitator's safety screen
+
+All 28 tools of https://t0ll.xyz/mcp (new: `find_paid_api`), and the discovery catalog of Toll's x402 facilitator
+(https://x402.t0ll.xyz, also at https://t0ll.xyz/api/facilitator).
+
+```python
+from toll_sdk import Toll, screen_of
+
+toll = Toll()
+found = toll.find_paid_apis(query="stock quotes", limit=5)   # GET /discovery/search?query=...
+for api in found["items"]:
+    print(api["resource"], api["price"], api["payTo"], api["verified"])
+toll.find_paid_apis(pay_to="0x...", operator="agent:8654", type="http", limit=20, offset=20)  # GET /discovery/resources
+print(toll.find_paid_api(query="weather").text)               # the MCP tool, as text
+
+screen_of(settle_answer)  # {"outcome": "allow" | "warn" | "block" | "not-read", "codes": [...]} or None
+```
+
+- `find_paid_apis(query=None, pay_to=None, operator=None, limit=None, type=None, offset=None)` -> `{"x402Version", "items", "pagination", "partialResults"?}`; each item: `resource`, `type`, `accepts`, `price`, `payTo`, `verified` (the payTo is the agentWallet its ERC-8004 identity registered, ERC-8478; it does not say the seller delivers), `settledViaToll`, `name`, `agentId`, `operator`. `offset` pages the list only. `facilitator_url` overrides where it reads.
+- `screen_of(answer)` reads and checks `extensions.screen` of a facilitator `/verify` or `/settle` answer; `not-read` is never a refusal. `TOLL_FACILITATOR`, `SCREEN_OUTCOMES`.
 
 ## 0.5.0 (2026-11-08): approvals, blocklist, pre-sign record, badges, watches, ALLOW tickets
 
