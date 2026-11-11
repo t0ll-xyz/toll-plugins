@@ -354,12 +354,12 @@ export const redisStore: SpendStore = {
 const wallet = guard(walletClient, { spend: { /* ... */ }, store: redisStore });
 ```
 
-## 0.5.0: mirror the caps into the facilitator budget (coming)
+## 0.5.0: mirror the caps into the facilitator budget
 
-guard's caps live in the agent's process. Toll's x402 facilitator (https://x402.t0ll.xyz) is adding per-payer budgets: the
+guard's caps live in the agent's process. Toll's x402 facilitator (https://x402.t0ll.xyz) has per-payer budgets (live since 2026-11-11): the
 payer wallet signs its limits once and the facilitator refuses any payment past them where it settles, so a second
-process, a key used elsewhere or a bug in the agent cannot spend past them through it. Budgets are **coming**: the
-facilitator answers `404 budgets_off` until they are switched on. `guardBudget` builds that budget from your `spend`
+process, a key used elsewhere or a bug in the agent cannot spend past them through it. If budgets are ever switched
+off the facilitator answers `404 budgets_off`. `guardBudget` builds that budget from your `spend`
 policy; guard itself behaves exactly as before.
 
 ```ts
