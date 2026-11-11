@@ -84,7 +84,7 @@ export interface SpendPolicy {
   approveAbove?: Record<string, bigint>;
   /** asks a human (or another system); no function = denied */
   approve?: (r: ApprovalRequest) => Promise<{ approved: boolean; approvalRef?: string }>;
-  /** a request whose spend could not be read (a contract call Toll did not simulate): default "allow", "block" under failClosed */
+  /** a request whose spend could not be read (a contract call Toll did not simulate, an x402 amount or a value that does not parse): "block" (default since 0.5.1) or "allow" */
   onUnknownSpend?: "allow" | "block";
 }
 
@@ -156,7 +156,7 @@ export interface GuardOptions extends CheckOptions {
   spend?: SpendPolicy;
   /** where caps and paid x402 ids are counted; default an in-process MemorySpendStore per SpendPolicy object */
   store?: SpendStore;
-  /** with `spend`: a request whose spend cannot be read is blocked (onUnknownSpend default "block") */
+  /** with `spend`: a request whose spend cannot be read is blocked. Since 0.5.1 that is the default anyway (onUnknownSpend "block"); kept for callers that set it */
   failClosed?: boolean;
 }
 
@@ -184,7 +184,10 @@ export function resolvePolicy(o: GuardOptions = {}): { onWarn: WarnPolicy; onUna
 
 const HIGH = new Set(["high", "critical"]);
 /** true when any warning is high or critical */
-export const hasHighWarning = (a: RiskAssessment): boolean => (a.warnings ?? []).some((w) => HIGH.has(String(w?.severity).toLowerCase()));
+/** warnings that say "this was not checked": refused under block-high whatever their severity (0.5.1) */
+const UNCHECKED = new Set(["coin-not-read"]);
+export const hasHighWarning = (a: RiskAssessment): boolean =>
+  (a.warnings ?? []).some((w) => HIGH.has(String(w?.severity).toLowerCase()) || UNCHECKED.has(String(w?.code)));
 
 const say = (o: GuardOptions, msg: string) => {
   if (o.logger === false) return;
@@ -546,7 +549,9 @@ async function enforceSpend(kind: GuardKind, build: () => CheckInput | Promise<C
   const s: Spend = input ? spendOf(input, base.assessment, assets) : { items: [], outflow: {}, approvals: {}, to: [], spender: [], payTo: [], unknown: true, simulated: false };
   const why = offList(sp, s);
   if (why) return blockWith(base, "not-allowlisted", `Not signed: ${why}.`, s);
-  if (s.unknown && (sp.onUnknownSpend ?? (o.failClosed ? "block" : "allow")) === "block") {
+  // 0.5.1: with a spend policy set, what cannot be read is refused by default (it was allowed unless failClosed):
+  // caps that bind only on plain transfers are not caps. onUnknownSpend "allow" is the opt-out
+  if (s.unknown && (sp.onUnknownSpend ?? "block") === "block") {
     return blockWith(base, "unknown-spend", 'Not signed: what this request spends could not be read (no simulation), and onUnknownSpend is "block".', s);
   }
 

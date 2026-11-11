@@ -133,12 +133,14 @@ test("caps hold when Toll is unavailable (local decode of native and USDG)", asy
   await assert.rejects(enforce("transaction", () => usdgTransfer(SHOP, 1n), c.o), TollUnavailableError);
 });
 
-test("unknown spend under failClosed: blocked; allowed by default", async () => {
+test("unknown spend: blocked by default (0.5.1) and under failClosed; onUnknownSpend allow lets it through", async () => {
   const call = { chainId: RH, from: FROM, to: ROUTER, data: "0x12345678", value: 0n };
   const t = opts(["down"], {}, { failClosed: true, failOpen: true });
   await assert.rejects(enforce("transaction", () => call, t.o), isPolicy("unknown-spend"));
   const d = opts(["down"], {}, { failOpen: true });
-  assert.equal((await enforce("transaction", () => call, d.o)).decision, "allowed");
+  await assert.rejects(enforce("transaction", () => call, d.o), isPolicy("unknown-spend"));
+  const a2 = opts(["down"], { onUnknownSpend: "allow" }, { failOpen: true });
+  assert.equal((await enforce("transaction", () => call, a2.o)).decision, "allowed");
   // onUnknownSpend wins over failClosed
   const w = opts(["down"], { onUnknownSpend: "allow" }, { failClosed: true, failOpen: true });
   assert.equal((await enforce("transaction", () => call, w.o)).decision, "allowed");

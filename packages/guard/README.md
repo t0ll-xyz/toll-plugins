@@ -28,6 +28,11 @@
 > switch the check off (a request padded past Toll's 64 KB limit answers 413). To keep the old behaviour pass
 > `failOpen: true` (or `onUnavailable: "allow"`), and know that it lets anyone who can shape the request skip the check.
 
+> **Also in 0.5.1.** With a `spend` policy, a request whose spend cannot be read (a contract call Toll did not simulate,
+> an x402 amount such as `"+5000000"` or a value that does not parse) is refused by default: `onUnknownSpend: "allow"`
+> opts out. A WARN that says the coin was not read yet (`coin-not-read`) is refused under the default `block-high`.
+> Fixed: `transferFrom`'s recipient was read from the amount word, so an allowlist refused every `transferFrom`.
+
 > **Defaults changed in 0.2.0.** A WARN with any `high` or `critical` warning is now blocked (`onWarn: "block-high"`,
 > the new default); a WARN with only `medium`/`low` warnings still goes ahead, logged. To keep the 0.1.x behaviour,
 > pass `onWarn: "allow"`. New `strict: true` preset: WARN, unavailable and unsupported all block. Any option you pass
@@ -184,7 +189,7 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `baseUrl`, `fetch` | `https://t0ll.xyz`, global fetch | |
 | `spend` | none | 0.4.0: caps, allowlists, approval ([below](#040-spend-caps-allowlists-approval-preview)); unset = 0.3.x behaviour |
 | `store` | in-process `MemorySpendStore` | where spend counters and paid x402 ids live |
-| `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked |
+| `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked (the default since 0.5.1; `onUnknownSpend: "allow"` opts out) |
 | `ticket` | none | 0.4.1: `true` or `{consumer?, scope?}`: ask Toll for a single-use ALLOW ticket for this exact call; it comes back as `report.ticket` ([below](#allow-tickets)) |
 
 Errors: `TollBlockedError` (`.assessment`, `.codes`, message lists each code and message) and
@@ -248,7 +253,7 @@ Robinhood Chain, plus every asset you name in `assets` or `approveAbove`. A sell
 - An approval counts against the per-call cap at its full size (an unlimited approval is over any cap) and must fit
   in what is left of the day cap; it is not added to the day total (the later swap is).
 - Unknown spend: a contract call with no simulation (Toll unreachable), a raw user operation, a bare EIP-7702
-  authorization. `onUnknownSpend` decides: `"allow"` by default, `"block"` under `failClosed: true`.
+  authorization. `onUnknownSpend` decides: `"block"` by default since 0.5.1 (caps that bind only on plain transfers are not caps), `"allow"` to opt out. An x402 amount or a transaction value the guard cannot parse is an unknown spend too.
 
 | `spend` field | |
 | --- | --- |
@@ -257,7 +262,7 @@ Robinhood Chain, plus every asset you name in `assets` or `approveAbove`. A sell
 | `allow` | `{ to?, spender?, payTo? }`: every recipient (or called contract), approval spender, x402 payee must be listed |
 | `approveAbove` | `{ [asset]: amount }`: above it, `approve` must say yes |
 | `approve` | `(req) => Promise<{ approved, approvalRef? }>`; no function = denied. `approvalRef` lands in `report.spend.approvalRef` |
-| `onUnknownSpend` | `"allow"` (default) or `"block"` (default under `failClosed`) |
+| `onUnknownSpend` | `"block"` (default since 0.5.1) or `"allow"` |
 
 New options next to `spend`: `store` (where counters live, below) and `failClosed`.
 
