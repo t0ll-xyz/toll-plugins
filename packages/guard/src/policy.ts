@@ -116,10 +116,18 @@ export interface GuardOptions extends CheckOptions {
   /** BLOCK: "throw" (default, TollBlockedError), or a function (e.g. ask a human); true lets it through */
   onBlock?: BlockPolicy;
   /**
-   * Toll unreachable, timed out, 5xx, 429, or a request it could not read: "allow" (default, fail-open, logged) or
-   * "block" (fail-closed, throws TollUnavailableError). `strict` makes "block" the default.
+   * Toll unreachable, timed out, 5xx, 429, any other non-2xx (400, 413), or an answer that is not a RiskAssessment:
+   * "block" (default since 0.5.1, fail-closed: nothing is signed, throws TollUnavailableError) or "allow" (fail-open,
+   * logged). Passed explicitly it wins over `failOpen` and `strict`.
    */
   onUnavailable?: "allow" | "block";
+  /**
+   * 0.5.1: the opt-in to the old default. `true` = when Toll cannot or will not answer, the request goes ahead
+   * unchecked (logged "NOT checked"). Know what it means: whoever builds the request can make Toll refuse it (a
+   * request padded past Toll's size limit answers HTTP 413) and so switch the check off. Default false.
+   * `strict` and an explicit `onUnavailable` win over it.
+   */
+  failOpen?: boolean;
   /** a request Toll does not read (another chain, a contract deploy): "allow" (default) or "block"; `strict`: "block" */
   onUnsupported?: "allow" | "block";
   /**
@@ -169,7 +177,7 @@ export function resolvePolicy(o: GuardOptions = {}): { onWarn: WarnPolicy; onUna
   const strict = o.strict === true;
   return {
     onWarn: o.onWarn ?? (strict ? "block" : "block-high"),
-    onUnavailable: o.onUnavailable ?? (strict ? "block" : "allow"),
+    onUnavailable: o.onUnavailable ?? (strict ? "block" : o.failOpen === true ? "allow" : "block"),
     onUnsupported: o.onUnsupported ?? (strict ? "block" : "allow"),
   };
 }
@@ -326,8 +334,13 @@ async function unavailable(kind: GuardKind, input: CheckInput | null, err: TollU
   const blocked = resolvePolicy(o).onUnavailable === "block" || isEthSign(input);
   const r: GuardReport = { kind, input, assessment: null, decision: blocked ? "blocked" : "allowed", basis: "unavailable", paidUrl: err.paidUrl, error: err };
   await report(o, r);
-  if (blocked) throw err;
-  say(o, `Toll unavailable, NOT checked, going ahead (onUnavailable "allow"): ${err.message}`);
+  if (blocked) {
+    // the same error class and fields; the message says nothing was signed and names the opt-out
+    if (/^Not signed/.test(err.message)) throw err;
+    throw new TollUnavailableError(`Not signed: Toll did not check this request. ${err.message} The guard fails closed; failOpen: true lets unchecked requests through.`,
+      { reason: err.reason, status: err.status, paidUrl: err.paidUrl, cause: err });
+  }
+  say(o, `Toll unavailable, NOT checked, going ahead (${o.failOpen === true && o.onUnavailable === undefined ? "failOpen: true" : 'onUnavailable "allow"'}): ${err.message}`);
   return r;
 }
 

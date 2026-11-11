@@ -11,8 +11,7 @@ import {
   type GuardOptions,
   type GuardReport,
   type RiskAssessment,
-  type SpendPolicy,
-} from "../src/index.js";
+  type SpendPolicy, TollUnavailableError } from "../src/index.js";
 
 const RH = 4663;
 const FROM = "0x2222222222222222222222222222222222222222";
@@ -117,7 +116,7 @@ test("a denied approval: approval-denied, and its day reservation is released", 
 
 test("caps hold when Toll is unavailable (local decode of native and USDG)", async () => {
   const spend: SpendPolicy = { assets: { [USDG]: { perCall: 5_000_000n, perDay: 8_000_000n }, [NATIVE]: { perCall: 10n } } };
-  const t = opts(["down", "down", "down", "down"], spend);
+  const t = opts(["down", "down", "down", "down"], spend, { failOpen: true });
   await assert.rejects(enforce("transaction", () => usdgTransfer(SHOP, 6_000_000n), t.o), isPolicy("cap-per-call"));
   assert.equal(t.reports[0].basis, "policy");
   const r = await enforce("transaction", () => usdgTransfer(SHOP, 5_000_000n), t.o);
@@ -127,18 +126,21 @@ test("caps hold when Toll is unavailable (local decode of native and USDG)", asy
   await assert.rejects(enforce("transaction", () => usdgTransfer(SHOP, 4_000_000n), t.o), isPolicy("cap-per-day"));
   await assert.rejects(enforce("transaction", () => ({ chainId: RH, from: FROM, to: SHOP, data: "0x", value: 11n }), t.o), isPolicy("cap-per-call"));
   // an unlimited approve is over any per-call cap
-  const a = opts(["down"], spend);
+  const a = opts(["down"], spend, { failOpen: true });
   await assert.rejects(enforce("transaction", () => usdgApprove(ROUTER, UNLIMITED), a.o), isPolicy("cap-per-call"));
+  // 0.5.1: without failOpen, Toll being down refuses the request before the caps are reached
+  const c = opts(["down"], spend);
+  await assert.rejects(enforce("transaction", () => usdgTransfer(SHOP, 1n), c.o), TollUnavailableError);
 });
 
 test("unknown spend under failClosed: blocked; allowed by default", async () => {
   const call = { chainId: RH, from: FROM, to: ROUTER, data: "0x12345678", value: 0n };
-  const t = opts(["down"], {}, { failClosed: true });
+  const t = opts(["down"], {}, { failClosed: true, failOpen: true });
   await assert.rejects(enforce("transaction", () => call, t.o), isPolicy("unknown-spend"));
-  const d = opts(["down"], {});
+  const d = opts(["down"], {}, { failOpen: true });
   assert.equal((await enforce("transaction", () => call, d.o)).decision, "allowed");
   // onUnknownSpend wins over failClosed
-  const w = opts(["down"], { onUnknownSpend: "allow" }, { failClosed: true });
+  const w = opts(["down"], { onUnknownSpend: "allow" }, { failClosed: true, failOpen: true });
   assert.equal((await enforce("transaction", () => call, w.o)).decision, "allowed");
   // a simulation read: known, so failClosed lets it go
   const s = opts([withSim([[COIN, FROM, -1n]])], {}, { failClosed: true });

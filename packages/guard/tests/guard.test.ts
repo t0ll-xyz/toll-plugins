@@ -192,14 +192,16 @@ test("WARN allowed by default is logged with the paid URL when over quota, and r
 });
 
 test("an action that is not ALLOW/WARN/BLOCK is never treated as ALLOW", async () => {
-  const t = opts([json({ ...fx("allow"), action: "MAYBE" })], { onWarn: "block" });
-  // not a valid assessment: unavailable (fail-open by default) ...
+  const t = opts([json({ ...fx("allow"), action: "MAYBE" })], { onWarn: "block", failOpen: true });
+  // not a valid assessment: unavailable (let through only under failOpen) ...
   const r = await enforce("transaction", build, t.o);
   assert.equal(r.basis, "unavailable");
+  // ... and by default (0.5.1) nothing is signed
+  await assert.rejects(enforce("transaction", build, opts([json({ ...fx("allow"), action: "MAYBE" })], { onWarn: "block" }).o), TollUnavailableError);
 });
 
-test("unavailable: fail-open by default (logged, reported), fail-closed throws TollUnavailableError", async () => {
-  const open = opts([json({ error: "down" }, 503)]);
+test("unavailable: fail-open under failOpen (logged, reported), fail-closed throws TollUnavailableError", async () => {
+  const open = opts([json({ error: "down" }, 503)], { failOpen: true });
   const r = await enforce("transaction", build, open.o);
   assert.equal(r.decision, "allowed");
   assert.equal(r.basis, "unavailable");
@@ -236,7 +238,7 @@ test("onReport and logger that throw never stop the signature", async () => {
 });
 
 test("a request that cannot be built (encode failure) goes to onUnavailable", async () => {
-  const t = opts([]);
+  const t = opts([], { failOpen: true });
   const r = await enforce("transaction", () => { throw new Error("bad abi"); }, t.o);
   assert.equal(r.error?.reason, "encode");
   await assert.rejects(enforce("transaction", () => { throw new Error("bad abi"); }, { ...t.o, onUnavailable: "block" }), TollUnavailableError);
@@ -406,8 +408,9 @@ test("x402: the paid retry (payment header) and non-402 answers pass through unc
   assert.equal(t.m.calls.length, 0);
 });
 
-test("x402: Toll unavailable is fail-open by default, fail-closed when asked", async () => {
-  const open = opts([json({}, 503)]);
+test("x402: Toll unavailable is fail-open under failOpen, fail-closed when asked and by default", async () => {
+  await assert.rejects(guardX402Fetch(mockFetch([res402()]).f, opts([json({}, 503)]).o)("https://seller.test/a"), TollUnavailableError);
+  const open = opts([json({}, 503)], { failOpen: true });
   assert.equal((await guardX402Fetch(mockFetch([res402()]).f, open.o)("https://seller.test/a")).status, 402);
   const closed = opts([json({}, 503)], { onUnavailable: "block" });
   await assert.rejects(guardX402Fetch(mockFetch([res402()]).f, closed.o)("https://seller.test/a"), TollUnavailableError);

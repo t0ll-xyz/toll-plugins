@@ -171,12 +171,12 @@ test("typed-data 400 other chain → blocked for signatures", async () => {
 
 test("eth_sign with Toll unreachable → blocked", async () => {
   const { client, sent } = fakeViem();
-  const t = opts([down]); // onUnavailable defaults to "allow", but eth_sign fails closed
+  const t = opts([down], { failOpen: true }); // even under failOpen, eth_sign fails closed
   await assert.rejects(guardViem(client, t.o).request({ method: "eth_sign", params: [FROM, "0x" + "11".repeat(32)] }), TollUnavailableError);
   assert.deepEqual(sent, []);
   assert.equal(t.reports[0].decision, "blocked");
-  // personal_sign with Toll unreachable keeps the onUnavailable default (allowed, logged)
-  const p = opts([down]);
+  // personal_sign with Toll unreachable goes ahead only under failOpen (allowed, logged)
+  const p = opts([down], { failOpen: true });
   await guardViem(client, p.o).request({ method: "personal_sign", params: ["0x68656c6c6f", FROM] });
   assert.deepEqual(sent, ["request:personal_sign"]);
 });

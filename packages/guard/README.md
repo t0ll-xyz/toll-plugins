@@ -22,6 +22,12 @@
 > - `eth_sign` always fails closed: it can sign any 32 bytes, a transaction included, so when Toll cannot answer it is
 >   blocked whatever `onUnavailable` says.
 
+> **Default changed in 0.5.1: the guard fails closed.** When Toll cannot or will not answer (unreachable, timeout,
+> 429, 5xx, HTTP 400 or 413, an answer that is not a RiskAssessment) nothing is signed: `TollUnavailableError`, with
+> "Not signed" in the message. Before, such a request went ahead unchecked, so whoever built the request could
+> switch the check off (a request padded past Toll's 64 KB limit answers 413). To keep the old behaviour pass
+> `failOpen: true` (or `onUnavailable: "allow"`), and know that it lets anyone who can shape the request skip the check.
+
 > **Defaults changed in 0.2.0.** A WARN with any `high` or `critical` warning is now blocked (`onWarn: "block-high"`,
 > the new default); a WARN with only `medium`/`low` warnings still goes ahead, logged. To keep the 0.1.x behaviour,
 > pass `onWarn: "allow"`. New `strict: true` preset: WARN, unavailable and unsupported all block. Any option you pass
@@ -166,7 +172,8 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `strict` | `false` | preset: the defaults of `onWarn`, `onUnavailable` and `onUnsupported` become `"block"`; each one passed explicitly still wins |
 | `onWarn` | `"block-high"` | `"block-high"` (blocked when any warning is `high` or `critical`, else allowed and logged), `"allow"` (every WARN goes ahead, logged; the 0.1.x default), `"block"`, or `(assessment) => boolean` (true lets it through) |
 | `onBlock` | `"throw"` | `"throw"` (TollBlockedError), or `(assessment) => boolean`, e.g. ask a human; true lets it through |
-| `onUnavailable` | `"allow"` (`strict`: `"block"`) | Toll unreachable, timed out, 5xx, 429, or a request it could not read: `"allow"` (fail-open, logged) or `"block"` (fail-closed, TollUnavailableError) |
+| `onUnavailable` | `"block"` (since 0.5.1) | Toll unreachable, timed out, 5xx, 429, any other non-2xx (400, 413) or an answer that is not a RiskAssessment: `"block"` (fail-closed, TollUnavailableError) or `"allow"` (fail-open, logged). Passed explicitly it wins over `failOpen` and `strict` |
+| `failOpen` | `false` | 0.5.1: `true` = the old default: when Toll cannot or will not answer, the request goes ahead unchecked (logged). `strict` and an explicit `onUnavailable` win over it |
 | `onUnsupported` | `"allow"` (`strict`: `"block"`) | a transaction on another chain, a deployment: `"allow"` or `"block"`. A signature for another chain is blocked unless this is `"allow"` explicitly |
 | `onAuthorization` | `"check"` | an EIP-7702 authorization: `"check"` (Toll decides; blocked when Toll cannot read it), `"block"` (TollBlockedError, Toll not asked) or `"allow"` (unchecked, logged) |
 | `origin` | none | the site asking for a signature, sent with messages and typed data |
@@ -419,12 +426,18 @@ should keep an owner bypass behind a timelock in case Toll is unreachable.
 
 ## Fail-open or fail-closed
 
-The default is fail-open: if Toll cannot answer, the signature goes ahead, with a `[toll-guard] ... NOT checked`
-line and an `onReport` call with `basis: "unavailable"`. The agent must never get stuck because of Toll, and the
-free route is rate limited per IP (a busy agent will see 429s). If an unchecked signature is worse for you than a
-stalled agent, set `onUnavailable: "block"` (or `strict: true`, which also blocks every WARN and unsupported request).
+The default is fail-closed since 0.5.1: if Toll cannot or will not answer, nothing is signed. The guard throws
+`TollUnavailableError` (its `reason` says why: `network`, `timeout`, `rate-limited`, `server-error`, `bad-request`,
+`bad-answer`) and calls `onReport` with `decision: "blocked"`, `basis: "unavailable"`. The reason for the default: a
+refusal can be caused on purpose. A request padded past Toll's size limit answers HTTP 413, and a guard that let
+"not checked" through would sign it.
 
-Two requests fail closed whatever `onUnavailable` says: `eth_sign` (it signs any 32 bytes, a transaction hash
+The free route is rate limited per IP (a busy agent will see 429s): catch `TollUnavailableError`, wait and ask again,
+or use the paid route the error names in `paidUrl`. If a stalled agent is worse for you than an unchecked signature,
+pass `failOpen: true`: the request then goes ahead with a `[toll-guard] ... NOT checked` line and an `onReport` call
+with `decision: "allowed"`, `basis: "unavailable"`. `strict: true` also blocks every WARN and unsupported request.
+
+Two requests fail closed whatever `onUnavailable` and `failOpen` say: `eth_sign` (it signs any 32 bytes, a transaction hash
 included, so an unchecked one could be anything) and an EIP-7702 authorization under `onAuthorization: "check"`.
 
 ## Free limit and the paid route

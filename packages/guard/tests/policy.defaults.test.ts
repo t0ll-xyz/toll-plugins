@@ -86,6 +86,7 @@ test("an option present but undefined does not override strict", async () => {
   await assert.rejects(run(json({ error: "down" }, 503), { strict: true, onUnavailable: undefined }).p, TollUnavailableError);
 });
 
-test("without strict, unavailable and unsupported stay fail-open by default", async () => {
-  assert.equal((await run(json({ error: "down" }, 503)).p).decision, "allowed");
+test("without strict: unavailable is fail-closed by default (0.5.1), fail-open only under failOpen", async () => {
+  await assert.rejects(run(json({ error: "down" }, 503)).p, TollUnavailableError);
+  assert.equal((await run(json({ error: "down" }, 503), { failOpen: true }).p).decision, "allowed");
 });
