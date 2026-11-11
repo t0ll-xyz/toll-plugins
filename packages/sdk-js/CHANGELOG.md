@@ -1,5 +1,9 @@
 # Changelog: @tollxyz/sdk
 
+## 0.7.1 (unreleased)
+
+- `checkTx` sends every kind of request the live `check_tx` reads: `authorizationList` (a type-4 EIP-7702 transaction, or a signAuthorization alone), `message` + `origin` (personal_sign / eth_sign, Sign-In with Ethereum), `rpc` (the wallet request as sent, `{method, params}`), `userOp` + `entryPoint` (ERC-4337) and `intent`. Before, a request carrying only one of these was refused locally ("needs a transaction, typedData or x402") and `CheckTxRequest` had no field for them.
+
 ## 0.7.0 (2026-11-10)
 
 - `paidBefore({ payer, payTo, resource?, since? })`: `GET /paid` on Toll's facilitator, whether a wallet already paid a payTo through it (settlements, escrow captures, batch charges). Typed `PaidAnswer`, `PaidEntry`, `PaidSource`.

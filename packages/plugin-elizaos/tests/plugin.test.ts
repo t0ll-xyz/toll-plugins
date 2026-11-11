@@ -374,3 +374,23 @@ test("0.4.0 TOLL_CHECK_TX passes ticket through", async () => {
   await act(p, "TOLL_CHECK_TX").handler({}, msg(`check before I sign: {"to":"${TOKEN}","data":"0x","value":"0","from":"${WALLET}","ticket":true}`));
   assert.deepEqual(calls[0].body.params.arguments, { to: TOKEN, data: "0x", value: "0", from: WALLET, ticket: {} });
 });
+
+// audit 2026-11-11 (PUB-2): the action runs for every kind of request the live check_tx reads, not only {to}, {typedData}, {x402}
+test("0.5.1 TOLL_CHECK_TX takes a 7702 authorization, a message, a wallet request and a user operation", async () => {
+  const kinds: Array<Record<string, unknown>> = [
+    { from: WALLET, authorizationList: [{ chainId: 4663, address: TOKEN, nonce: 0 }] },
+    { from: WALLET, message: { kind: "personal_sign", data: "hello" }, origin: "https://example.com" },
+    { rpc: { method: "eth_sign", params: [WALLET, "0x" + "ab".repeat(32)] } },
+    { userOp: { sender: WALLET, nonce: "0x0", callData: "0x" }, entryPoint: TOKEN },
+  ];
+  for (const k of kinds) {
+    const { toll, calls } = restClient([{ body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "ALLOW" }] } }) }]);
+    const p = createTollPlugin({ client: toll });
+    const text = `check before I sign: ${JSON.stringify(k)}`;
+    assert.equal(await act(p, "TOLL_CHECK_TX").validate({}, msg(text)), true, Object.keys(k).join(","));
+    await act(p, "TOLL_CHECK_TX").handler({}, msg(text));
+    assert.deepEqual(calls[0].body.params.arguments, k);
+  }
+  // JSON that is none of them still does not run the action
+  assert.equal(await act(createTollPlugin({}), "TOLL_CHECK_TX").validate({}, msg('here: {"hello":"world"}')), false);
+});

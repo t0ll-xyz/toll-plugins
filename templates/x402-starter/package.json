@@ -10,7 +10,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@tollxyz/x402-seller": "^0.1.0",
+    "@tollxyz/x402-seller": "^0.3.0",
     "next": "15.5.4",
     "react": "19.1.1",
     "react-dom": "19.1.1"

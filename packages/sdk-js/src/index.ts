@@ -75,6 +75,23 @@ export interface CheckTxRequest {
   value?: number | string;
   /** An EIP-712 signature request: {domain, types, primaryType, message}. */
   typedData?: Record<string, unknown>;
+  /**
+   * 0.7.1: a type-4 (EIP-7702) transaction's authorizationList, or a signAuthorization alone (no to, no data):
+   * [{chainId, address, nonce, yParity, r, s}]. A delegate Toll has verified by code hash is WARN; any other is BLOCK.
+   */
+  authorizationList?: unknown[];
+  /** 0.7.1: a message to sign: {kind: "personal_sign" | "eth_sign", data (0x hex or text), origin?, from?}. Sign-In with Ethereum is read; eth_sign of a hash is BLOCK. */
+  message?: { kind: "personal_sign" | "eth_sign"; data: string; origin?: string; from?: string } | Record<string, unknown>;
+  /** 0.7.1: the site or app asking for the signature (https://...), checked against a Sign-In with Ethereum domain. */
+  origin?: string;
+  /** 0.7.1: the wallet request as the agent would send it: {method, params} (personal_sign, eth_sign, eth_signTypedData_v4, eth_sendTransaction). */
+  rpc?: { method: string; params?: unknown[] } | Record<string, unknown>;
+  /** 0.7.1: an ERC-4337 user operation (v0.6, v0.7 packed or unpacked, v0.8); its calls are opened and each checked. */
+  userOp?: Record<string, unknown>;
+  /** 0.7.1: the userOp's EntryPoint address (0x + 40 hex). */
+  entryPoint?: string;
+  /** 0.7.1: what the agent means to do ({action, recipient, ...}); an effect that does not match it is flagged. */
+  intent?: Record<string, unknown>;
   /** An x402 payment: the PaymentRequired the 402 sent (with accepts), or one accepts entry; optional payment and resource. */
   x402?: Record<string, unknown>;
   /** The x402 seller's ERC-8004 agent id, when known. */
@@ -1186,11 +1203,17 @@ export class Toll {
 
   /**
    * Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment), for a
-   * transaction (to, data, value, from), an EIP-712 signature (typedData) or an x402 payment (x402).
+   * transaction (to, data, value, from; authorizationList for a type-4 one), an EIP-712 signature (typedData), a message
+   * to sign (message, origin), the wallet request as sent (rpc), an ERC-4337 user operation (userOp, entryPoint) or an
+   * x402 payment (x402).
    */
   async checkTx(req: CheckTxRequest): Promise<CheckTxResult> {
-    if (!isObject(req) || (req.to === undefined && req.typedData === undefined && req.x402 === undefined)) {
-      throw new TollError("checkTx needs a transaction (to, data, value, from), typedData or x402.");
+    // every kind of request the live check_tx reads (0.7.1): a transaction, a signature, a payment, an EIP-7702
+    // authorization list (alone is a signAuthorization), a message to sign, the wallet request as sent, a user operation
+    const has = isObject(req) && (req.to !== undefined || req.typedData !== undefined || req.x402 !== undefined
+      || (Array.isArray(req.authorizationList) && req.authorizationList.length > 0) || isObject(req.message) || isObject(req.rpc) || isObject(req.userOp));
+    if (!has) {
+      throw new TollError("checkTx needs a transaction (to, data, value, from), typedData, x402, authorizationList, message, rpc or userOp.");
     }
     if (req.chainId !== undefined && String(req.chainId) !== "4663" && String(req.chainId).toLowerCase() !== "0x1237") {
       throw new TollError(`Invalid chainId "${req.chainId}": ${RH_ONLY} (chain id 4663)`);

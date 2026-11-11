@@ -1,5 +1,9 @@
 # Changelog: toll-sdk
 
+## 0.7.1 (unreleased)
+
+- `check_tx` sends every kind of request the live tool reads: `authorization_list` (a type-4 EIP-7702 transaction, or a signAuthorization alone), `message` + `origin` (personal_sign / eth_sign, Sign-In with Ethereum), `rpc` (the wallet request as sent), `user_op` + `entry_point` (ERC-4337) and `intent`. Before, a request carrying only one of these was refused locally and there was no argument for them.
+
 ## 0.7.0 (2026-11-10)
 
 - `paid_before(payer, pay_to, resource=None, since=None)`: `GET /paid` on Toll's facilitator, whether a wallet already paid a payTo through it.

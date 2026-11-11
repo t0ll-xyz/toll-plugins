@@ -612,18 +612,31 @@ class Toll:
         strict: Optional[bool] = None,
         chain_id: Any = None,
         ticket: Union[bool, Dict[str, Any], None] = None,
+        authorization_list: Optional[List[Any]] = None,
+        message: Optional[Dict[str, Any]] = None,
+        origin: Optional[str] = None,
+        rpc: Optional[Dict[str, Any]] = None,
+        user_op: Optional[Dict[str, Any]] = None,
+        entry_point: Optional[str] = None,
+        intent: Optional[Dict[str, Any]] = None,
     ) -> TollResult:
         """Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment).
 
         Pass a transaction (to, data, value, from_), an EIP-712 signature request (typed_data) or an x402 payment
         (x402: the PaymentRequired from the 402, or one accepts entry; agent_id optional).
+        0.7.1, everything else the live tool reads: authorization_list (a type-4 EIP-7702 transaction's list, or a
+        signAuthorization alone: [{chainId, address, nonce, ...}]), message ({"kind": "personal_sign" | "eth_sign",
+        "data": ...}) with origin (the site asking), rpc (the wallet request as sent: {"method", "params"}), user_op
+        (an ERC-4337 user operation) with entry_point, and intent (what the agent means to do).
         ticket: True (scope "call", any consumer) or {"consumer": 0x..., "scope": "call" | "v4swap"} asks for a single-use
         ALLOW ticket for this exact call; it comes back in result.ticket ({ticket, signature, signer} or {why}). A BLOCK is
         never signed; no ticket without from_. Same option as @tollxyz/guard 0.4.1.
         The result also carries .assessment (the RiskAssessment JSON) and .action (ALLOW / WARN / BLOCK).
         """
-        if to is None and typed_data is None and x402 is None:
-            raise TollError("check_tx needs a transaction (to, data, value, from_), typed_data or x402.")
+        if (to is None and typed_data is None and x402 is None and not authorization_list
+                and not isinstance(message, dict) and not isinstance(rpc, dict) and not isinstance(user_op, dict)):
+            raise TollError("check_tx needs a transaction (to, data, value, from_), typed_data, x402, "
+                            "authorization_list, message, rpc or user_op.")
         if chain_id is not None and str(chain_id).lower() not in ("4663", "0x1237"):
             raise TollError(f'Invalid chain_id "{chain_id}": {RH_ONLY} (chain id 4663)')
         args = _opt(
@@ -636,6 +649,13 @@ class Toll:
             agentId=agent_id,
             registry=registry,
             strict=strict,
+            authorizationList=authorization_list,
+            message=message,
+            origin=origin,
+            rpc=rpc,
+            userOp=user_op,
+            entryPoint=entry_point,
+            intent=intent,
         )
         if from_ is not None:
             args["from"] = from_

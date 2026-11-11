@@ -46,7 +46,7 @@ test("schemas convert to OpenAI function JSON for bindTools", () => {
   const agent: any = convertToOpenAITool(by.check_agent as any).function;
   assert.deepEqual(agent.parameters.properties.id.anyOf.map((x: any) => x.type), ["integer", "string"]);
   const tx: any = convertToOpenAITool(by.check_tx as any).function;
-  assert.deepEqual(Object.keys(tx.parameters.properties).sort(), ["agentId", "chainId", "data", "from", "registry", "strict", "ticket", "to", "typedData", "value", "x402"]);
+  assert.deepEqual(Object.keys(tx.parameters.properties).sort(), ["agentId", "authorizationList", "chainId", "data", "entryPoint", "from", "intent", "message", "origin", "registry", "rpc", "strict", "ticket", "to", "typedData", "userOp", "value", "x402"]);
   const ev: any = convertToOpenAITool(by.stock_events as any).function;
   assert.equal(ev.parameters.properties.kind.enum.length, 9);
 });

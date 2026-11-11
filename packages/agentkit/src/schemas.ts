@@ -54,6 +54,22 @@ export const CheckTxSchema = z.object({
   data: z.string().max(40000).optional().describe("The calldata, hex (0x for a plain send)."),
   value: intOrString.optional().describe("Wei sent with it, decimal or 0x hex (default 0)."),
   typedData: object.optional().describe("An EIP-712 signature request: {domain, types, primaryType, message}."),
+  // audit 2026-11-11 (PUB-2): the rest of what the live check_tx reads; without these keys the framework dropped them
+  authorizationList: z
+    .array(z.unknown())
+    .max(64)
+    .optional()
+    .describe("A type-4 (EIP-7702) transaction's authorizationList, or a signAuthorization alone (no to, no data): [{chainId, address, nonce, yParity, r, s}]. A delegate Toll has verified by code hash is WARN; any other is BLOCK."),
+  message: object
+    .optional()
+    .describe('A message to sign: {kind: "personal_sign" | "eth_sign", data (0x hex or text), origin?, from?}. Sign-In with Ethereum is read (domain against origin, expiry); eth_sign of a hash is BLOCK.'),
+  origin: z.string().max(2048).optional().describe("The site or app asking for the signature (https://...), checked against a Sign-In with Ethereum domain."),
+  rpc: object
+    .optional()
+    .describe("The wallet request as the agent would send it: {method, params}. personal_sign [data, address], eth_sign [address, data], eth_signTypedData_v4 [address, typed data JSON], eth_sendTransaction [tx]."),
+  userOp: object.optional().describe("An ERC-4337 user operation (v0.6, v0.7 packed or unpacked, v0.8): sender, nonce, callData, gas fields, paymaster, signature. Its calls are opened and each checked."),
+  entryPoint: z.string().max(42).optional().describe("The userOp's EntryPoint address (0x + 40 hex)."),
+  intent: object.optional().describe("What the agent means to do ({action, recipient, ...}); an effect that does not match it is flagged."),
   x402: object
     .optional()
     .describe("An x402 payment: the PaymentRequired the 402 sent (with accepts), or one accepts entry; optional payment (the signed payload) and resource (the URL)."),

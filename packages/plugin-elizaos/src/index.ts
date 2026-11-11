@@ -330,10 +330,13 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
     makeAction(resolve, {
       name: "TOLL_CHECK_TX",
       similes: ["CHECK_TX", "PRESIGN_CHECK", "CHECK_BEFORE_SIGNING"],
-      description: `${LIVE_DESCRIPTIONS.check_tx} Needs the request as JSON in the message: {to, data, value, from}, {typedData: {...}} or {x402: {...}}.`,
+      description: `${LIVE_DESCRIPTIONS.check_tx} Needs the request as JSON in the message: {to, data, value, from}, {typedData: {...}}, {x402: {...}}, {authorizationList: [...]}, {message: {...}}, {rpc: {method, params}} or {userOp: {...}}.`,
       canRun: (t) => {
         const j = extractJson(t);
-        return j !== null && j.version !== "erc-presign/1" && ("to" in j || "typedData" in j || "x402" in j || "accepts" in j);
+        // every kind of request the live check_tx reads (audit 2026-11-11): a transaction, a signature, a payment, an
+        // EIP-7702 authorization list, a message to sign, the wallet request as sent, a user operation
+        return j !== null && j.version !== "erc-presign/1"
+          && ["to", "typedData", "x402", "accepts", "authorizationList", "message", "rpc", "userOp"].some((k) => k in j);
       },
       run: ({ client: c }, t) => {
         const j = extractJson(t)!;
