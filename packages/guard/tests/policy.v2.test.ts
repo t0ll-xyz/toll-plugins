@@ -128,12 +128,12 @@ test("caps hold when Toll is unavailable (local decode of native and USDG)", asy
   // an unlimited approve is over any per-call cap
   const a = opts(["down"], spend, { failOpen: true });
   await assert.rejects(enforce("transaction", () => usdgApprove(ROUTER, UNLIMITED), a.o), isPolicy("cap-per-call"));
-  // 0.5.1: without failOpen, Toll being down refuses the request before the caps are reached
+  // 0.6.0: without failOpen, Toll being down refuses the request before the caps are reached
   const c = opts(["down"], spend);
   await assert.rejects(enforce("transaction", () => usdgTransfer(SHOP, 1n), c.o), TollUnavailableError);
 });
 
-test("unknown spend: blocked by default (0.5.1) and under failClosed; onUnknownSpend allow lets it through", async () => {
+test("unknown spend: blocked by default (0.6.0) and under failClosed; onUnknownSpend allow lets it through", async () => {
   const call = { chainId: RH, from: FROM, to: ROUTER, data: "0x12345678", value: 0n };
   const t = opts(["down"], {}, { failClosed: true, failOpen: true });
   await assert.rejects(enforce("transaction", () => call, t.o), isPolicy("unknown-spend"));

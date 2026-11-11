@@ -84,7 +84,7 @@ export interface SpendPolicy {
   approveAbove?: Record<string, bigint>;
   /** asks a human (or another system); no function = denied */
   approve?: (r: ApprovalRequest) => Promise<{ approved: boolean; approvalRef?: string }>;
-  /** a request whose spend could not be read (a contract call Toll did not simulate, an x402 amount or a value that does not parse): "block" (default since 0.5.1) or "allow" */
+  /** a request whose spend could not be read (a contract call Toll did not simulate, an x402 amount or a value that does not parse): "block" (default since 0.6.0) or "allow" */
   onUnknownSpend?: "allow" | "block";
 }
 
@@ -117,12 +117,12 @@ export interface GuardOptions extends CheckOptions {
   onBlock?: BlockPolicy;
   /**
    * Toll unreachable, timed out, 5xx, 429, any other non-2xx (400, 413), or an answer that is not a RiskAssessment:
-   * "block" (default since 0.5.1, fail-closed: nothing is signed, throws TollUnavailableError) or "allow" (fail-open,
+   * "block" (default since 0.6.0, fail-closed: nothing is signed, throws TollUnavailableError) or "allow" (fail-open,
    * logged). Passed explicitly it wins over `failOpen` and `strict`.
    */
   onUnavailable?: "allow" | "block";
   /**
-   * 0.5.1: the opt-in to the old default. `true` = when Toll cannot or will not answer, the request goes ahead
+   * 0.6.0: the opt-in to the old default. `true` = when Toll cannot or will not answer, the request goes ahead
    * unchecked (logged "NOT checked"). Know what it means: whoever builds the request can make Toll refuse it (a
    * request padded past Toll's size limit answers HTTP 413) and so switch the check off. Default false.
    * `strict` and an explicit `onUnavailable` win over it.
@@ -156,7 +156,7 @@ export interface GuardOptions extends CheckOptions {
   spend?: SpendPolicy;
   /** where caps and paid x402 ids are counted; default an in-process MemorySpendStore per SpendPolicy object */
   store?: SpendStore;
-  /** with `spend`: a request whose spend cannot be read is blocked. Since 0.5.1 that is the default anyway (onUnknownSpend "block"); kept for callers that set it */
+  /** with `spend`: a request whose spend cannot be read is blocked. Since 0.6.0 that is the default anyway (onUnknownSpend "block"); kept for callers that set it */
   failClosed?: boolean;
 }
 
@@ -184,7 +184,7 @@ export function resolvePolicy(o: GuardOptions = {}): { onWarn: WarnPolicy; onUna
 
 const HIGH = new Set(["high", "critical"]);
 /** true when any warning is high or critical */
-/** warnings that say "this was not checked": refused under block-high whatever their severity (0.5.1) */
+/** warnings that say "this was not checked": refused under block-high whatever their severity (0.6.0) */
 const UNCHECKED = new Set(["coin-not-read"]);
 export const hasHighWarning = (a: RiskAssessment): boolean =>
   (a.warnings ?? []).some((w) => HIGH.has(String(w?.severity).toLowerCase()) || UNCHECKED.has(String(w?.code)));
@@ -549,7 +549,7 @@ async function enforceSpend(kind: GuardKind, build: () => CheckInput | Promise<C
   const s: Spend = input ? spendOf(input, base.assessment, assets) : { items: [], outflow: {}, approvals: {}, to: [], spender: [], payTo: [], unknown: true, simulated: false };
   const why = offList(sp, s);
   if (why) return blockWith(base, "not-allowlisted", `Not signed: ${why}.`, s);
-  // 0.5.1: with a spend policy set, what cannot be read is refused by default (it was allowed unless failClosed):
+  // 0.6.0: with a spend policy set, what cannot be read is refused by default (it was allowed unless failClosed):
   // caps that bind only on plain transfers are not caps. onUnknownSpend "allow" is the opt-out
   if (s.unknown && (sp.onUnknownSpend ?? "block") === "block") {
     return blockWith(base, "unknown-spend", 'Not signed: what this request spends could not be read (no simulation), and onUnknownSpend is "block".', s);

@@ -22,13 +22,13 @@
 > - `eth_sign` always fails closed: it can sign any 32 bytes, a transaction included, so when Toll cannot answer it is
 >   blocked whatever `onUnavailable` says.
 
-> **Default changed in 0.5.1: the guard fails closed.** When Toll cannot or will not answer (unreachable, timeout,
+> **Default changed in 0.6.0: the guard fails closed.** When Toll cannot or will not answer (unreachable, timeout,
 > 429, 5xx, HTTP 400 or 413, an answer that is not a RiskAssessment) nothing is signed: `TollUnavailableError`, with
 > "Not signed" in the message. Before, such a request went ahead unchecked, so whoever built the request could
 > switch the check off (a request padded past Toll's 64 KB limit answers 413). To keep the old behaviour pass
 > `failOpen: true` (or `onUnavailable: "allow"`), and know that it lets anyone who can shape the request skip the check.
 
-> **Also in 0.5.1.** With a `spend` policy, a request whose spend cannot be read (a contract call Toll did not simulate,
+> **Also in 0.6.0.** With a `spend` policy, a request whose spend cannot be read (a contract call Toll did not simulate,
 > an x402 amount such as `"+5000000"` or a value that does not parse) is refused by default: `onUnknownSpend: "allow"`
 > opts out. A WARN that says the coin was not read yet (`coin-not-read`) is refused under the default `block-high`.
 > Fixed: `transferFrom`'s recipient was read from the amount word, so an allowlist refused every `transferFrom`.
@@ -177,8 +177,8 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `strict` | `false` | preset: the defaults of `onWarn`, `onUnavailable` and `onUnsupported` become `"block"`; each one passed explicitly still wins |
 | `onWarn` | `"block-high"` | `"block-high"` (blocked when any warning is `high` or `critical`, else allowed and logged), `"allow"` (every WARN goes ahead, logged; the 0.1.x default), `"block"`, or `(assessment) => boolean` (true lets it through) |
 | `onBlock` | `"throw"` | `"throw"` (TollBlockedError), or `(assessment) => boolean`, e.g. ask a human; true lets it through |
-| `onUnavailable` | `"block"` (since 0.5.1) | Toll unreachable, timed out, 5xx, 429, any other non-2xx (400, 413) or an answer that is not a RiskAssessment: `"block"` (fail-closed, TollUnavailableError) or `"allow"` (fail-open, logged). Passed explicitly it wins over `failOpen` and `strict` |
-| `failOpen` | `false` | 0.5.1: `true` = the old default: when Toll cannot or will not answer, the request goes ahead unchecked (logged). `strict` and an explicit `onUnavailable` win over it |
+| `onUnavailable` | `"block"` (since 0.6.0) | Toll unreachable, timed out, 5xx, 429, any other non-2xx (400, 413) or an answer that is not a RiskAssessment: `"block"` (fail-closed, TollUnavailableError) or `"allow"` (fail-open, logged). Passed explicitly it wins over `failOpen` and `strict` |
+| `failOpen` | `false` | 0.6.0: `true` = the old default: when Toll cannot or will not answer, the request goes ahead unchecked (logged). `strict` and an explicit `onUnavailable` win over it |
 | `onUnsupported` | `"allow"` (`strict`: `"block"`) | a transaction on another chain, a deployment: `"allow"` or `"block"`. A signature for another chain is blocked unless this is `"allow"` explicitly |
 | `onAuthorization` | `"check"` | an EIP-7702 authorization: `"check"` (Toll decides; blocked when Toll cannot read it), `"block"` (TollBlockedError, Toll not asked) or `"allow"` (unchecked, logged) |
 | `origin` | none | the site asking for a signature, sent with messages and typed data |
@@ -189,7 +189,7 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `baseUrl`, `fetch` | `https://t0ll.xyz`, global fetch | |
 | `spend` | none | 0.4.0: caps, allowlists, approval ([below](#040-spend-caps-allowlists-approval-preview)); unset = 0.3.x behaviour |
 | `store` | in-process `MemorySpendStore` | where spend counters and paid x402 ids live |
-| `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked (the default since 0.5.1; `onUnknownSpend: "allow"` opts out) |
+| `failClosed` | `false` | with `spend`: a request whose spend cannot be read is blocked (the default since 0.6.0; `onUnknownSpend: "allow"` opts out) |
 | `ticket` | none | 0.4.1: `true` or `{consumer?, scope?}`: ask Toll for a single-use ALLOW ticket for this exact call; it comes back as `report.ticket` ([below](#allow-tickets)) |
 
 Errors: `TollBlockedError` (`.assessment`, `.codes`, message lists each code and message) and
@@ -253,7 +253,7 @@ Robinhood Chain, plus every asset you name in `assets` or `approveAbove`. A sell
 - An approval counts against the per-call cap at its full size (an unlimited approval is over any cap) and must fit
   in what is left of the day cap; it is not added to the day total (the later swap is).
 - Unknown spend: a contract call with no simulation (Toll unreachable), a raw user operation, a bare EIP-7702
-  authorization. `onUnknownSpend` decides: `"block"` by default since 0.5.1 (caps that bind only on plain transfers are not caps), `"allow"` to opt out. An x402 amount or a transaction value the guard cannot parse is an unknown spend too.
+  authorization. `onUnknownSpend` decides: `"block"` by default since 0.6.0 (caps that bind only on plain transfers are not caps), `"allow"` to opt out. An x402 amount or a transaction value the guard cannot parse is an unknown spend too.
 
 | `spend` field | |
 | --- | --- |
@@ -262,7 +262,7 @@ Robinhood Chain, plus every asset you name in `assets` or `approveAbove`. A sell
 | `allow` | `{ to?, spender?, payTo? }`: every recipient (or called contract), approval spender, x402 payee must be listed |
 | `approveAbove` | `{ [asset]: amount }`: above it, `approve` must say yes |
 | `approve` | `(req) => Promise<{ approved, approvalRef? }>`; no function = denied. `approvalRef` lands in `report.spend.approvalRef` |
-| `onUnknownSpend` | `"block"` (default since 0.5.1) or `"allow"` |
+| `onUnknownSpend` | `"block"` (default since 0.6.0) or `"allow"` |
 
 New options next to `spend`: `store` (where counters live, below) and `failClosed`.
 
@@ -431,7 +431,7 @@ should keep an owner bypass behind a timelock in case Toll is unreachable.
 
 ## Fail-open or fail-closed
 
-The default is fail-closed since 0.5.1: if Toll cannot or will not answer, nothing is signed. The guard throws
+The default is fail-closed since 0.6.0: if Toll cannot or will not answer, nothing is signed. The guard throws
 `TollUnavailableError` (its `reason` says why: `network`, `timeout`, `rate-limited`, `server-error`, `bad-request`,
 `bad-answer`) and calls `onReport` with `decision: "blocked"`, `basis: "unavailable"`. The reason for the default: a
 refusal can be caused on purpose. A request padded past Toll's size limit answers HTTP 413, and a guard that let

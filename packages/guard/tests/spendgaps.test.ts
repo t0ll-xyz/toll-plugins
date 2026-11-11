@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { enforce, MemorySpendStore, spendOf, TollBlockedError, TollPolicyError, USDG, NATIVE, type GuardOptions, type RiskAssessment, type SpendPolicy } from "../src/index.js";
 
 /**
- * 0.5.1 (audit 2026-11-11, PUB-5 / PUB-7): WHAT THE GUARD CANNOT READ IS NOT "NOTHING SPENT".
+ * 0.6.0 (audit 2026-11-11, PUB-5 / PUB-7): WHAT THE GUARD CANNOT READ IS NOT "NOTHING SPENT".
  *  - an x402 amount it cannot parse ("+5000000", "5e6") was skipped, so per-call, per-day and approval caps all passed
  *    while a client that parses it pays the sum: it now counts as an unknown spend
  *  - a transaction value it cannot read (a JS number above 2^53) counted as zero: unknown too

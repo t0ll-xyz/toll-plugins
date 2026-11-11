@@ -119,7 +119,7 @@ class Acc {
 function decodeTx(i: CheckInput, acc: Acc) {
   const from = isAddress(i.from) ? lc(i.from) : null;
   const target = lc(i.to);
-  // a value that cannot be read (a JS number past 2^53, text) is not "nothing sent": unknown (0.5.1)
+  // a value that cannot be read (a JS number past 2^53, text) is not "nothing sent": unknown (0.6.0)
   const read = big(i.value ?? 0);
   if (read === null) acc.unknown = true;
   const value = read ?? 0n;
@@ -139,7 +139,7 @@ function decodeTx(i: CheckInput, acc: Acc) {
   }
   if (sel === SEL.transferFrom && w.length >= 3) {
     const src = wAddr(w[0]);
-    // transferFrom(from, to, amount): the recipient is the SECOND word (0.5.1: it was read from the amount word)
+    // transferFrom(from, to, amount): the recipient is the SECOND word (0.6.0: it was read from the amount word)
     const to = wAddr(w[1]);
     acc.to.add(to);
     // only the signer's own tokens are its spend
@@ -200,7 +200,7 @@ function decodeX402(x: Record<string, unknown>, acc: Acc) {
     const payTo = lc(e.payTo);
     if (payTo) acc.payTo.add(payTo);
     const amt = big(e.amount ?? e.maxAmountRequired);
-    // the client pays one entry: the largest per asset counts. An amount that cannot be read (0.5.1: "+5000000",
+    // the client pays one entry: the largest per asset counts. An amount that cannot be read (0.6.0: "+5000000",
     // "5e6", none) is not zero: the caps cannot be applied to it, so the spend is unknown
     if (amt !== null) acc.out(lc(e.asset), amt, { kind: "x402", payTo }, true);
     else acc.unknown = true;

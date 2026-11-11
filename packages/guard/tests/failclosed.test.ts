@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { enforce, resolvePolicy, TollUnavailableError, type GuardOptions, type GuardReport } from "../src/index.js";
 
 /**
- * 0.5.1 (audit 2026-11-11): the guard FAILS CLOSED by default. Before, an answer Toll refused to give (HTTP 400, 413
+ * 0.6.0 (audit 2026-11-11): the guard FAILS CLOSED by default. Before, an answer Toll refused to give (HTTP 400, 413
  * for a request padded past 64 KB, 5xx, a timeout, a body that is not a RiskAssessment) was "unavailable" and the
  * signature went ahead: whoever built the request could switch the check off. Now nothing is signed unless Toll
  * answered; `failOpen: true` (or the older `onUnavailable: "allow"`) is the explicit opt-in to the old behaviour.

@@ -196,7 +196,7 @@ test("an action that is not ALLOW/WARN/BLOCK is never treated as ALLOW", async (
   // not a valid assessment: unavailable (let through only under failOpen) ...
   const r = await enforce("transaction", build, t.o);
   assert.equal(r.basis, "unavailable");
-  // ... and by default (0.5.1) nothing is signed
+  // ... and by default (0.6.0) nothing is signed
   await assert.rejects(enforce("transaction", build, opts([json({ ...fx("allow"), action: "MAYBE" })], { onWarn: "block" }).o), TollUnavailableError);
 });
 
