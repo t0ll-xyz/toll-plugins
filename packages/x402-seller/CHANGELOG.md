@@ -1,5 +1,9 @@
 # Changelog: @tollxyz/x402-seller
 
+## 0.3.1 (unreleased)
+
+- A settle that gave no answer is no longer answered "Nothing was charged". `/settle` now waits 60 s (`settleTimeoutMs`; `/verify` keeps 15 s), is asked once more with the same payment when it times out, answers 5xx or says `settlement_pending`, and if there is still no answer the buyer gets 503 `settlement_unknown` / `settlement_pending` ("the payment may still settle; send the same payment again"), never a 402 asking for a second payment. The handler had already run by then, so the old message could be false.
+
 ## 0.3.0 (2026-11-10)
 
 - `signReceipt(typedData)`: sign the x402 offer-receipt spec's receipt with your own key. The forwarded payment carries `extensions["offer-receipt"]` and the resource; when the settle answer's `extensions["toll-offer-receipt"].receiptPayload` is this settlement's (version 1, eip155:4663, this resource, the settled payer and transaction), it is signed and sent to the buyer in `PAYMENT-RESPONSE` as `extensions["offer-receipt"].info.receipt = { format: "eip712", payload, signature }`, and kept in `settlement.offerReceipt`. A signer that throws only means no receipt. `receiptTypedData()`, `receiptPayloadOf()`, `RECEIPT_DOMAIN`, `RECEIPT_TYPES`, types `ReceiptPayload`, `SignedReceipt`, `ReceiptTypedData`.

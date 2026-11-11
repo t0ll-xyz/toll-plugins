@@ -205,6 +205,15 @@ export type SellerOptions = {
   /** facilitator timeout per call, ms; default 15000 */
   timeoutMs?: number;
   /**
+   * 0.3.1: how long /settle may take, ms; default 60000 (the facilitator waits for the transaction to be mined). The
+   * handler has already answered when /settle runs, so giving up early is how a buyer pays and gets nothing.
+   */
+  settleTimeoutMs?: number;
+  /** 0.3.1: the wait before /settle is asked a second time, ms; default 2000 */
+  settleRetryMs?: number;
+  /** test hook: the sleep between the two settle tries */
+  sleep?: (ms: number) => Promise<void>;
+  /**
    * your ERC-8021 app code (^[a-z0-9_]{1,32}$), sent as extensions["builder-code"].info.a: Toll's facilitator writes it
    * into the settlement's calldata suffix, so each sale is attributed to your app on chain
    */
@@ -527,7 +536,7 @@ async function call(o: SellerOptions, op: "verify" | "settle", pay: Payment): Pr
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ x402Version: pay.version, paymentPayload: pay.payload, paymentRequirements: pay.requirements }),
-    signal: AbortSignal.timeout(o.timeoutMs ?? 15_000),
+    signal: AbortSignal.timeout(op === "settle" ? o.settleTimeoutMs ?? 60_000 : o.timeoutMs ?? 15_000),
   });
   let j: unknown = null;
   try { j = await r.json(); } catch { /* not JSON */ }
@@ -537,6 +546,19 @@ async function call(o: SellerOptions, op: "verify" | "settle", pay: Payment): Pr
 }
 
 const unavailable = () => json({ error: "The payment could not be checked right now. Nothing was charged. Try again shortly." }, 503, { "retry-after": "10" });
+/**
+ * AFTER THE HANDLER RAN (0.3.1): /settle gave no answer, or said the transaction is not mined yet. The transfer may
+ * still land, so "nothing was charged" would be a lie and a 402 would ask for a second payment. The buyer is told what
+ * is true: the payment may settle, and the SAME payment sent again gets the answer (the facilitator answers one
+ * settlement however often it is asked).
+ */
+const settleUnknown = (pending: Record<string, unknown> | null) => json({
+  error: pending
+    ? "The payment is being settled and is not confirmed yet. Do not pay again: send this request again with the same payment."
+    : "The payment could not be confirmed right now. It may still settle. Do not pay again: send this request again with the same payment.",
+  code: pending ? "settlement_pending" : "settlement_unknown",
+  ...(pending && typeof pending.transaction === "string" && pending.transaction ? { transaction: pending.transaction } : {}),
+}, 503, { "retry-after": "15" });
 
 /**
  * Put a price on a handler. The handler runs only for a verified payment, and the payment settles only when the
@@ -564,8 +586,18 @@ export function paywall(o: SellerOptions, handler: (req: Request, payment: Payme
     const res = await handler(req, vScreen ? { ...pay, screen: vScreen } : pay);
     if (res.status >= 400) return res;
 
-    let s: Record<string, unknown>;
-    try { s = await call(o, "settle", pay); } catch { return unavailable(); }
+    // SETTLE, AND ONCE MORE WHEN IT GAVE NO ANSWER OR SAID "PENDING" (0.3.1): the same payment, never a new one
+    const trySettle = async (): Promise<Record<string, unknown> | null> => { try { return await call(o, "settle", pay); } catch { return null; } };
+    const isPending = (x: Record<string, unknown> | null) => !!x && x.success !== true && x.errorReason === "settlement_pending";
+    let s = await trySettle();
+    if (s === null || isPending(s)) {
+      await (o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(o.settleRetryMs ?? 2_000);
+      const again = await trySettle();
+      if (again !== null) s = again;
+      if (again === null && s === null) return settleUnknown(null);
+    }
+    if (s === null) return settleUnknown(null);
+    if (isPending(s)) return settleUnknown(s);
     if (s.success !== true) return need402(o, resource, reason(s, "errorReason", "settlement_failed"), method);
 
     const ext = (s.extensions && typeof s.extensions === "object" ? s.extensions : {}) as Record<string, unknown>;
