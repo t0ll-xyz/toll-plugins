@@ -67,11 +67,11 @@ What it does (its `/supported` lists them):
   `x402 receipt` / `1` / chainId 1); `/receipt/<id or tx>` carries it as `offerReceipt` on a settled row. Toll never signs
   the spec's receipt (it attests delivery). `signReceipt` in `@tollxyz/x402-seller` signs it and returns it to the buyer
   as `extensions["offer-receipt"].info.receipt`; `receiptTypedData()` in the SDKs.
-- **Per-payer budgets (coming, off until launch):** a payer signs its own spending limits (EIP-712 `Budget`, domain
+- **Per-payer budgets (live since 2026-11-11):** a payer signs its own spending limits (EIP-712 `Budget`, domain
   `Toll Facilitator Budget` / `1` / 4663: perPayment, perDay, per-payTo day caps, allowed payTos, expiry) with
   `POST /budget`, reads them with `GET /budget?payer=`, and `/verify` and `/settle` refuse any payment past them, across
   every scheme. `budgetTypedData()`, `setBudget()`, `revokeBudget()`, `getBudget()` in the SDKs; `guardBudget()` in
-  `@tollxyz/guard` mirrors guard's caps into one. Until it launches the facilitator answers `404 budgets_off`.
+  `@tollxyz/guard` mirrors guard's caps into one. If budgets are ever switched off the facilitator answers `404 budgets_off`.
 
 Start from the template: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api` ([templates/x402-starter](templates/x402-starter), a Next.js API with one paid route).
 Or add [`@tollxyz/x402-seller`](packages/x402-seller): `export const GET = paywall({ payTo, price: "0.05", agentId }, handler)`.
@@ -95,7 +95,10 @@ no default for chain 4663):
 ```
 
 Endpoints: `/verify`, `/settle`, `/supported`, `/stats`, `/receipt/<id or tx>`, `/discovery/resources`,
-`/discovery/search`, `/paid`, `/budget` (coming). The
+`/discovery/search`, `/paid`, `/budget`. Its limits (the defaults): 0.001 to 100 USDG a payment; 200 settlements a
+day and 60 an hour for one payTo, 20 an hour for a payTo that is not verified; 20 an hour and 100 a day for one payer;
+and a gas budget for the UTC day, because Toll pays the gas (past it a new settle answers `gas_day_budget_exhausted`
+until 00:00 UTC). A capture, refund or void of an existing escrow hold is never refused by these limits. The
 [x402 Register](https://x402.t0ll.xyz/#register) lists every agent on Robinhood Chain that sells over x402 and whether
 its payTo is bound to its identity.
 
@@ -105,7 +108,7 @@ its payTo is bound to its identity.
 | --- | --- | --- |
 | [`@tollxyz/sdk`](packages/sdk-js) | TypeScript client, zero dependencies, `pay()` for the x402 paid path | `npm install @tollxyz/sdk` |
 | [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`) | `pip install toll-sdk` |
-| [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing | `npm install @tollxyz/guard` |
+| [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing. Since 0.6.0 nothing is signed when Toll cannot answer (`failOpen: true` opts out) | `npm install @tollxyz/guard` |
 | [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check, signed receipt, builder code, safety screen, a discovery listing, seller-signed offer-receipt receipts and `paidBefore` | `npm install @tollxyz/x402-seller` |
 | [`@tollxyz/mcp`](packages/mcp) | Local stdio MCP server, Toll's tools 1:1 (bin `toll-mcp`) | `npx -y @tollxyz/mcp` |
 | [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |

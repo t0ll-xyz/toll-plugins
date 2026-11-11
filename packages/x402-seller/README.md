@@ -46,6 +46,7 @@ app.get("/forecast", (c) => forecast(c.req.raw));
 | --- | --- |
 | `payTo` | the wallet paid; for the payee check, the agentWallet your ERC-8004 identity registered |
 | `price` | USDG as a decimal, e.g. `"0.05"` (Toll's facilitator takes 0.001 to 100 USDG a payment) |
+| `settleTimeoutMs`, `settleRetryMs` | 0.3.1: how long `/settle` may take (default 60000) and the wait before it is asked once more (default 2000) |
 | `agentId` | your ERC-8004 agent id on Robinhood Chain (optional, recommended) |
 | `description`, `mimeType` | what is sold, shown in the 402 |
 | `maxTimeoutSeconds` | how long a signed payment stays valid (default 300) |
@@ -55,13 +56,28 @@ app.get("/forecast", (c) => forecast(c.req.raw));
 | `signReceipt(typedData)` | sign the x402 offer-receipt spec's receipt with your own key, returned to the buyer (0.3.0, see below) |
 | `facilitator` | another facilitator URL (default `https://x402.t0ll.xyz`) |
 
+## A slow settle, and the facilitator's limits (0.3.1)
+
+`/settle` waits for the transaction to be mined, so the package gives it 60 seconds and asks once more with the same
+payment when it times out or answers "pending". Your handler has already answered by then. If there is still no answer
+the buyer gets a 503 with `code: "settlement_pending"` or `"settlement_unknown"` and is told the truth: the payment may
+still settle, do not pay again, send the same request with the same payment (the facilitator answers one settlement
+however often it is asked). It is never told "nothing was charged" after your handler ran.
+
+Toll's facilitator pays the gas, so it counts: 200 settlements a day and 60 an hour for one payTo (20 an hour while your
+payTo is not verified), 20 an hour and 100 a day for one payer, and a gas budget for the UTC day (past it a new settle
+answers `gas_day_budget_exhausted` until 00:00 UTC). These are the defaults; `GET https://x402.t0ll.xyz/supported` and
+<https://t0ll.xyz/x402/docs> say what is set now. Verify your agent (payTo = your ERC-8004 agent wallet) at
+<https://t0ll.xyz/x402/verify> for the higher hourly limit and your own listing mark.
+
 ## Get listed: `bazaar` (0.2.0)
 
 With `bazaar`, the 402 carries the [x402 bazaar extension](https://github.com/x402-foundation/x402/blob/main/specs/extensions/bazaar.md)
 (`extensions.bazaar = { info, schema }`) and the payment sent to the facilitator carries it too, even when the buyer's
 client does not echo it. Toll's facilitator records the endpoint once a payment settles, after `info` validates against
 `schema`; it then shows in `https://x402.t0ll.xyz/discovery/resources`, `/discovery/search`, the `find_paid_api` tool and
-<https://t0ll.xyz/x402/discover>, verified when your payTo is your ERC-8004 agent wallet.
+<https://t0ll.xyz/x402/discover>, verified when your payTo is your ERC-8004 agent wallet. A listing belongs to its payTo: a payment from another wallet
+that names your URL is a listing of its own and never carries your verified mark, name or settled count.
 
 ```ts
 export const GET = paywall(
