@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/toll-header.svg" width="100%" alt="Toll for every agent framework: one check before it buys or signs"/></p>
+
 # toll-plugins
 
 [![Toll on HEY Research Lab](https://heyresearch.xyz/api/badge/toll)](https://heyresearch.xyz/project/toll?utm_source=badge&utm_medium=readme)
