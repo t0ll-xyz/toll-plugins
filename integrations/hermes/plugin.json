@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "toll",
-  "version": "0.2.0",
-  "description": "Read-only safety checks before an agent buys a coin, signs a transaction or pays an agent: who is behind a coin, the dev's record, LP pull risk, LARP check, pre-sign check (ERC-8265), ERC-8004 agent check, and Robinhood Stock Token market data (fundamentals, insiders, 13F holders, guidance, events, macro). Robinhood Chain (4663) only.",
+  "version": "0.3.0",
+  "description": "Safety checks before an agent buys a coin, signs a transaction or pays an agent: who is behind a coin, a one-word gate before a buy, the dev's record, LP pull risk, LARP check, pre-sign check (ERC-8265), a wallet's live approvals, ERC-8004 agent check, paid x402 API search, Uniswap v4 hook check, and Robinhood Stock Token market data (fundamentals, insiders, 13F holders, guidance, events, macro). 24 read-only lookups; 4 webhook watch tools that need the user's own Toll key. Robinhood Chain (4663) only.",
   "author": {
     "name": "Toll",
     "url": "https://t0ll.xyz"
