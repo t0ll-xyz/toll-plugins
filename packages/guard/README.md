@@ -104,6 +104,18 @@ Robinhood Chain (4663) only for now. A transaction on another chain, or a contra
 and goes through (`onUnsupported: "block"` to stop it instead). A signature for another chain is blocked
 (`onUnsupported: "allow"` lets it through).
 
+## Building on Hookr
+
+A wallet behind the guard that signs a call built by [Hookr](https://hookr.fun)'s MCP server
+(`https://hookr.fun/api/mcp`: `hookr_build_swap`, `hookr_build_launch`, `hookr_build_claim`, `hookr_build_agent_link`,
+`hookr_build_fill`, the liquidity builders) has that call checked like any other: the guard sends it to Toll with the
+wallet as `from` before anything is signed. Toll reads HookrRouter swaps, HookrLauncher launches (the token, the
+pools, who holds the liquidity, a dev buy), a launch's own withdrawal and fee collection, a pool core's claim, the
+Agent gate link and the order book fill. Each is named as Hookr's contract, not audited (`hookr-contract`, low); an
+unknown hook, rules contract or add-on is a warning, and a payout to anyone but `from` is `hookr-pays-other` (high).
+Any other function of those contracts is `calldata-undecoded`: WARN, never ALLOW. Nothing to configure: the checks are
+on Toll's server. Steps: <https://t0ll.xyz/hooks/hookr#agents>
+
 ## API
 
 ### `guard(wallet, opts?)`, `guardViem(client, opts?)`, `guardSmartAccount(bundler, opts?)`, `guardEthers(signer, opts?)`

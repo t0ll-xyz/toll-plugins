@@ -31,6 +31,24 @@ Toll's token is $TOLL on Robinhood Chain: `0xff9e86e6b21fd688027981bee4b64c8b6b8
 | Hermes agent | `mcp_servers: { toll: { url: "https://t0ll.xyz/mcp" } }` in `~/.hermes/config.yaml`, plus `hermes skills install https://t0ll.xyz/skill.md` |
 | Any agent that reads skills | <https://t0ll.xyz/skill.md> ([source](docs/site/skill.md)) |
 
+## Building on Hookr
+
+[Hookr](https://hookr.fun) is a Uniswap v4 hook builder and launchpad on Robinhood Chain. Its own MCP server
+(`https://hookr.fun/api/mcp`) builds unsigned calls; Toll checks each one before the wallet signs.
+
+1. **Build** the call with Hookr's MCP for your wallet: `hookr_build_swap`, `hookr_build_launch`, `hookr_build_claim`,
+   `hookr_build_agent_link`, `hookr_build_fill`, or the liquidity builders (`hookr_build_add_liquidity`,
+   `hookr_build_remove_liquidity`, `hookr_build_collect_fees`).
+2. **Check** it: pass what Hookr returned (`to`, `data`, `value`) to `check_tx` with `from` set to that wallet.
+3. **Sign** only on ALLOW. Pass every warning on; on BLOCK do not sign without the user's say.
+
+What `check_tx` reads of those calls: HookrRouter swaps, HookrLauncher launches (the token, the pools, who holds the
+liquidity, a dev buy), a launch's own withdrawal and fee collection, a pool core's claim, the Agent gate link and the
+order book fill. Each is named as Hookr's contract, not audited. An unknown hook, rules contract or add-on, or a
+payout to anyone but `from`, is a warning. Any other function of those contracts is undecoded: WARN, never ALLOW.
+
+Hookr's root hook: `check_hook` `0x89c9fb50d1f03192230ffb1c279bb6e7d3fe6acc`. Steps: <https://t0ll.xyz/hooks/hookr#agents>
+
 ## Sell over x402: the Toll facilitator
 
 Toll runs an x402 facilitator for USDG on Robinhood Chain at **<https://x402.t0ll.xyz>**: keyless, free, no account.

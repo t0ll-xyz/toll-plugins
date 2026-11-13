@@ -7,6 +7,13 @@ const root = new URL("../", import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), "utf8").replace(/\r\n/g, "\n");
 const tools = JSON.parse(read("packages/mcp/tests/fixture_tools_list.json")).result.tools.map((t) => t.name);
 
+// backticked words that are not Toll's tools: an answer's field (`read_age_s`, pre_buy_check / check_coin), the calls
+// Hookr's MCP builds (the "Building on Hookr" recipe), and the facilitator's refusal codes (the site's skill.md)
+const FIELDS = new Set(["read_age_s", "hookr_build_swap", "hookr_build_launch", "hookr_build_claim", "hookr_build_agent_link",
+  "hookr_build_fill", "hookr_build_add_liquidity", "hookr_build_remove_liquidity", "hookr_build_collect_fees",
+  "unsupported_asset", "budget_exceeded_per_payment", "budget_exceeded_per_day", "budget_exceeded_per_payto",
+  "budget_payto_not_allowed", "budget_expired", "budget_revoked", "budget_asset_not_usdg", "gas_day_budget_exhausted"]);
+
 const files = {
   "docs/site/skill.md": { homepage: true },
   "skills/openclaw/toll/SKILL.md": { homepage: true, openclaw: true },
@@ -41,6 +48,7 @@ for (const [path, want] of Object.entries(files)) {
   // `mcp_toll_<tool>` (Hermes names, one-word tools such as macro too) or a bare `<word>_<word>` tool name.
   for (const [, prefixed, bare] of body.matchAll(/`(?:mcp_toll_([a-z_]+)|([a-z]+_[a-z_]+))`/g)) {
     const name = prefixed ?? bare;
+    if (!prefixed && FIELDS.has(name)) continue;
     assert.ok(tools.includes(name), `${path}: unknown tool ${name}`);
   }
   for (const t of ["check_coin", "larp_check", "dev_record", "check_agent"]) assert.ok(body.includes(t), `${path}: mentions ${t}`);

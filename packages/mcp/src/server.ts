@@ -16,7 +16,7 @@ import {
 import { parsePaidUrl, resolveClientId } from "@tollxyz/sdk";
 import { SNAPSHOT_TOOLS } from "./snapshot.js";
 
-export const VERSION = "0.6.1";
+export const VERSION = "0.6.2";
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 

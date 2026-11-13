@@ -1,7 +1,7 @@
 ---
 name: toll
 description: Safety check before an agent buys a coin, signs or pays an agent, on Robinhood Chain (4663). Use when the user gives a token contract or asks whether a coin looks like a rug, who sniped or bundled it, who made it, whether its liquidity can be pulled, or whether there is a real product behind it; before signing a transaction, an EIP-712 message or an x402 payment; before paying or trusting an ERC-8004 agent; and for Robinhood Stock Token data. Toll (t0ll.xyz) answers with facts read from the chain, not advice.
-version: 0.2.1
+version: 0.2.2
 author: Toll
 metadata:
   hermes:
@@ -87,6 +87,12 @@ curl -s "https://t0ll.xyz/api/agent/<id>?format=text"
   never ALLOW. What it reads (a simulated run, what a signature lets someone take, hidden text, x402 terms):
   https://t0ll.xyz/agents/safety. `presign_risk_report` gives the signed facts (approval amounts, payee binding, text checks) with no
   verdict: treat not read as unknown, never as clean.
+- Building on Hookr (hookr.fun): build the call with Hookr's MCP (https://hookr.fun/api/mcp: `hookr_build_swap`,
+  `hookr_build_launch`, `hookr_build_claim`, `hookr_build_agent_link`, `hookr_build_fill`, the liquidity builders),
+  then send it to `check_tx` with your `from` before you sign. Toll reads HookrRouter swaps, HookrLauncher launches, a
+  launch's own withdrawal and fee collection, a pool core's claim, the Agent gate link and the order book fill; an
+  unknown hook, rules contract or add-on, or a payout to anyone but you, is a warning. Hookr's root hook:
+  `check_hook` 0x89c9fb50d1f03192230ffb1c279bb6e7d3fe6acc. Steps: https://t0ll.xyz/hooks/hookr#agents
 
 ## Free limit
 

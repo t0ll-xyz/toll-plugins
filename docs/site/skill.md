@@ -90,6 +90,11 @@ import { guard } from "@tollxyz/guard";
 const wallet = guard(walletClient);   // viem WalletClient or ethers Signer: BLOCK throws, WARN is logged
 ```
 
+Since 0.6.0 the guard fails closed: when Toll cannot or will not answer (unreachable, a timeout, 429, 5xx, or a request
+it refuses to read such as one over its size limit) nothing is signed and it throws `TollUnavailableError`. Catch it,
+wait and ask again. `failOpen: true` is the opt-in to go ahead unchecked; know that whoever builds the request can then
+switch the check off. With a spend policy, a spend the guard cannot read is refused too (`onUnknownSpend: "allow"` opts out).
+
 ALLOW tickets: add `ticket: true` (or `{consumer, scope}`) to the check (`check_tx`, `POST /api/tx/check`, or the guard's
 `ticket` option) and a qualifying answer carries a single-use ticket signed by Toll for that exact call (60 s, never for
 a BLOCK), which a contract built on https://github.com/t0ll-xyz/toll-allow can require. Toll's ALLOW signer:
@@ -141,6 +146,16 @@ WARN / ALLOW / WAIT, with up to 3 reasons, on the same calibrated rules as `chec
 rugged at 40% or more within 24 h, or sells that fail. On WAIT call it again after the seconds given; on BLOCK do not
 buy without your owner's say. ALLOW is not a promise.
 
+When the fresh read is not whole yet and Toll holds a whole check of the coin read in the last 30 minutes,
+`pre_buy_check` and `check_coin` answer from that last whole check, and the answer says how old it is ("Made from our last whole read,
+6 min ago"; `read_age_s` in the structured fields) instead of WAIT or still reading. A fresh read that already blocks is
+never replaced by an older one.
+
+The watch line: on a careful or against `check_coin` answer and on a WARN or BLOCK `pre_buy_check`, the Telegram watch
+link comes near the top ("This coin can change: get told when it does. ..."); on a clear or ALLOW answer it is the last
+line before the link ("Watch it: ..."). Pass it on to your owner. After a WARN or WAIT, `pre_buy_check` also names your
+own next call: `Next: watch_coin {"address": "0x...", "url": "<your https webhook>"}` (see below; needs a Toll key).
+
 For a list (a screener, a watchlist), call `check_coins` with `addresses` (up to 20): each coin's verdict word from the
 checks Toll already holds, free; a coin not read yet says so, and `check_coin` or `pre_buy_check` reads it.
 
@@ -176,6 +191,10 @@ registered agentWallet, and whether that wallet has sent a transaction, with the
 
 If the x402 `payTo` is not the registered agentWallet, stop and tell your owner. Facts, never a verdict.
 
+To find a paid API to buy, call `find_paid_api` (query, limit): x402 resources on Robinhood Chain with the price, the
+`payTo`, whether that payTo is the seller's registered agent wallet (verified) and payments settled through Toll,
+verified first. The same list: `GET https://x402.t0ll.xyz/discovery/resources` and `/discovery/search?query=`.
+
 ## 5. Other reads
 
 - `check_hook` (address): one Uniswap v4 hook on Robinhood Chain (a pool's hook named in `check_coin`, or one you are
@@ -184,6 +203,12 @@ If the x402 `payTo` is not the registered agentWallet, stop and tell your owner.
   whether a test sell through it reverted (sells fail). A $TOLL holder's Toll key adds the measured cut and how its
   latest coins ended; paid with those parts at https://t0ll.xyz/api/x402/hook/{hook} (0.005 USDG). If sells fail or
   its code can be changed, tell your owner before you trade through it.
+- Building on Hookr (hookr.fun): build the call with Hookr's MCP (https://hookr.fun/api/mcp: `hookr_build_swap`,
+  `hookr_build_launch`, `hookr_build_claim`, `hookr_build_agent_link`, `hookr_build_fill`, the liquidity builders),
+  then send it to `check_tx` with your `from` before you sign. Toll reads HookrRouter swaps, HookrLauncher launches, a
+  launch's own withdrawal and fee collection, a pool core's claim, the Agent gate link and the order book fill; an
+  unknown hook, rules contract or add-on, or a payout to anyone but you, is a warning. Hookr's root hook:
+  `check_hook` 0x89c9fb50d1f03192230ffb1c279bb6e7d3fe6acc. Steps: https://t0ll.xyz/hooks/hookr#agents
 - `fresh_launches` (limit 1 to 20): the newest coins on Robinhood Chain.
 - `chain_pulse`: launches, graduations and trades on Robinhood Chain right now.
 - `wallet_privacy` (wallet): what anyone can learn about a wallet. The grade measures exposure, not whether the wallet
@@ -228,6 +253,10 @@ https://t0ll.xyz/api/x402/markets/institutions/{id}, https://t0ll.xyz/api/x402/m
 https://t0ll.xyz/api/x402/markets/macro, https://t0ll.xyz/api/x402/markets/stocks (the list) and
 https://t0ll.xyz/api/x402/pulse (the chain pulse).
 
+One sign-in: your owner signs in with a wallet on t0ll.xyz once (Sign-In with Ethereum); it lasts 7 days and holds on
+every t0ll.xyz host (t0ll.xyz and x402.t0ll.xyz), and linking Telegram uses it with no second signature. It proves a
+wallet and moves nothing.
+
 Holding $TOLL lifts the daily limits: new coins a day Free 10 / 1M $TOLL 100 / 5M 500 / 20M 2,000, and Markets calls
 50 / 1,000 / 5,000 / 20,000. Your owner makes a Toll key at https://t0ll.xyz/toll#keys; send it as `x-toll-pass` or
 `Authorization: Bearer` (for example as a header on the remote MCP server). Past the tier, x402 per call: 0.005 USDG a
@@ -254,9 +283,21 @@ Information only, not financial advice.
 ## x402 facilitator (settle USDG on Robinhood Chain)
 
 Toll runs a keyless x402 facilitator: `https://t0ll.xyz/api/facilitator` (also `https://x402.t0ll.xyz`).
-- `POST /verify` and `POST /settle` take the x402 body (v1 or v2, scheme exact, USDG on eip155:4663) and answer the x402 shapes.
+- Fee: none. The seller receives the full amount the payer signed, and the facilitator pays the gas.
+- `POST /verify` and `POST /settle` take the x402 body (v1 or v2, scheme exact; v2 scheme upto through Permit2: the payer signs a maximum, the seller settles what it used; USDG on eip155:4663) and answer the x402 shapes.
+- Every settlement transaction carries an ERC-8021 builder code (`toll`, plus the seller's app code when its requirements send one).
+- Escrow with refunds (x402 v2 scheme `auth-capture`, live since 2026-11-10): the payer's USDG is held in the v1.0 escrow `0xBdEA0D1bcC5966192B070Fdf62aB4EF5b4420cff` (v1.1 has no code on chain 4663 and is refused); the seller captures what it delivered, refunds, or voids the rest, each step a `POST /settle` with `payload.type` signed by the seller's receiverAuthorizer; refunds are funded by the seller; the payer can reclaim after the capture deadline. `GET /api/facilitator/hold?id=<paymentInfoHash>` reads a hold; holds and refunds are listed on https://x402.t0ll.xyz/#escrow.
+- Batch settlement (x402 v2 scheme `batch-settlement`, facilitator-managed vouchers, live since 2026-11-10): the payer deposits once into a channel on x402BatchSettlement `0x4020074e9dF2ce1deE5A9C1b5c3f541D02a10003`, then signs a cumulative voucher per request with no transaction and no gas; claims are batched on chain, the rest is refundable. For sub-cent and high-frequency agent payments.
+- Pay in more tokens (x402 v2 scheme `exact` through Permit2, `extra.assetTransferMethod` "permit2", live since 2026-11-11): the payer signs one Permit2 transfer for the exact price to the x402ExactPermit2Proxy, and the money can only go to payTo. Only the tokens on this facilitator's list are settled, each read on chain first and listed with its decimals and limits under the exact kind in `GET /supported`; any other token is refused (`unsupported_asset`). A payer that has not approved Permit2 for the token gets `permit2_allowance_required`: approve it once, then pay again.
+- Safety screen (extension `toll-screen`): every payment is also read by check_tx; the seller gets `extensions.screen = { outcome: allow | warn | block | not-read, codes }` in the verify and settle answers. Report-only: a slow read never blocks a payment.
+- Discovery: `GET https://x402.t0ll.xyz/discovery/resources` and `GET /discovery/search?query=` list every x402 seller on Robinhood Chain, verified payees first (page: https://t0ll.xyz/x402/discover; MCP tool `find_paid_api`). A listing belongs to its payTo: a payment from another wallet that names a seller's URL is a listing of its own, and it never carries the seller's verified mark, name or settled count.
+- Verify your agent (sellers): a seller is verified when its x402 payTo is its ERC-8004 agentWallet. An agent minted by a platform and then sent to its user has none set, because the registry clears it on every transfer. `GET https://t0ll.xyz/api/x402/verify-agent?id=<agent id>` says verified / no agent wallet set / payTo differs / no payTo on record, with the owner, the agent wallet and the payTo; https://t0ll.xyz/x402/verify (also https://x402.t0ll.xyz/verify-agent) sets it: the payTo wallet signs EIP-712 `AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)` (domain `ERC8004IdentityRegistry` v1, chainId 4663, the registry), deadline at most 5 minutes ahead, and the owner sends `setAgentWallet(agentId, newWallet, deadline, signature)` to `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`, checked by check_tx first.
 - Every payment's payTo is checked against the seller's registered ERC-8004 identity (ERC-8478); the outcome is in `extensions.erc8478`. A mismatch (or an invalid delegation) is refused with error "payee_mismatch" (enforced since 2026-11-08); an identity that could not be read never refuses a payment.
 - Every settlement carries a signed receipt in `extensions.receipt` (EIP-712 "Toll x402 Receipt"); `GET /receipt/<id or tx>` returns it.
-- `GET /supported` lists what it settles. Limits: 0.001 to 100 USDG a payment, EOA payers only. Page: https://t0ll.xyz/x402
+- Paid before? `GET /paid?payer=<0x>&payTo=<0x>` (optional `resource=<url>`, `since=<unix s>`) answers `{ paid, count, last: { tx, ts, amount, receiptId, via } }` from this facilitator's own settlements, escrow captures and batch charges, so a seller using sign-in-with-x can let a returning wallet in without charging it again. Only facts already on chain.
+- Spending budgets per payer (live since 2026-11-11): a payer wallet signs its own limits (EIP-712 domain `Toll Facilitator Budget` v1, chainId 4663, no verifyingContract; `Budget(address payer,uint256 perPayment,uint256 perDay,uint256 perPayTo,PayToCap[] payToCaps,address[] allowedPayTos,uint64 validUntil,uint256 nonce)`, `PayToCap(address payTo,uint256 perDay)`, USDG base units, UTC days) with `POST /budget` `{ budget, signature }` (a higher nonce replaces; `{ revoke: { payer, nonce }, signature }` revokes) and reads it with `GET /budget?payer=<0x>` (`spentToday`, `remainingToday`); verify and settle then refuse payments past it on every scheme (`budget_exceeded_per_payment`, `budget_exceeded_per_day`, `budget_exceeded_per_payto`, `budget_payto_not_allowed`, `budget_expired`, `budget_revoked`, `budget_asset_not_usdg`).
+- x402 offer-receipt extension: when a payment carries the seller's signed offers (`extensions["offer-receipt"]`), the settle answer adds `extensions["toll-offer-receipt"]`: the matching offer's signer, whether it is the payTo, and whether amount, resource and validUntil match (facts, never a refusal), plus the spec's receipt payload for the seller to sign with its own key (`GET /receipt/<id or tx>` has it as `offerReceipt`). The facilitator does not sign the spec's receipt: it attests delivery, which only the seller can.
+- `GET /supported` lists what it settles. Limits (the defaults): 0.001 to 100 USDG a payment, EOA payers only; at most 200 settlements a day and 60 an hour for one payTo, 20 an hour for a payTo that is not verified (its payTo is not its ERC-8004 agent wallet); 20 an hour and 100 settlements a day for one payer; and a gas budget for the UTC day, because we pay the gas: past it a new settle answers `gas_day_budget_exhausted` until 00:00 UTC, and payTos that are not verified share half of it, so they cannot use up a verified seller's share. A capture, refund or void of an existing hold is never refused by these limits (only a new payment or a new hold is). Page: https://t0ll.xyz/x402
 - Selling over x402? `npm i @tollxyz/x402-seller`: `paywall({ payTo, price: "0.05", agentId }, handler)` puts a USDG price on any Next.js, Hono, Bun or Workers handler, settled here, charged only for a good answer. A ready Next.js API to start from: `npx degit t0ll-xyz/toll-plugins/templates/x402-starter my-api`.
-- The x402 Register (https://x402.t0ll.xyz/#register) lists every Robinhood Chain agent selling over x402 and whether its payTo is its registered agent wallet.
+- The x402 Register (https://x402.t0ll.xyz/#register) lists every Robinhood Chain agent selling over x402 and whether its payTo is its registered agent wallet, counted as agents and as sellers (one operator behind many agents is one seller).
+- x402 on Robinhood Chain, measured: x402 payments settled directly on USDG or through the two x402 proxies over the last 30 days, by seller and by facilitator, with the block range, refreshed weekly (page: https://t0ll.xyz/x402/market; free JSON: `GET https://t0ll.xyz/api/x402/market`).
