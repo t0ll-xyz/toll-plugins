@@ -1,5 +1,5 @@
 /**
- * guardHookr (the release after 0.6.1): Toll's check on every unsigned call a Hookr builder returns, before the wallet sees it.
+ * guardHookr (0.7.0): Toll's check on every unsigned call a Hookr builder returns, before the wallet sees it.
  *
  * Hookr's SDK (npm hookr-sdk) and its MCP (hookr_build_*) hand back unsigned calls: `{ to, data, value? }`, one or
  * several. The wallet then signs them. This wraps the builders so each call goes through Toll's check_tx first, under
