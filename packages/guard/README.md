@@ -116,6 +116,28 @@ unknown hook, rules contract or add-on is a warning, and a payout to anyone but 
 Any other function of those contracts is `calldata-undecoded`: WARN, never ALLOW. Nothing to configure: the checks are
 on Toll's server. Steps: <https://t0ll.xyz/hooks/hookr#agents>
 
+### `guardHookr(sdk, opts?)`: the check on every call Hookr's SDK builds
+
+Without a guarded wallet, wrap the builders instead. Every `build*` function of
+[hookr-sdk](https://www.npmjs.com/package/hookr-sdk) then sends its unsigned call to Toll before returning it:
+
+```ts
+import * as hookr from "hookr-sdk";
+import { guardHookr } from "@tollxyz/guard";
+
+const checked = guardHookr(hookr, { from: account });
+const swapCall = await checked.buildSwap(manifest, swap);   // the one change: await
+await wallet.sendTransaction({ account, ...swapCall });
+```
+
+- BLOCK throws `TollBlockedError` and the call is never returned. WARN, Toll unreachable and the other policies are
+  the same options as `guard()`.
+- `buildQuote` is not wrapped: its call is read, never signed. Reads, ABIs and constants pass through untouched.
+- A builder that returns several calls (approvals) has each checked in order; the first refusal stops the rest.
+- Calls from Hookr's MCP (`hookr_build_*` answers `{ calls: [...] }`): `await checkHookrCalls(result, { from })`.
+- Toll reads Robinhood Chain only. For a call built for another chain pass `chainId`: it is reported as not checked,
+  and `onUnsupported: "block"` or `strict` refuses it.
+
 ## API
 
 ### `guard(wallet, opts?)`, `guardViem(client, opts?)`, `guardSmartAccount(bundler, opts?)`, `guardEthers(signer, opts?)`

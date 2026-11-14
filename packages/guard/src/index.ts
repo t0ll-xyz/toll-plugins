@@ -35,6 +35,8 @@ export type { GuardOptions, GuardReport, GuardKind, WarnPolicy, BlockPolicy, Spe
 export { guard, guardViem, guardEthers, guardSmartAccount, isViemClient, isBundlerClient, primaryTypeOf } from "./wallets.js";
 export type { ViemGuardOptions } from "./wallets.js";
 export { guardX402Fetch, readPaymentRequired, readPaymentForms, paymentFormsDiffer, paymentIdOf } from "./x402.js";
+export { guardHookr, checkHookrCalls, hookrCallsOf, isHookrCall } from "./hookr.js";
+export type { HookrCall, HookrGuardOptions, GuardedHookr } from "./hookr.js";
 export type { X402GuardOptions } from "./x402.js";
 export {
   read8470,
