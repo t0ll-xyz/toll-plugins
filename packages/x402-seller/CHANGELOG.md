@@ -1,6 +1,10 @@
 # Changelog: @tollxyz/x402-seller
 
-## 0.3.1 (unreleased)
+## 0.3.2 (2026-11-15)
+
+- A refused payment is answered in the version it was sent in. A v2 payment the facilitator refuses (at verify or at settle, `self_payment` included) now gets a v2 body: the same v2 PaymentRequired as the `PAYMENT-REQUIRED` header, with `error` and the facilitator's `message`; a refusal at settle also carries the failed SettleResponse in `PAYMENT-RESPONSE` (`success: false`, `errorReason`, `errorMessage`), where a v2 client reads a settlement's outcome. Before, every refusal had a v1 body, so a v2 client saw a bare 402. v1 payments and the unpaid 402 are unchanged. Found by Agent_Minimum (#7622) in its field test. `refused402()` is exported.
+
+## 0.3.1 (2026-11-11)
 
 - A settle that gave no answer is no longer answered "Nothing was charged". `/settle` now waits 60 s (`settleTimeoutMs`; `/verify` keeps 15 s), is asked once more with the same payment when it times out, answers 5xx or says `settlement_pending`, and if there is still no answer the buyer gets 503 `settlement_unknown` / `settlement_pending` ("the payment may still settle; send the same payment again"), never a 402 asking for a second payment. The handler had already run by then, so the old message could be false.
 

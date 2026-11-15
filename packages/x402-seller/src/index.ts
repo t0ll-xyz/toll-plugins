@@ -456,10 +456,56 @@ const unb64 = (s: string): unknown => {
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...NO_STORE, ...headers } });
 
-/** the 402 a request without (or with a refused) payment gets */
+/** the 402 a request without (or with a refused v1) payment gets: the v1 PaymentRequired in the body, v2 in the header */
 export function need402(o: SellerOptions, resource: string, error = "payment_required", method = "GET"): Response {
   return json({ x402Version: 1, error, accepts: [requirementV1(o, resource)] }, 402,
     { ...EXPOSE, "PAYMENT-REQUIRED": b64(paymentRequired(o, resource, error, method)) });
+}
+
+/** a facilitator's free-text message, made safe to echo: no control characters, at most 200 characters */
+const message = (o: Record<string, unknown>, k: string): string | undefined => {
+  const v = o[k];
+  if (typeof v !== "string") return undefined;
+  const t = v.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 200);
+  return t || undefined;
+};
+
+/**
+ * A REFUSED PAYMENT, ANSWERED IN THE VERSION IT WAS SENT IN (0.3.2; found by Agent_Minimum #7622's field test, where a
+ * v2 client saw a bare 402: the reason sat in a v1 body). v1 keeps need402. v2, as the x402 v2 HTTP transport answers:
+ * the body and the PAYMENT-REQUIRED header are the same v2 PaymentRequired with `error` set (plus `message` when the
+ * facilitator gave one); a refusal at settle also carries the failed SettleResponse in PAYMENT-RESPONSE
+ * (`success: false`, `errorReason`), which is where a v2 client reads a settlement's outcome.
+ */
+export function refused402(o: SellerOptions, resource: string, version: 1 | 2, error: string, method = "GET",
+  extra: { message?: string; settle?: Record<string, unknown> } = {}): Response {
+  if (version !== 2) return need402(o, resource, error, method);
+  const pr = paymentRequired(o, resource, error, method);
+  const headers: Record<string, string> = { ...EXPOSE, "PAYMENT-REQUIRED": b64(pr) };
+  if (extra.settle) {
+    const s = extra.settle;
+    headers["PAYMENT-RESPONSE"] = b64({
+      success: false,
+      errorReason: error,
+      ...(extra.message ? { errorMessage: extra.message } : {}),
+      transaction: typeof s.transaction === "string" ? s.transaction : "",
+      network: typeof s.network === "string" ? s.network : USDG.network,
+      ...(typeof s.payer === "string" ? { payer: s.payer } : {}),
+    });
+  }
+  return json({ ...pr, ...(extra.message ? { message: extra.message } : {}) }, 402, headers);
+}
+
+/** the x402 version a payment header claims (2 or 1), or 1 when it cannot be read: a refused header is answered in it */
+function headerVersion(req: Request): 1 | 2 {
+  const raw = req.headers.get("payment-signature") ?? req.headers.get("x-payment");
+  if (raw == null || raw.length > MAX_HEADER) return 1;
+  try {
+    const p = unb64(raw) as Record<string, unknown>;
+    return p && typeof p === "object" && p.x402Version === 2 ? 2 : 1;
+  } catch {
+    return req.headers.get("payment-signature") != null ? 2 : 1;
+  }
 }
 
 export type Payment = {
@@ -575,12 +621,12 @@ export function paywall(o: SellerOptions, handler: (req: Request, payment: Payme
     const method = req.method;
     const read = readPayment(req, o, resource);
     if (read === null) return need402(o, resource, undefined, method);
-    if (typeof read === "string") return need402(o, resource, read, method);
+    if (typeof read === "string") return refused402(o, resource, headerVersion(req), read, method);
     const pay = withDeclared(read, o, resource, method);
 
     let v: Record<string, unknown>;
     try { v = await call(o, "verify", pay); } catch { return unavailable(); }
-    if (v.isValid !== true) return need402(o, resource, reason(v, "invalidReason", "invalid_payment"), method);
+    if (v.isValid !== true) return refused402(o, resource, pay.version, reason(v, "invalidReason", "invalid_payment"), method, { message: message(v, "invalidMessage") });
 
     const vScreen = screenOf(v);
     const res = await handler(req, vScreen ? { ...pay, screen: vScreen } : pay);
@@ -598,7 +644,7 @@ export function paywall(o: SellerOptions, handler: (req: Request, payment: Payme
     }
     if (s === null) return settleUnknown(null);
     if (isPending(s)) return settleUnknown(s);
-    if (s.success !== true) return need402(o, resource, reason(s, "errorReason", "settlement_failed"), method);
+    if (s.success !== true) return refused402(o, resource, pay.version, reason(s, "errorReason", "settlement_failed"), method, { message: message(s, "errorMessage"), settle: s });
 
     const ext = (s.extensions && typeof s.extensions === "object" ? s.extensions : {}) as Record<string, unknown>;
     const sScreen = screenOf(s);
