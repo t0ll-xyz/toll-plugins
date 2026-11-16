@@ -1,5 +1,7 @@
 export {
   checkTx,
+  checkBudgetMs,
+  budgetOf,
   bodyOf,
   chainIdOf,
   paidUrlOf,
@@ -9,6 +11,9 @@ export {
   DEFAULT_BASE_URL,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_RETRY_WAIT_MS,
+  CHECK_BUDGET_MIN_MS,
+  CHECK_BUDGET_MAX_MS,
+  DEFAULT_ROUND_TRIP_MS,
   PAID_TX_PATH,
   PRESIGN_DOCS,
   TX_CHAIN_ID,

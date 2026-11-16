@@ -1,5 +1,8 @@
 # @tollxyz/guard
 
+> **New in 0.7.1: a time budget** (`budgetMs` option, `checkBudgetMs`): for an agent with a timeout, Toll answers
+> inside it. Unset, nothing changes. See [A time budget](#a-time-budget-071).
+
 > **New in 0.4.1: ALLOW tickets** (`ticket` option, `appendTicketSuffix`): a single-use, signed ticket for one exact
 > call, for contracts that require one. See [ALLOW tickets](#allow-tickets).
 
@@ -219,7 +222,8 @@ is at most `maxRetryWaitMs` (default 10 s); a coin still not read stays WARN, ne
 | `onReport` | none | `(report) => void`: every decision, with `assessment`, `decision`, `basis`, `paidUrl` |
 | `logger` | `console.warn` | where WARN and unavailable lines go; `false` = silent |
 | `timeoutMs` | `15000` | one request to Toll |
-| `retry`, `maxRetryWaitMs` | `true`, `10000` | the one retry after Retry-After |
+| `budgetMs` | none | 0.7.1: the time budget sent to Toll (300 to 30000 ms): your timeout minus your round trip, `checkBudgetMs(timeoutMs)`. See [A time budget](#a-time-budget-071) |
+| `retry`, `maxRetryWaitMs` | `true` (`false` with `budgetMs`), `10000` | the one retry after Retry-After |
 | `baseUrl`, `fetch` | `https://t0ll.xyz`, global fetch | |
 | `spend` | none | 0.4.0: caps, allowlists, approval ([below](#040-spend-caps-allowlists-approval-preview)); unset = 0.3.x behaviour |
 | `store` | in-process `MemorySpendStore` | where spend counters and paid x402 ids live |
@@ -478,6 +482,36 @@ with `decision: "allowed"`, `basis: "unavailable"`. `strict: true` also blocks e
 
 Two requests fail closed whatever `onUnavailable` and `failOpen` say: `eth_sign` (it signs any 32 bytes, a transaction hash
 included, so an unchecked one could be anything) and an EIP-7702 authorization under `onAuthorization: "check"`.
+
+## A time budget (0.7.1)
+
+A trading agent has a deadline. Pass `budgetMs` and Toll's check answers inside it (it is sent to
+`POST https://t0ll.xyz/api/tx/check` as `budgetMs`): your timeout minus your own round trip to Toll.
+
+```ts
+import { guard, guardX402Fetch, checkBudgetMs } from "@tollxyz/guard";
+
+const timeoutMs = 1500;
+const wallet = guard(walletClient, { strict: true, timeoutMs, budgetMs: checkBudgetMs(timeoutMs) });      // 1100: 400 ms left for the round trip
+const pay = guardX402Fetch(fetch, { strict: true, timeoutMs: 5000, budgetMs: checkBudgetMs(5000, 1000) }); // 4000
+```
+
+- `budgetMs` is a whole number of ms from 300 to 30000. A number outside is moved to the nearest end; anything that is
+  not a number is not sent. `checkBudgetMs(timeoutMs, roundTripMs = 400)` does the subtraction and keeps it in range.
+- A coin Toll could not read inside the budget comes back as WARN `coin-not-read`, never as ALLOW. The default
+  `block-high` and `strict` both refuse it; the read goes on at Toll, so the next ask is fast.
+- With a budget the guard does not wait for Retry-After and ask a second time (the wait would run past your
+  deadline). `retry: true` brings the second ask back.
+- No answer inside `timeoutMs` is `TollUnavailableError` (`reason: "timeout"`): nothing is signed, as before.
+
+What each outcome means under `strict: true`, in the words to show a person: ALLOW goes ahead. BLOCK is not signed.
+WARN is not signed either (strict stops on every WARN; without strict only a high or critical warning, or
+`coin-not-read`, stops it), and its reasons are on the error (`e.assessment.warnings`). A check Toll could not give is
+"not checked" (`TollUnavailableError`), never "clear".
+
+Toll's own agent templates ([toll-agent-templates](https://github.com/t0ll-xyz/toll-agent-templates)) run the guard
+this way by default in front of everything they sign or pay, with one switch in the environment to turn it off:
+`TOLL_GUARD=off`. The guard itself reads no environment variable: the switch lives in the app that wraps the wallet.
 
 ## Free limit and the paid route
 

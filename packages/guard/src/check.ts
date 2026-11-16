@@ -14,6 +14,11 @@ export const PRESIGN_DOCS = "https://t0ll.xyz/agents/x402#presign";
 
 export const DEFAULT_TIMEOUT_MS = 15_000;
 export const DEFAULT_MAX_RETRY_WAIT_MS = 10_000;
+/** the time budget Toll's check takes (`budgetMs`): 300 to 30000 ms */
+export const CHECK_BUDGET_MIN_MS = 300;
+export const CHECK_BUDGET_MAX_MS = 30_000;
+/** what `checkBudgetMs` leaves for the way to Toll and back when no round trip is given */
+export const DEFAULT_ROUND_TRIP_MS = 400;
 
 /* ------------------------------------------------------------------ the answer: ERC-8265 RiskAssessment */
 
@@ -122,7 +127,14 @@ export interface CheckOptions {
   fetch?: FetchLike;
   /** one HTTP request, default 15000 ms */
   timeoutMs?: number;
-  /** ask once more after Retry-After when a coin is still being read (default true) */
+  /**
+   * 0.7.1: the time budget sent to Toll as `budgetMs`, for a caller with a timeout: your timeout minus your own round
+   * trip (`checkBudgetMs(timeoutMs)`). Toll answers within it: a coin not read in time is a WARN "coin-not-read"
+   * (never an ALLOW) and the read goes on, so the next call is fast. A whole number of ms from 300 to 30000; a number
+   * outside is moved to the nearest end, anything that is not a number is not sent. Unset = no budget, as before.
+   */
+  budgetMs?: number;
+  /** ask once more after Retry-After when a coin is still being read (default true; false when `budgetMs` is set, since the wait would run past the budget) */
   retry?: boolean;
   /** the longest Retry-After we wait for that one retry (default 10000 ms); longer = no retry, the WARN stands */
   maxRetryWaitMs?: number;
@@ -246,6 +258,17 @@ export function isAssessment(x: unknown): x is RiskAssessment {
   return (a.action === "ALLOW" || a.action === "WARN" || a.action === "BLOCK") && Array.isArray(a.warnings);
 }
 
+/** the `budgetMs` Toll reads: a whole number from 300 to 30000; undefined when the value is not a finite number */
+export function budgetOf(v: unknown): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+  return Math.min(CHECK_BUDGET_MAX_MS, Math.max(CHECK_BUDGET_MIN_MS, Math.round(v)));
+}
+
+/** the `budgetMs` for a caller's timeout: the timeout minus its own round trip to Toll (default 400 ms), within 300 to 30000 */
+export function checkBudgetMs(timeoutMs: number, roundTripMs: number = DEFAULT_ROUND_TRIP_MS): number {
+  return budgetOf(timeoutMs - roundTripMs) ?? CHECK_BUDGET_MIN_MS;
+}
+
 /* ------------------------------------------------------------------ the call */
 
 async function once(url: string, body: string, o: CheckOptions, f: FetchLike, paid: string): Promise<{ a: RiskAssessment; retryS: number | null }> {
@@ -299,9 +322,11 @@ export async function checkTx(input: CheckInput, opts: CheckOptions = {}): Promi
   const url = `${base}/api/tx/check`;
   const paid = `${base}${PAID_TX_PATH}`;
   const ask = ticketAskOf(opts.ticket);
-  const body = toJson(ask ? { ...bodyOf(input), ticket: ask } : bodyOf(input));
+  const budgetMs = budgetOf(opts.budgetMs);
+  const body = toJson({ ...bodyOf(input), ...(ask ? { ticket: ask } : {}), ...(budgetMs !== undefined ? { budgetMs } : {}) });
   const first = await once(url, body, opts, f, paid);
-  if (first.retryS === null || opts.retry === false) return first.a;
+  // with a budget the caller has a deadline: the wait for a second ask would run past it, so it is asked only on retry: true
+  if (first.retryS === null || opts.retry === false || (budgetMs !== undefined && opts.retry !== true)) return first.a;
   const waitMs = Math.max(1, first.retryS) * 1000;
   if (waitMs > (opts.maxRetryWaitMs ?? DEFAULT_MAX_RETRY_WAIT_MS)) return first.a;
   await (opts.sleep ?? realSleep)(waitMs);
