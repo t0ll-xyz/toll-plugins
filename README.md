@@ -146,6 +146,10 @@ never pay without the owner's consent.
 Example: [`examples/guarded-agent`](examples/guarded-agent), an agent that will not buy until Toll's check passes
 (its `buy()` is a stub that never sends a transaction).
 
+**Toll's guard is on by default in everything here that signs or pays.** Today no example and no template does (each README
+says so), and `npm test` fails when one starts to without [`@tollxyz/guard`](packages/guard) on the strict preset with a time
+budget. One switch turns it off, the same as in [toll-agent-templates](https://github.com/t0ll-xyz/toll-agent-templates): `TOLL_GUARD=off`.
+
 The npm packages are ESM only. Free: 10 new coins a day per caller (coins already read stay free) and 50 Markets
 calls (Robinhood Stock Tokens, fundamentals, insider trades, institutions, guidance, macro). Holding $TOLL lifts both: 1M $TOLL 100 coins / 1,000 Markets calls, 5M 500 / 5,000,
 20M 2,000 / 20,000, with a Toll key from <https://t0ll.xyz/toll#keys> sent as `x-toll-pass` (the `tollKey` option in

@@ -52,4 +52,8 @@ Edit `app/api/forecast/route.ts`: replace `forecast()` with what you sell. Add m
 
    It reads *payTo verified*, and *payTo verified · settles via Toll* once a payment settles through Toll.
 
+**Toll's guard:** this template never signs or pays (it is a seller: the buyer signs and the facilitator settles), so there
+is nothing for the guard to check. If your handler ever pays another API or signs a transaction, put [`@tollxyz/guard`](https://www.npmjs.com/package/@tollxyz/guard) in front of it (`strict: true` and a `budgetMs`): on by default, off only with
+`TOLL_GUARD=off`. `npm test` at the repo root fails on a signing or paying call that skips it.
+
 Built on [`@tollxyz/x402-seller`](https://www.npmjs.com/package/@tollxyz/x402-seller). MIT.

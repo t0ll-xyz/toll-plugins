@@ -26,4 +26,6 @@ Change the rule to fit your own risk. The tally is parsed from Toll's text, with
 
 10 new coins a day per caller are free (coins already read stay free). Past that, Toll's answer ends with the x402 URL for that coin (0.005 USDG on Robinhood Chain), or hold 1M $TOLL. The script prints that URL; paying it from code is in the [`@tollxyz/sdk`](../../packages/sdk-js) README (`pay()`).
 
+**Toll's guard:** this example never signs or pays (`buy()` is a stub that prints), so there is nothing for the guard to check. When you replace `buy()` with a real swap, put [`@tollxyz/guard`](../../packages/guard) in front of it (`strict: true` and a `budgetMs`): on by default, off only with `TOLL_GUARD=off`. `npm test` at the repo root fails on a signing or paying call that skips it.
+
 Links: <https://t0ll.xyz/agents/plugins>, <https://t0ll.xyz/llms.txt>. MIT.
