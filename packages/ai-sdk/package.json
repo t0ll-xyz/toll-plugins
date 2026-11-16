@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/ai-sdk",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Vercel AI SDK tools: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",
@@ -50,7 +50,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@tollxyz/sdk": "^0.7.1"
+    "@tollxyz/sdk": "^0.7.2"
   },
   "peerDependencies": {
     "ai": ">=6 <8",
@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "ai": "^7.0.154",
+    "ai": "^7.0.173",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "zod": "^3.25.76"

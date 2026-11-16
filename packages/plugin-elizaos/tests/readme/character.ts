@@ -3,6 +3,6 @@ import type { Character } from "@elizaos/core";
 
 export const character: Character = {
   name: "Trader",
-  bio: "Checks who is behind a coin before it trades.",
+  bio: ["Checks who is behind a coin before it trades."],
   plugins: ["@tollxyz/plugin-elizaos"],
 };

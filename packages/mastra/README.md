@@ -37,6 +37,20 @@ Coin names and text quoted in an answer were written by whoever made the coin: t
 
 `check_tx` takes a transaction (`to`, `data`, `value`, `from`), an EIP-712 signature request (`typedData`) or an x402 payment (`x402`: the 402's PaymentRequired or one accepts entry; `agentId`, `registry`, `strict` optional) and answers ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment. Pass on every warning; on BLOCK do not sign without the owner's say. `presign_risk_report` takes a PresignRequest (`version: "erc-presign/1"`, `subject`, optional `context` and `kinds`; ERC draft, ethereum/ERCs PR #2134) and returns typed facts about the unsigned request, EIP-712 signed by Toll, with no verdict.
 
+## Time budget for bots: budgetMs (0.6.0)
+
+A caller with a timeout passes its budget once, and it goes with every `pre_buy_check` and `check_tx`:
+
+```ts
+tollTools({ budgetMs: 1100 })   // your tool timeout 1.5 s minus ~400 ms round trip
+```
+
+Toll answers within it. A coin not read in time is `Decision: WAIT` (pre_buy_check) or WARN `coin-not-read` (check_tx)
+with the seconds to ask again, never ALLOW, and the read goes on so the next call is fast. With a budget, `check_tx` is
+sent to `POST https://t0ll.xyz/api/tx/check` (the MCP tool takes no budget) and answers in the same text. 300 to 30000 ms
+for check_tx, 300 to 25000 for pre_buy_check; a number outside is moved to the nearest end. Unset = no budget, as before.
+Needs `@tollxyz/sdk` 0.7.2.
+
 ## Wallet approvals, watches and ALLOW tickets (0.4.0)
 
 `wallet_approvals` takes a `wallet` and lists its live token approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2): the spender, the amount (unlimited flagged), a risk (high / medium / low) and the revoke transaction with check_tx's answer on it. `watch_coin` and `watch_wallet` take an `address` and your https webhook `url`: Toll POSTs a signed JSON event when the coin's verdict word changes or a new finding against appears, or when the wallet gives a new approval, signs an EIP-7702 delegation or receives a token whose check is against. The first answer carries the `secret` that signs every event. `my_watches` lists your watches; `unwatch_coin` and `unwatch_wallet` remove one by id. The watch tools need a Toll key (`tollKey`). `check_tx` also takes `ticket: true` (or `{ consumer, scope }`) for a signed single-use ALLOW ticket a contract can require; it comes back in the RiskAssessment's `x-toll.ticket`, and a BLOCK is never signed.

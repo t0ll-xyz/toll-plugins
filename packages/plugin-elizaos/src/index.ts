@@ -26,6 +26,7 @@ import {
 export { extractAddress, extractAddresses, extractAgentId, extractJson, extractStockId, extractWallet, formatResult } from "./format.js";
 export { LIVE_DESCRIPTIONS } from "./live.js";
 export { BLOCKLIST_URL, blocklistText } from "./blocklist.js";
+export { withTollPreBuy, type PreBuyGuardOptions } from "./guard.js";
 export {
   FACTS_NOTE,
   MACRO_NOTE,
@@ -58,12 +59,27 @@ export interface TollPluginOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
+  /**
+   * 0.6.0: your time budget in ms for TOLL_PRE_BUY_CHECK and TOLL_CHECK_TX (your timeout minus your round trip to Toll,
+   * e.g. 1100 for 1.5 s). Not read in time = WAIT / WARN coin-not-read, never ALLOW. Default: the agent's TOLL_BUDGET_MS
+   * setting, when set; else no budget.
+   */
+  budgetMs?: number;
 }
 
-/** What an action calls Toll with: the coin client and the Markets options, for this runtime's Toll key. */
+/** What an action calls Toll with: the coin client, the Markets options and the time budget, for this runtime. */
 interface TollContext {
   client: Toll;
   markets: MarketsOptions;
+  budget: { budgetMs?: number };
+}
+
+/** the budget from the option, else from the TOLL_BUDGET_MS setting (a whole number of ms) */
+function budgetOf(rt: IAgentRuntime | undefined, opt: number | undefined): { budgetMs?: number } {
+  if (opt !== undefined) return { budgetMs: opt };
+  const v = settingOf(rt, "TOLL_BUDGET_MS");
+  const n = v !== undefined && /^\d{3,5}$/.test(v) ? Number(v) : undefined;
+  return n === undefined ? {} : { budgetMs: n };
 }
 
 function settingOf(rt: IAgentRuntime | undefined, key: string): string | undefined {
@@ -85,7 +101,7 @@ function contextResolver(client: Toll | undefined, opts: Omit<TollPluginOptions,
       c = new Toll({ fetch: withTollKey(fetchFn, key) });
       clients.set(key ?? "", c);
     }
-    return { client: c, markets: { fetch: fetchFn, tollKey: key } };
+    return { client: c, markets: { fetch: fetchFn, tollKey: key }, budget: budgetOf(rt, opts.budgetMs) };
   };
 }
 
@@ -204,10 +220,10 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
     }),
     makeAction(resolve, {
       name: "TOLL_PRE_BUY_CHECK",
-      similes: ["PRE_BUY_CHECK", "BUY_GATE", "SHOULD_I_BUY"],
+      similes: ["TOLL_PRE_BUY", "PRE_BUY_CHECK", "BUY_GATE", "SHOULD_I_BUY"],
       description: `${LIVE_DESCRIPTIONS.pre_buy_check} Needs words like should I buy or about to buy and the token's 0x address in the message.`,
       canRun: (t) => PRE_BUY_WORDS.test(t) && extractAddress(t) !== null,
-      run: ({ client: c }, t) => c.preBuyCheck(extractAddress(t)!.address),
+      run: ({ client: c, budget }, t) => c.preBuyCheck(extractAddress(t)!.address, budget),
       example: [`should I buy ${CA}?`, "Here is Toll's one-word decision for that coin, with the reasons."],
       missing: "TOLL_PRE_BUY_CHECK runs when the message asks whether to buy and gives the token's 0x address.",
     }),
@@ -338,10 +354,10 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
         return j !== null && j.version !== "erc-presign/1"
           && ["to", "typedData", "x402", "accepts", "authorizationList", "message", "rpc", "userOp"].some((k) => k in j);
       },
-      run: ({ client: c }, t) => {
+      run: ({ client: c, budget }, t) => {
         const j = extractJson(t)!;
         // A pasted 402 body (with accepts) is the x402 payment itself.
-        return c.checkTx(("accepts" in j && !("x402" in j) ? { x402: j } : j) as Parameters<Toll["checkTx"]>[0]);
+        return c.checkTx(("accepts" in j && !("x402" in j) ? { x402: j } : j) as Parameters<Toll["checkTx"]>[0], budget);
       },
       example: [
         'check this before I sign: {"to":"0xff9e86e6b21fd688027981bee4b64c8b6b804ed3","data":"0x","value":"0","from":"0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc"}',
@@ -455,18 +471,54 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
   ];
 }
 
-/** Adds Toll's note to the context only when the message holds a token address; otherwise nothing. */
-export function createTollProvider(): Provider {
+/** How long the provider waits on Toll's held verdict before it leaves it out (it runs while the agent composes). */
+export const PROVIDER_TIMEOUT_MS = 2_500;
+
+/** The verdict word of one coin in a check_coins answer, or null when the line is missing or says "not read yet". */
+export function heldVerdictOf(text: string, address: string): { word: string; line: string } | null {
+  const line = text.split(/\r?\n/).find((l) => l.toLowerCase().startsWith(`${address.toLowerCase()}:`));
+  if (!line) return null;
+  const m = /:\s*(AGAINST|CAREFUL|CLEAR|INCOMPLETE)\b/.exec(line);
+  return m ? { word: m[1], line: line.trim() } : null;
+}
+
+/**
+ * Adds Toll's note to the context only when the message holds a token address; otherwise nothing. 0.6.0: when the
+ * plugin has a client, it also adds the verdict Toll already holds for that coin (check_coins: free, reads nothing
+ * new, at most PROVIDER_TIMEOUT_MS). A coin not read yet, INCOMPLETE, or no answer in time is said so, never as clear.
+ */
+export function createTollProvider(resolve?: (rt?: IAgentRuntime) => TollContext): Provider {
   return {
     name: "TOLL_COIN_HINT",
-    description: "When a message contains a token address, tells the agent Toll can check who is behind it.",
-    get: async (_rt: IAgentRuntime, message: Memory) => {
+    description: "When a message contains a token address, adds the verdict Toll already holds for it on Robinhood Chain (or that it is not read yet).",
+    get: async (rt: IAgentRuntime, message: Memory) => {
       const a = extractAddress(textOf(message));
       if (!a) return { text: "", values: {}, data: {} };
+      const hint = `Toll can check who is behind it on Robinhood Chain (actions TOLL_CHECK_COIN, TOLL_PRE_BUY_CHECK, TOLL_LARP_CHECK). Information only, not advice.`;
+      let held: { word: string; line: string } | null = null;
+      let asked = false;
+      if (resolve) {
+        try {
+          const r = await resolve(rt).client.call("check_coins", { addresses: [a.address] }, { timeoutMs: PROVIDER_TIMEOUT_MS });
+          asked = true;
+          held = heldVerdictOf(r.text, a.address);
+        } catch {
+          /* no answer in time: the hint alone */
+        }
+      }
+      const verdict = held
+        ? held.word === "CLEAR"
+          ? `Toll's held read: ${held.line}. CLEAR means nothing against was found in what was read, not a promise.`
+          : held.word === "INCOMPLETE"
+            ? `Toll's held read: ${held.line}. INCOMPLETE means part was not read: never treat it as clear; run TOLL_CHECK_COIN.`
+            : `Toll's held read: ${held.line}.`
+        : asked
+          ? "Toll has not read this coin yet: that is not clear; run TOLL_PRE_BUY_CHECK or TOLL_CHECK_COIN before buying."
+          : "";
       return {
-        text: `A token address (${a.address}) is in the message. Toll can check who is behind it on Robinhood Chain (actions TOLL_CHECK_COIN, TOLL_LARP_CHECK). Information only, not advice.`,
-        values: { tollAddress: a.address },
-        data: { address: a.address },
+        text: `A token address (${a.address}) is in the message. ${verdict ? `${verdict} ` : ""}${hint}`,
+        values: { tollAddress: a.address, ...(held ? { tollVerdict: held.word } : asked ? { tollVerdict: "NOT_READ" } : {}) },
+        data: { address: a.address, ...(held ? { verdict: held.word, line: held.line } : asked ? { verdict: "NOT_READ" } : {}) },
       };
     },
   };
@@ -474,12 +526,13 @@ export function createTollProvider(): Provider {
 
 export function createTollPlugin(opts: TollPluginOptions = {}): Plugin {
   const { client, ...rest } = opts;
+  const resolve = contextResolver(client, rest);
   return {
     name: "toll",
     description:
       "Toll's checks on Robinhood Chain (4663): who is behind a coin, the dev's record, whether there is a real product, a wallet's privacy and its token approvals, Toll's open blocklist, ERC-8004 agents, a pre-sign check before signing (ALLOW / WARN / BLOCK) and the signed pre-sign report; and Robinhood Stock Token facts, the companies' SEC fundamentals, insider trades, 13F holders and earnings guidance, the Stock Token event feed and US macro, with their sources. Information only, not advice.",
     actions: createTollActions(client, rest),
-    providers: [createTollProvider()],
+    providers: [createTollProvider(resolve)],
   };
 }
 

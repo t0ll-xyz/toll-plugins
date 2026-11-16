@@ -1,5 +1,11 @@
 # Changelog: @tollxyz/sdk
 
+## 0.7.2 (unreleased)
+
+- `checkTx(req, { budgetMs })`: a time budget for a caller with a timeout (300 to 30000 ms; your timeout minus your own round trip). With a budget the check goes to `POST /api/tx/check` (the MCP tool takes no budget) and comes back as the same text the MCP tool answers, so `action`, `assessment` and `pending` read the same. A coin not read in time is WARN `coin-not-read` with `pending`, never ALLOW. Without a budget nothing changes.
+- `preBuyCheck(address, { budgetMs })`: sends `budget_ms` (300 to 25000 ms) to `pre_buy_check`; not read in time = `Decision: WAIT` with the seconds to ask again.
+- `call(name, args, { timeoutMs })`: an optional per-call HTTP timeout. New exports `clampBudgetMs`, `checkTxText`, `BudgetOptions`, `CHECK_TX_BUDGET_MIN_MS` / `_MAX_MS`, `PRE_BUY_BUDGET_MIN_MS` / `_MAX_MS`.
+
 ## 0.7.1 (unreleased)
 
 - `checkTx` sends every kind of request the live `check_tx` reads: `authorizationList` (a type-4 EIP-7702 transaction, or a signAuthorization alone), `message` + `origin` (personal_sign / eth_sign, Sign-In with Ethereum), `rpc` (the wallet request as sent, `{method, params}`), `userOp` + `entryPoint` (ERC-4337) and `intent`. Before, a request carrying only one of these was refused locally ("needs a transaction, typedData or x402") and `CheckTxRequest` had no field for them.

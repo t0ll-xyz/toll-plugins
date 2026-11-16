@@ -1,6 +1,6 @@
 {
   "name": "@tollxyz/plugin-elizaos",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "elizaOS plugin: before an agent buys a coin, pays an agent or signs on Robinhood Chain, check it with Toll (coins, devs, LARP, ERC-8004 agents, pre-sign check, Stock Token data). Information only.",
   "license": "MIT",
   "author": "Toll",
@@ -47,17 +47,18 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsc -p tsconfig.readme.json && tsx --test tests/*.test.ts",
+    "test": "tsc -p tsconfig.readme.json && tsc -p tsconfig.v2.json && tsx --test tests/*.test.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@tollxyz/sdk": "^0.7.1"
+    "@tollxyz/sdk": "^0.7.2"
   },
   "peerDependencies": {
-    "@elizaos/core": "^1.6.0"
+    "@elizaos/core": "^1.6.0 || ^2.0.0"
   },
   "devDependencies": {
     "@elizaos/core": "^1.7.2",
+    "@elizaos/core-v2": "npm:@elizaos/core@^2.0.5",
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"

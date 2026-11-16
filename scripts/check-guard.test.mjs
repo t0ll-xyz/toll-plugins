@@ -87,6 +87,6 @@ test("a new folder nobody mapped fails, and so does a README without its line", 
 });
 
 test("the map lists every example and template of this repo, none of which signs or pays today", () => {
-  assert.deepEqual(Object.keys(FOLDERS).sort(), ["examples/crewai", "examples/guarded-agent", "examples/openai-agents", "templates/x402-starter"]);
+  assert.deepEqual(Object.keys(FOLDERS).sort(), ["examples/crewai", "examples/guarded-agent", "examples/langchain-mcp", "examples/openai-agents", "templates/x402-starter"]);
   assert.ok(Object.values(FOLDERS).every((v) => v === false));
 });

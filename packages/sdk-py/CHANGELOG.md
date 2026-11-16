@@ -1,5 +1,11 @@
 # Changelog: toll-sdk
 
+## 0.7.2 (unreleased)
+
+- `check_tx(..., budget_ms=)`: a time budget for a caller with a timeout (300 to 30000 ms; your timeout minus your round trip). With it the check goes to `POST /api/tx/check` (the MCP tool takes none) and comes back as the same text, so `.action`, `.assessment` and `.pending` read the same; a coin not read in time is WARN `coin-not-read`, never ALLOW. `pre_buy_check(address, budget_ms=)` sends `budget_ms` (300 to 25000 ms): not read in time = WAIT.
+- `toll_sdk.langchain.toll_tools(client=, toll_key=, budget_ms=, only=, prefix=)`: LangChain tools (langchain-core `StructuredTool`) for check_coin, pre_buy_check, check_coins, check_tx, check_agent, wallet_approvals and check_hook. Install with `pip install "toll-sdk[langchain]"`.
+- `call(name, args, timeout=)`, `clamp_budget_ms`, `check_tx_text`, `CHECK_TX_BUDGET_MIN_MS` / `_MAX_MS`, `PRE_BUY_BUDGET_MIN_MS` / `_MAX_MS`.
+
 ## 0.7.1 (unreleased)
 
 - `check_tx` sends every kind of request the live tool reads: `authorization_list` (a type-4 EIP-7702 transaction, or a signAuthorization alone), `message` + `origin` (personal_sign / eth_sign, Sign-In with Ethereum), `rpc` (the wallet request as sent), `user_op` + `entry_point` (ERC-4337) and `intent`. Before, a request carrying only one of these was refused locally and there was no argument for them.

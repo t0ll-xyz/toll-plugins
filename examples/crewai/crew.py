@@ -13,14 +13,17 @@ from crewai import Agent, Crew, Task
 from crewai_tools import MCPServerAdapter
 
 TOLL = {"url": "https://t0ll.xyz/mcp", "transport": "streamable-http"}
+# the core checks (the same set as @tollxyz/langchain's quick start and toll_sdk.langchain); pass none to load every tool
+CORE = ("pre_buy_check", "check_coin", "check_coins", "check_tx", "check_agent", "wallet_approvals", "check_hook")
 
 
 def main(token: str) -> None:
-    with MCPServerAdapter(TOLL) as tools:
+    with MCPServerAdapter(TOLL, *CORE) as tools:
         analyst = Agent(
             role="Robinhood Chain coin analyst",
-            goal="Say whether a coin is safe enough to buy, from Toll's chain facts only",
-            backstory="You never guess: you call Toll's pre_buy_check and report its decision and reasons.",
+            goal="Report Toll's decision on a coin before a buy, from Toll's chain facts only",
+            backstory="You never guess: you call Toll's pre_buy_check and report its decision and reasons. "
+            "WAIT, WARN and not read are never clear; on BLOCK the trader does not buy.",
             tools=tools,
         )
         task = Task(

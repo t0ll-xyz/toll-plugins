@@ -19,6 +19,12 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from urllib.parse import quote, urlencode
 
 __all__ = [
+    "clamp_budget_ms",
+    "check_tx_text",
+    "CHECK_TX_BUDGET_MIN_MS",
+    "CHECK_TX_BUDGET_MAX_MS",
+    "PRE_BUY_BUDGET_MIN_MS",
+    "PRE_BUY_BUDGET_MAX_MS",
     "resolve_client_id",
     "BLOCKLIST_KINDS",
     "COIN_WATCH_EVENTS",
@@ -406,7 +412,7 @@ class Toll:
         except OSError as e:
             raise TollError(f"Request to {req.full_url} failed: {e}.{note}") from None
 
-    def _rpc(self, method: str, params: Dict[str, Any]) -> Any:
+    def _rpc(self, method: str, params: Dict[str, Any], timeout: Optional[float] = None) -> Any:
         payload = json.dumps({"jsonrpc": "2.0", "id": self._next_id, "method": method, "params": params}).encode()
         self._next_id += 1
         req = urllib.request.Request(
@@ -420,7 +426,7 @@ class Toll:
                 "x-toll-client": self._client_id,
             },
         )
-        status, _headers, raw = self._http(req, self.timeout)
+        status, _headers, raw = self._http(req, self.timeout if timeout is None else timeout)
         if not 200 <= status < 300:
             raise TollError(f"Toll answered HTTP {status}" + (f": {raw[:200]}" if raw else ""), status=status)
         try:
@@ -437,9 +443,9 @@ class Toll:
         r = self._rpc("tools/list", {})
         return (r or {}).get("tools", [])
 
-    def call(self, name: str, args: Optional[Dict[str, Any]] = None) -> TollResult:
-        """Call any tool by its server name. isError answers raise TollError."""
-        r = self._rpc("tools/call", {"name": name, "arguments": args or {}}) or {}
+    def call(self, name: str, args: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None) -> TollResult:
+        """Call any tool by its server name. isError answers raise TollError. timeout (0.7.2): this call's HTTP timeout in s."""
+        r = self._rpc("tools/call", {"name": name, "arguments": args or {}}, timeout) or {}
         content = r.get("content")
         text = "\n".join(str(c.get("text", "")) for c in content if isinstance(c, dict) and c.get("type") == "text") if isinstance(content, list) else ""
         if r.get("isError"):
@@ -453,11 +459,17 @@ class Toll:
         _check_chain(chain)
         return self.call("check_coin", {"address": address, **({"chain": chain} if chain else {})})
 
-    def pre_buy_check(self, address: str) -> TollResult:
+    def pre_buy_check(self, address: str, budget_ms: Optional[int] = None) -> TollResult:
         """One call before a buy: decision BLOCK / WARN / ALLOW / WAIT with up to 3 reasons (the same calibrated
-        rules as check_tx). On WAIT, pending says when to ask again. ALLOW is never a promise."""
+        rules as check_tx). On WAIT, pending says when to ask again. ALLOW is never a promise.
+        budget_ms (0.7.2): your time budget (your timeout minus your round trip), 300 to 25000 ms; not read in time is
+        WAIT with the seconds to ask again."""
         _check_address(address)
-        r = self.call("pre_buy_check", {"address": address})
+        b = clamp_budget_ms(budget_ms, PRE_BUY_BUDGET_MIN_MS, PRE_BUY_BUDGET_MAX_MS)
+        if b is None:
+            r = self.call("pre_buy_check", {"address": address})
+        else:
+            r = self.call("pre_buy_check", {"address": address, "budget_ms": b}, timeout=min(self.timeout, b / 1000 + _BUDGET_HTTP_MARGIN_S))
         m = re.search(r"^Decision: (BLOCK|WARN|ALLOW|WAIT)$", r.text, re.M)
         decision = m.group(1) if m else None
         pending = (r.pending or parse_pending(r.text)) if decision == "WAIT" else r.pending
@@ -619,8 +631,13 @@ class Toll:
         user_op: Optional[Dict[str, Any]] = None,
         entry_point: Optional[str] = None,
         intent: Optional[Dict[str, Any]] = None,
+        budget_ms: Optional[int] = None,
     ) -> TollResult:
         """Pre-sign check on Robinhood Chain: ALLOW / WARN / BLOCK with the reasons (an ERC-8265 RiskAssessment).
+
+        budget_ms (0.7.2): your time budget (your timeout minus your round trip), 300 to 30000 ms. With it the check
+        goes to POST /api/tx/check (the MCP tool takes none) and comes back as the same text; a coin not read in time is
+        WARN coin-not-read with pending set, never ALLOW.
 
         Pass a transaction (to, data, value, from_), an EIP-712 signature request (typed_data) or an x402 payment
         (x402: the PaymentRequired from the 402, or one accepts entry; agent_id optional).
@@ -666,7 +683,8 @@ class Toll:
             if "scope" in ask and ask["scope"] not in ("call", "v4swap"):
                 raise TollError('Invalid ticket scope: use "call" or "v4swap".')
             args["ticket"] = ask
-        r = self.call("check_tx", args)
+        b = clamp_budget_ms(budget_ms, CHECK_TX_BUDGET_MIN_MS, CHECK_TX_BUDGET_MAX_MS)
+        r = self.call("check_tx", args) if b is None else self._check_tx_rest({**args, "budgetMs": b}, b)
         r.assessment = assessment_of(r.text)
         a = (r.assessment or {}).get("action")
         r.action = a if a in ("ALLOW", "WARN", "BLOCK") else None
@@ -738,7 +756,20 @@ class Toll:
         return self.call("stock_events", _opt(since=since, kind=kind, limit=limit))
 
     # -- REST (t0ll.xyz/api) ------------------------------------------------
-    def _rest(self, method: str, path: str, auth: bool = False, body: Any = None, headers: Optional[Dict[str, str]] = None) -> tuple:
+    def _check_tx_rest(self, body: Dict[str, Any], budget_ms: int) -> TollResult:
+        """check_tx with a budget, over POST /api/tx/check; the RiskAssessment comes back as the MCP tool's text."""
+        status, headers, raw = self._rest("POST", "/api/tx/check", auth=True, body=body, timeout=min(self.timeout, budget_ms / 1000 + _BUDGET_HTTP_MARGIN_S))
+        data = _try_json(raw)
+        if status != 200 or not isinstance(data, dict) or data.get("action") not in ("ALLOW", "WARN", "BLOCK") or not isinstance(data.get("warnings"), list):
+            raise _rest_error(status, headers, raw)
+        retry = _retry_after(headers)
+        if retry is None:
+            xr = (data.get("x-toll") or {}).get("retry_after_s") if isinstance(data.get("x-toll"), dict) else None
+            retry = _clamp_seconds(xr, 5) if isinstance(xr, (int, float)) and xr > 0 else None
+        text = check_tx_text(data, retry)
+        return TollResult(text=text, paid_url=parse_paid_url(text), pending={"retry_after_s": retry} if retry else None)
+
+    def _rest(self, method: str, path: str, auth: bool = False, body: Any = None, headers: Optional[Dict[str, str]] = None, timeout: Optional[float] = None) -> tuple:
         h = {"accept": "application/json", "x-toll-client": self._client_id}
         if auth and self._toll_key:
             h["authorization"] = f"Bearer {self._toll_key}"
@@ -748,7 +779,7 @@ class Toll:
             data = json.dumps(body).encode()
         h.update(headers or {})
         req = urllib.request.Request(f"{self.base_url}{path}", data=data, method=method, headers=h)
-        return self._http(req, self.timeout)
+        return self._http(req, self.timeout if timeout is None else timeout)
 
     def approvals(self, wallet: str) -> Dict[str, Any]:
         """GET /api/approvals/{wallet}: the wallet's live approvals on Robinhood Chain (ERC-20, NFT approval-for-all,
@@ -1339,6 +1370,32 @@ TICKET_SUFFIX_MAGIC = "0x900bc3e1"
 TOLL_ALLOW_SIGNER = "0x4A2C93066d94F1E69f3EAd5438c4efDdf80a46ba"
 """Toll's production ALLOW signer on Robinhood Chain (4663)."""
 _RA_MARK = "RiskAssessment (ERC-8265):"
+
+# 0.7.2: the time budgets Toll reads (ms): check_tx over REST takes budgetMs, pre_buy_check takes budget_ms
+CHECK_TX_BUDGET_MIN_MS = 300
+CHECK_TX_BUDGET_MAX_MS = 30000
+PRE_BUY_BUDGET_MIN_MS = 300
+PRE_BUY_BUDGET_MAX_MS = 25000
+_BUDGET_HTTP_MARGIN_S = 2.0
+
+
+def clamp_budget_ms(v: Any, lo: int, hi: int) -> Optional[int]:
+    """A budget moved into [lo, hi]; None when it is not a finite number (bool is not a number here)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+        return None
+    return int(min(hi, max(lo, round(v))))
+
+
+def check_tx_text(a: Dict[str, Any], retry_after_s: Optional[int] = None) -> str:
+    """POST /api/tx/check's RiskAssessment as the MCP tool's text: the action line, each warning, the retry line, the JSON."""
+    act = a.get("action")
+    head = ("ALLOW: none of the checks Toll runs found a reason to stop (not a promise that it is safe)." if act == "ALLOW"
+            else "BLOCK: do not sign this without the user's say." if act == "BLOCK" else "WARN: read the warnings before signing.")
+    ws = a.get("warnings") or []
+    lines = [head] + ([f"- [{w.get('severity', 'info')}] {w.get('message', '')} ({w.get('code', '')})" for w in ws if isinstance(w, dict)] or ["- no warnings"])
+    if retry_after_s:
+        lines.append(f"A coin is still being read: call check_tx again in {retry_after_s} s for the whole answer.")
+    return "\n".join(lines) + "\n\n" + _RA_MARK + "\n" + json.dumps(a, separators=(",", ":"))
 
 
 def assessment_of(text: str) -> Optional[Dict[str, Any]]:

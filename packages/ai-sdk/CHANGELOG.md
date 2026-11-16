@@ -1,5 +1,11 @@
 # Changelog: @tollxyz/ai-sdk
 
+## 0.6.0 (unreleased)
+
+- `tollTools({ budgetMs })`: a time budget in ms for `pre_buy_check` and `check_tx` (your timeout minus your round trip). `pre_buy_check` sends `budget_ms`; `check_tx` with a budget goes to `POST /api/tx/check` with `budgetMs` and answers in the MCP tool's text. Not read in time = WAIT / WARN `coin-not-read`, never ALLOW. Unset = unchanged. Needs `@tollxyz/sdk` 0.7.2.
+- Tests: mocked budget tests, and a live smoke test (`tests/smoke.test.ts`) skipped unless `TOLL_LIVE=1`.
+- Tested against `ai` 7.0.173 (dev dependency moved from 7.0.154); no API change needed.
+
 ## 0.5.1 (unreleased)
 
 - `check_tx` keeps every kind of request the live tool reads: `authorizationList` (a type-4 EIP-7702 transaction, or a signAuthorization alone), `message` + `origin`, `rpc` (the wallet request as sent), `userOp` + `entryPoint` (ERC-4337) and `intent`. Before, the schema dropped them: a type-4 transaction reached Toll as a plain call. Needs `@tollxyz/sdk` 0.7.1.

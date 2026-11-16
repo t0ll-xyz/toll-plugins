@@ -7,13 +7,16 @@ to start.
 from crewai import Agent
 from crewai_tools import MCPServerAdapter   # pip install "crewai-tools[mcp]"
 
-with MCPServerAdapter({"url": "https://t0ll.xyz/mcp", "transport": "streamable-http"}) as tools:
+CORE = ("pre_buy_check", "check_coin", "check_coins", "check_tx", "check_agent", "wallet_approvals", "check_hook")
+with MCPServerAdapter({"url": "https://t0ll.xyz/mcp", "transport": "streamable-http"}, *CORE) as tools:
     analyst = Agent(role="Coin analyst", goal="Check coins with Toll before a buy",
                     backstory="You call pre_buy_check and report its decision.", tools=tools)
 ```
 
-Full example: `crew.py`. Tested with crewai / crewai-tools 1.15. All 24 tools come through, including
-`pre_buy_check`, `check_coin`, `check_tx` (pre-sign), `check_agent` and `watch_coin`.
+Full example: `crew.py`. Written against crewai-tools 1.15 (`MCPServerAdapter(serverparams, *tool_names)`, the names
+filter the server's tools). The server serves 29 tools (2026-11-16); the example keeps the core checks: `pre_buy_check`,
+`check_coin`, `check_coins`, `check_tx` (pre-sign), `check_agent`, `wallet_approvals` and `check_hook`. Leave the names
+out to load all of them.
 
 **Toll's guard:** this example never signs or pays (it reads Toll's tools over MCP and holds no wallet), so there is nothing
 for the guard to check. When you give the agent a wallet, put [`@tollxyz/guard`](../../packages/guard) in front of it (`strict: true` and a `budgetMs`): on by default, off only with

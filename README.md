@@ -24,7 +24,9 @@ Toll's token is $TOLL on Robinhood Chain: `0xff9e86e6b21fd688027981bee4b64c8b6b8
 | Coinbase AgentKit | `AgentKit.from({ walletProvider, actionProviders: [tollActionProvider()] })` |
 | GOAT | `getTools({ wallet, plugins: [toll()] })` |
 | Vercel AI SDK | `generateText({ model, tools: tollTools(), prompt })` |
-| LangChain JS / LangGraph | `createAgent({ model, tools: tollTools() })` |
+| LangChain JS / LangGraph | `createAgent({ model, tools: tollTools() })` (`tollTools({ budgetMs: 1100 })` for a bot with a timeout) |
+| LangChain Python | `create_agent(model, tools=toll_tools())` with `from toll_sdk.langchain import toll_tools` (`pip install "toll-sdk[langchain]"`) |
+| LangChain over MCP (Python / JS) | `MultiServerMCPClient({"toll": {"url": "https://t0ll.xyz/mcp", "transport": "streamable_http"}})` / `new MCPAdapter({ servers: { toll: { url: "https://t0ll.xyz/mcp" } } })` ([example](examples/langchain-mcp)) |
 | Mastra | `new Agent({ id, name, instructions, model, tools: tollTools() })` |
 | OpenAI Agents SDK (Python) | `MCPServerStreamableHttp(name="Toll", params={"url": "https://t0ll.xyz/mcp"})` in `mcp_servers` ([example](examples/openai-agents)) |
 | OpenAI Agents SDK (JS) | `new MCPServerStreamableHttp({ url: "https://t0ll.xyz/mcp", name: "Toll" })` in `mcpServers` ([example](examples/openai-agents)) |
@@ -127,11 +129,11 @@ its payTo is bound to its identity.
 | Package | What | Install |
 | --- | --- | --- |
 | [`@tollxyz/sdk`](packages/sdk-js) | TypeScript client, zero dependencies, `pay()` for the x402 paid path | `npm install @tollxyz/sdk` |
-| [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`) | `pip install toll-sdk` |
+| [`toll-sdk`](packages/sdk-py) | Python client, standard library only (import `toll_sdk`); LangChain tools in `toll_sdk.langchain` | `pip install toll-sdk` (`"toll-sdk[langchain]"` for the tools) |
 | [`@tollxyz/guard`](packages/guard) | Pre-sign check in front of a wallet: viem, ethers and x402 fetch wrappers, ALLOW / WARN / BLOCK before signing. Since 0.6.0 nothing is signed when Toll cannot answer (`failOpen: true` opts out) | `npm install @tollxyz/guard` |
 | [`@tollxyz/x402-seller`](packages/x402-seller) | Sell over x402 in one line: a paywall for Next.js, Hono, Bun or Workers, USDG through Toll's facilitator, payee check, signed receipt, builder code, safety screen, a discovery listing, seller-signed offer-receipt receipts and `paidBefore` | `npm install @tollxyz/x402-seller` |
 | [`@tollxyz/mcp`](packages/mcp) | Local stdio MCP server, Toll's tools 1:1 (bin `toll-mcp`) | `npx -y @tollxyz/mcp` |
-| [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS actions and provider | `npm install @tollxyz/plugin-elizaos` |
+| [`@tollxyz/plugin-elizaos`](packages/plugin-elizaos) | elizaOS 1.x and 2.x actions, a provider with the held verdict, and `withTollPreBuy` (a buy gate) | `npm install @tollxyz/plugin-elizaos` |
 | [`@tollxyz/agentkit`](packages/agentkit) | Coinbase AgentKit action provider | `npm install @tollxyz/agentkit @coinbase/agentkit zod@3` |
 | [`@tollxyz/ai-sdk`](packages/ai-sdk) | Vercel AI SDK tools | `npm install @tollxyz/ai-sdk ai zod` |
 | [`@tollxyz/langchain`](packages/langchain) | LangChain JS tools (createAgent, LangGraph) | `npm install @tollxyz/langchain langchain @langchain/core zod` |

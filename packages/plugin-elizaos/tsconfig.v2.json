@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "paths": {
+      "@elizaos/core": ["./node_modules/@elizaos/core-v2", "../../node_modules/@elizaos/core-v2"]
+    }
+  },
+  "include": ["src", "tests/readme"]
+}

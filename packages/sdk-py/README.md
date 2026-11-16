@@ -45,6 +45,26 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
 
+## 0.7.2: LangChain tools and a time budget
+
+**LangChain** (`pip install "toll-sdk[langchain]"`, Python 3.10+ for langchain-core 1.x):
+
+```python
+from toll_sdk.langchain import toll_tools
+
+tools = toll_tools(budget_ms=1100)      # check_coin, pre_buy_check, check_coins, check_tx, check_agent, wallet_approvals, check_hook
+# create_agent("openai:gpt-4.1-mini", tools=tools)  or  llm.bind_tools(tools)
+```
+
+`only=[...]` picks a subset, `prefix="toll_"` names them `toll_check_coin` and so on, `toll_key=` or `client=` as in
+`Toll`. Each tool returns Toll's text; an error comes back as one line ("Toll could not answer: ..."), never as a clear
+answer. For every Toll tool over MCP, see [examples/langchain-mcp](../../examples/langchain-mcp).
+
+**Time budget** for a caller with a timeout: `check_tx(..., budget_ms=1100)` (300 to 30000 ms; sent to
+`POST /api/tx/check`, the MCP tool takes none, and answered in the same text) and `pre_buy_check(address,
+budget_ms=1100)` (300 to 25000 ms). Not read in time = WARN `coin-not-read` / `Decision: WAIT` with `pending` set,
+never ALLOW.
+
 ## 0.7.0 (2026-11-10): paid before, seller receipts, budgets
 
 ```python

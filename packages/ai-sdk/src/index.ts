@@ -55,6 +55,11 @@ export interface TollToolsOptions {
   fetch?: FetchLike;
   /** Which tools to return. Default: all twenty-eight. */
   only?: TollToolName[];
+  /**
+   * 0.6.0: your time budget in ms for pre_buy_check and check_tx (your tool timeout minus your round trip to Toll,
+   * e.g. 1100 for 1.5 s). Not read in time = WAIT / WARN coin-not-read, never ALLOW. Unset = no budget.
+   */
+  budgetMs?: number;
 }
 
 export type TollToolName =
@@ -103,6 +108,7 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
   const fetchFn: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
   const toll = opts.client ?? new Toll({ fetch: withTollKey(fetchFn, opts.tollKey), ...(opts.tollKey ? { tollKey: opts.tollKey } : {}) });
   const markets = { fetch: fetchFn, tollKey: opts.tollKey };
+  const budget = opts.budgetMs === undefined ? {} : { budgetMs: opts.budgetMs };
   const all = {
     check_coin: tool({
       description:
@@ -113,7 +119,7 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
     pre_buy_check: tool({
       description: LIVE_DESCRIPTIONS.pre_buy_check,
       inputSchema: SCHEMAS.pre_buy_check,
-      execute: async ({ address }) => run(() => toll.preBuyCheck(address)),
+      execute: async ({ address }) => run(() => toll.preBuyCheck(address, budget)),
     }),
     check_coins: tool({
       description: LIVE_DESCRIPTIONS.check_coins,
@@ -176,7 +182,7 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
     check_tx: tool({
       description: LIVE_DESCRIPTIONS.check_tx,
       inputSchema: SCHEMAS.check_tx,
-      execute: async (args) => run(() => toll.checkTx(args)),
+      execute: async (args) => run(() => toll.checkTx(args, budget)),
     }),
     presign_risk_report: tool({
       description: LIVE_DESCRIPTIONS.presign_risk_report,

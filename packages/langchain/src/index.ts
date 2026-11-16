@@ -8,7 +8,7 @@ import { descriptions, pick, runners, schemas, type TollToolName } from "./defs.
 
 export { formatResult } from "./format.js";
 export { TOOL_NAMES } from "./defs.js";
-export type { TollToolName } from "./defs.js";
+export type { TollToolName, RunOptions } from "./defs.js";
 export { Toll, TollError, verifyWebhook, readWebhook } from "@tollxyz/sdk";
 export type { TollResult, WatchEvent } from "@tollxyz/sdk";
 
@@ -22,6 +22,11 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** Which tools to return. Default: all twenty-eight. */
   only?: TollToolName[];
+  /**
+   * 0.6.0: your time budget in ms for pre_buy_check and check_tx (your tool timeout minus your round trip to Toll,
+   * e.g. 1100 for 1.5 s). Not read in time = WAIT / WARN coin-not-read, never ALLOW. Unset = no budget.
+   */
+  budgetMs?: number;
 }
 
 /**
@@ -29,7 +34,7 @@ export interface TollToolsOptions {
  * Each tool returns Toll's text; the model decides what it means.
  */
 export function tollTools(opts: TollToolsOptions = {}): StructuredToolInterface[] {
-  const run = runners(opts.client ?? new Toll({ tollKey: opts.tollKey }));
+  const run = runners(opts.client ?? new Toll({ tollKey: opts.tollKey }), { budgetMs: opts.budgetMs });
   return pick(opts.only).map(
     (name) =>
       tool(run[name] as (input: any) => Promise<string>, {

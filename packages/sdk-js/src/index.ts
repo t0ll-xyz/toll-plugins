@@ -384,6 +384,29 @@ export interface PreBuyResult extends TollResult {
 }
 /** check_coins takes 1 to 20 addresses. */
 export const CHECK_COINS_MAX = 20;
+/** 0.7.2: the time budget POST /api/tx/check reads (`budgetMs`): 300 to 30000 ms. Same range as @tollxyz/guard. */
+export const CHECK_TX_BUDGET_MIN_MS = 300;
+export const CHECK_TX_BUDGET_MAX_MS = 30_000;
+/** 0.7.2: the time budget pre_buy_check reads (`budget_ms`): 300 to 25000 ms. */
+export const PRE_BUY_BUDGET_MIN_MS = 300;
+export const PRE_BUY_BUDGET_MAX_MS = 25_000;
+
+/** 0.7.2: options for a caller with a timeout (a trading bot, an agent framework's tool timeout). */
+export interface BudgetOptions {
+  /**
+   * Your time budget in ms: your timeout minus your own round trip to Toll. Toll answers within it: a coin not read in
+   * time is WARN coin-not-read (checkTx) or WAIT (preBuyCheck) with the seconds to ask again, never an ALLOW, and the
+   * read goes on so the next call is fast. A number outside the range is moved to the nearest end; anything that is
+   * not a finite number is not sent. checkTx with a budget is sent to POST /api/tx/check (the MCP tool takes none).
+   */
+  budgetMs?: number;
+}
+
+/** a budget clamped to [min, max]; undefined when it is not a finite number */
+export function clampBudgetMs(v: unknown, min: number, max: number): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+  return Math.min(max, Math.max(min, Math.round(v)));
+}
 
 export interface TollResult {
   /** The markdown text the server answered with. */
@@ -980,7 +1003,7 @@ export class Toll {
     }
   }
 
-  private async rpc(method: string, params: unknown): Promise<any> {
+  private async rpc(method: string, params: unknown, timeoutMs: number = this.timeoutMs): Promise<any> {
     const { res, raw } = await this.request(`${this.baseUrl}/mcp`, {
       method: "POST",
       headers: {
@@ -990,7 +1013,7 @@ export class Toll {
         "x-toll-client": this.clientId,
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: this.nextId++, method, params }),
-    });
+    }, timeoutMs);
     if (!res.ok) {
       throw new TollError(`Toll answered HTTP ${res.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`, { status: res.status });
     }
@@ -1013,8 +1036,8 @@ export class Toll {
   }
 
   /** Call any tool by its server name. isError answers throw a TollError. */
-  async call(name: string, args: Record<string, unknown> = {}): Promise<TollResult> {
-    const r = await this.rpc("tools/call", { name, arguments: args });
+  async call(name: string, args: Record<string, unknown> = {}, opts: { timeoutMs?: number } = {}): Promise<TollResult> {
+    const r = await this.rpc("tools/call", { name, arguments: args }, opts.timeoutMs);
     const text: string = Array.isArray(r?.content)
       ? r.content.filter((c: any) => c?.type === "text").map((c: any) => String(c.text)).join("\n")
       : "";
@@ -1036,9 +1059,13 @@ export class Toll {
    * One call before a buy: Decision BLOCK / WARN / ALLOW / WAIT with up to 3 reasons, on the same calibrated rules as
    * checkTx. On WAIT, `pending.retryAfterS` says when to ask again. ALLOW is never a promise.
    */
-  async preBuyCheck(address: string): Promise<PreBuyResult> {
+  async preBuyCheck(address: string, opts: BudgetOptions = {}): Promise<PreBuyResult> {
     assertAddress(address);
-    const r = await this.call("pre_buy_check", { address });
+    // 0.7.2: budget_ms (300-25000): not read in time = WAIT with the seconds to ask again; the HTTP wait is the budget plus a margin
+    const budget = clampBudgetMs(opts.budgetMs, PRE_BUY_BUDGET_MIN_MS, PRE_BUY_BUDGET_MAX_MS);
+    const r = budget === undefined
+      ? await this.call("pre_buy_check", { address })
+      : await this.call("pre_buy_check", { address, budget_ms: budget }, { timeoutMs: Math.min(this.timeoutMs, budget + BUDGET_HTTP_MARGIN_MS) });
     const m = /^Decision: (BLOCK|WARN|ALLOW|WAIT)$/m.exec(r.text);
     const decision = (m?.[1] ?? null) as PreBuyDecision | null;
     return { ...r, decision, pending: decision === "WAIT" ? (r.pending ?? parsePending(r.text)) : r.pending };
@@ -1207,7 +1234,7 @@ export class Toll {
    * to sign (message, origin), the wallet request as sent (rpc), an ERC-4337 user operation (userOp, entryPoint) or an
    * x402 payment (x402).
    */
-  async checkTx(req: CheckTxRequest): Promise<CheckTxResult> {
+  async checkTx(req: CheckTxRequest, opts: BudgetOptions = {}): Promise<CheckTxResult> {
     // every kind of request the live check_tx reads (0.7.1): a transaction, a signature, a payment, an EIP-7702
     // authorization list (alone is a signAuthorization), a message to sign, the wallet request as sent, a user operation
     const has = isObject(req) && (req.to !== undefined || req.typedData !== undefined || req.x402 !== undefined
@@ -1222,11 +1249,41 @@ export class Toll {
     const ask = ticketAskOf(ticket as CheckTxRequest["ticket"]);
     if (ask?.consumer !== undefined && !isValidAddress(ask.consumer)) throw new TollError("Invalid ticket.consumer: expected 0x + 40 hex characters.");
     if (ask?.scope !== undefined && ask.scope !== "call" && ask.scope !== "v4swap") throw new TollError('Invalid ticket.scope: use "call" or "v4swap".');
-    const r = await this.call("check_tx", ask ? { ...rest, ticket: ask } : { ...rest });
+    const budget = clampBudgetMs(opts.budgetMs, CHECK_TX_BUDGET_MIN_MS, CHECK_TX_BUDGET_MAX_MS);
+    const r = budget === undefined
+      ? await this.call("check_tx", ask ? { ...rest, ticket: ask } : { ...rest })
+      : await this.checkTxRest({ ...rest, ...(ask ? { ticket: ask } : {}), budgetMs: budget }, budget);
     const assessment = assessmentOf(r.text);
     const a = assessment?.action;
     const tk = ticketOfAnswer(assessment);
     return { ...r, assessment, action: a === "ALLOW" || a === "WARN" || a === "BLOCK" ? a : null, ...(tk ? { ticket: tk } : {}) };
+  }
+
+  /**
+   * 0.7.2: check_tx with a time budget, over POST /api/tx/check (the REST twin of the MCP tool, which takes no budget).
+   * The JSON RiskAssessment comes back as the same text the MCP tool answers (the action line, each warning, then the
+   * RiskAssessment), so callers read one shape. Retry-After = a coin still being read: `pending`, and the action is
+   * WARN (never ALLOW).
+   */
+  private async checkTxRest(body: Record<string, unknown>, budgetMs: number): Promise<TollResult> {
+    const { res, raw } = await this.request(`${this.baseUrl}/api/tx/check`, {
+      method: "POST",
+      headers: this.restHeaders(true, { "content-type": "application/json" }),
+      body: JSON.stringify(body),
+    }, Math.min(this.timeoutMs, budgetMs + BUDGET_HTTP_MARGIN_MS));
+    const json = tryJson(raw);
+    const retry = clampRetryHeader(res.headers.get("retry-after"));
+    if (res.status === 429) {
+      throw new TollError(`Toll's free check is rate limited for this caller (HTTP 429)${retry ? `: ask again in ${retry} s` : ""}.`, { status: 429, ...(retry ? { retryAfterS: retry } : {}) });
+    }
+    if (res.status !== 200 || !isObject(json) || (json.action !== "ALLOW" && json.action !== "WARN" && json.action !== "BLOCK") || !Array.isArray(json.warnings)) {
+      const err = isObject(json) && typeof json.error === "string" ? json.error : raw.slice(0, 200);
+      throw new TollError(`Toll answered HTTP ${res.status}${err ? `: ${err}` : ""}`, { status: res.status });
+    }
+    const xr = isObject(json["x-toll"]) ? (json["x-toll"] as Record<string, unknown>).retry_after_s : undefined;
+    const retryS = retry ?? (typeof xr === "number" && xr > 0 ? clampSeconds(xr, 5) : null);
+    const text = checkTxText(json as { action: string; warnings: Array<Record<string, unknown>> }, retryS);
+    return { text, paidUrl: parsePaidUrl(text), pending: retryS ? { retryAfterS: retryS } : null };
   }
 
   /** Agent Pre-Sign Risk Report (ERC draft, PR #2134): typed facts about an unsigned request, EIP-712 signed by Toll. No verdict. */
@@ -1727,6 +1784,29 @@ function restError(res: Response, raw: string): TollError {
 /* ------------------------------------------------------------------ check_tx: the RiskAssessment and the ALLOW ticket */
 
 const RA_MARK = "RiskAssessment (ERC-8265):";
+
+/** how much longer than its budget a budgeted call waits on the HTTP answer (the way there and back) */
+const BUDGET_HTTP_MARGIN_MS = 2_000;
+
+/** a Retry-After header in seconds (whole seconds only), or null */
+function clampRetryHeader(v: string | null): number | null {
+  if (!v || !/^\d{1,6}$/.test(v.trim())) return null;
+  const n = Number(v.trim());
+  return n > 0 ? clampSeconds(n, 5) : null;
+}
+
+/** POST /api/tx/check's RiskAssessment as the MCP tool's text: the action line, each warning, the retry line, then the JSON */
+export function checkTxText(a: { action: string; warnings: Array<Record<string, unknown>> }, retryAfterS: number | null = null): string {
+  const head = a.action === "ALLOW"
+    ? "ALLOW: none of the checks Toll runs found a reason to stop (not a promise that it is safe)."
+    : a.action === "BLOCK" ? "BLOCK: do not sign this without the user's say." : "WARN: read the warnings before signing.";
+  const lines = [
+    head,
+    ...(a.warnings.length ? a.warnings.map((w) => `- [${String(w.severity ?? "info")}] ${String(w.message ?? "")} (${String(w.code ?? "")})`) : ["- no warnings"]),
+    ...(retryAfterS ? [`A coin is still being read: call check_tx again in ${retryAfterS} s for the whole answer.`] : []),
+  ];
+  return `${lines.join("\n")}\n\n${RA_MARK}\n${JSON.stringify(a)}`;
+}
 
 /** The RiskAssessment JSON a check_tx answer ends with ("RiskAssessment (ERC-8265):" then one JSON line), or null. */
 export function assessmentOf(text: string): Record<string, unknown> | null {

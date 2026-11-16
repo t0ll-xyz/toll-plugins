@@ -17,6 +17,7 @@ export const SWITCH = "TOLL_GUARD";
 export const FOLDERS = {
   "examples/crewai": false, // an MCP client: reads Toll's tools, holds no wallet
   "examples/openai-agents": false, // an MCP client: reads Toll's tools, holds no wallet
+  "examples/langchain-mcp": false, // an MCP client (langchain-mcp-adapters): reads Toll's tools, holds no wallet
   "examples/guarded-agent": false, // buy() is a stub that prints
   "templates/x402-starter": false, // a seller: the buyer signs, the facilitator settles
 };

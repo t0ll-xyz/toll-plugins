@@ -83,6 +83,11 @@ export interface TollActionProviderOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
+  /**
+   * 0.6.0: your time budget in ms for pre_buy_check and check_tx (your tool timeout minus your round trip to Toll,
+   * e.g. 1100 for 1.5 s). Not read in time = WAIT / WARN coin-not-read, never ALLOW. Unset = no budget.
+   */
+  budgetMs?: number;
 }
 
 async function run(fn: () => Promise<TollResult>): Promise<string> {
@@ -101,12 +106,14 @@ export class TollActionProvider extends ActionProvider {
   private readonly client: Toll;
   private readonly fetchFn: FetchLike;
   private readonly tollKey?: string;
+  private readonly budget: { budgetMs?: number };
 
   /** Takes a Toll client (as before) or options with a tollKey. */
   constructor(clientOrOptions: Toll | TollActionProviderOptions = {}) {
     super("toll", []);
     const o: TollActionProviderOptions = clientOrOptions instanceof Toll ? { client: clientOrOptions } : clientOrOptions;
     this.tollKey = o.tollKey;
+    this.budget = o.budgetMs === undefined ? {} : { budgetMs: o.budgetMs };
     this.fetchFn = o.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.client = o.client ?? new Toll({ fetch: withTollKey(this.fetchFn, o.tollKey), ...(o.tollKey ? { tollKey: o.tollKey } : {}) });
   }
@@ -127,7 +134,7 @@ export class TollActionProvider extends ActionProvider {
 
   @CreateAction({ name: "pre_buy_check", description: LIVE_DESCRIPTIONS.pre_buy_check, schema: PreBuyCheckSchema })
   async preBuyCheck(args: z.infer<typeof PreBuyCheckSchema>): Promise<string> {
-    return run(() => this.client.preBuyCheck(args.address));
+    return run(() => this.client.preBuyCheck(args.address, this.budget));
   }
 
   @CreateAction({ name: "check_coins", description: LIVE_DESCRIPTIONS.check_coins, schema: CheckCoinsSchema })
@@ -210,7 +217,7 @@ export class TollActionProvider extends ActionProvider {
 
   @CreateAction({ name: "check_tx", description: LIVE_DESCRIPTIONS.check_tx, schema: CheckTxSchema })
   async checkTx(args: z.infer<typeof CheckTxSchema>): Promise<string> {
-    return run(() => this.client.checkTx(args));
+    return run(() => this.client.checkTx(args, this.budget));
   }
 
   @CreateAction({ name: "presign_risk_report", description: LIVE_DESCRIPTIONS.presign_risk_report, schema: PresignRiskReportSchema })

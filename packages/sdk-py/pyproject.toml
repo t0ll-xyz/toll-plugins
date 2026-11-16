@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toll-sdk"
-version = "0.7.1"
+version = "0.7.2"
 description = "Client for Toll's checks on Robinhood Chain over MCP: coins, dev records, LARP, ERC-8004 agents, pre-sign checks (check_tx, ERC-8265, ALLOW tickets), wallet approvals, the open blocklist, coin and wallet watches with webhook verification, and Robinhood Stock Token data. Standard library only."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
+
+[project.optional-dependencies]
+# toll_sdk.langchain: Toll's core checks as LangChain tools
+langchain = ["langchain-core>=1.0; python_version >= '3.10'"]
 
 [project.urls]
 Homepage = "https://t0ll.xyz/agents/plugins"

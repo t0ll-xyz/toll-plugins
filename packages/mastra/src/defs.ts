@@ -120,11 +120,22 @@ export const descriptions: Record<TollToolName, string> = {
 
 type Inputs = { [K in TollToolName]: z.infer<(typeof schemas)[K]> };
 
+/** What every tool shares beyond the client (0.6.0). */
+export interface RunOptions {
+  /**
+   * Your time budget in ms for the two checks that sit in front of a buy or a signature (pre_buy_check, check_tx): your
+   * tool timeout minus your round trip to Toll (for a 1.5 s timeout, 1100). Toll answers within it: not read in time is
+   * WAIT (pre_buy_check) or WARN coin-not-read (check_tx), never ALLOW. Unset = no budget.
+   */
+  budgetMs?: number;
+}
+
 /** Runs one tool against Toll. */
-export function runners(toll: Toll): { [K in TollToolName]: (input: Inputs[K]) => Promise<string> } {
+export function runners(toll: Toll, opts: RunOptions = {}): { [K in TollToolName]: (input: Inputs[K]) => Promise<string> } {
+  const budget = opts.budgetMs === undefined ? {} : { budgetMs: opts.budgetMs };
   return {
     check_coin: ({ address, chain }) => run(() => toll.checkCoin(address, chain ? { chain } : {})),
-    pre_buy_check: ({ address }) => run(() => toll.preBuyCheck(address)),
+    pre_buy_check: ({ address }) => run(() => toll.preBuyCheck(address, budget)),
     check_coins: ({ addresses }) => run(() => toll.checkCoins(addresses)),
     larp_check: ({ token, chain }) => run(() => toll.larpCheck(token, { wait: true, ...(chain ? { chain } : {}) })),
     dev_record: ({ wallet, chain }) => run(() => toll.devRecord(wallet, chain ? { chain } : {})),
@@ -136,7 +147,7 @@ export function runners(toll: Toll): { [K in TollToolName]: (input: Inputs[K]) =
     check_agent: ({ id }) => run(() => toll.checkAgent(id)),
     find_paid_api: ({ query, limit }) => run(() => toll.findPaidApi({ query, limit })),
     check_hook: ({ address }) => run(() => toll.checkHook(address)),
-    check_tx: (input) => run(() => toll.checkTx(input)),
+    check_tx: (input) => run(() => toll.checkTx(input, budget)),
     presign_risk_report: (input) => run(() => toll.presignRiskReport(input)),
     stock_token: ({ id }) => run(() => toll.stockToken(id)),
     stock_tokens: ({ query, limit }) => run(() => toll.stockTokens({ query, limit })),

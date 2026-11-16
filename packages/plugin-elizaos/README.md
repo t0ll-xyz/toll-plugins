@@ -31,7 +31,7 @@ import type { Character } from "@elizaos/core";
 
 export const character: Character = {
   name: "Trader",
-  bio: "Checks who is behind a coin before it trades.",
+  bio: ["Checks who is behind a coin before it trades."],
   plugins: ["@tollxyz/plugin-elizaos"],
 };
 ```
@@ -43,7 +43,7 @@ import type { Project, ProjectAgent } from "@elizaos/core";
 import { tollPlugin } from "@tollxyz/plugin-elizaos";
 
 const agent: ProjectAgent = {
-  character: { name: "Trader", bio: "Checks who is behind a coin before it trades." },
+  character: { name: "Trader", bio: ["Checks who is behind a coin before it trades."] },
   plugins: [tollPlugin],
 };
 const project: Project = { agents: [agent] };
@@ -69,6 +69,37 @@ Facts with their sources, not advice. The EFFR is subject to the Terms of Use po
 ## Before signing: TOLL_CHECK_TX and TOLL_PRESIGN_RISK_REPORT
 
 `TOLL_CHECK_TX` sends the pasted transaction, EIP-712 signature request or x402 payment to Toll's `check_tx`, which answers ALLOW / WARN / BLOCK with the reasons, an ERC-8265 RiskAssessment. Pass on every warning; on BLOCK do not sign without the owner's say. `TOLL_PRESIGN_RISK_REPORT` sends a PresignRequest (ERC draft, ethereum/ERCs PR #2134) to `presign_risk_report`, which returns typed facts about the unsigned request, EIP-712 signed by Toll, with no verdict.
+
+## Time budget, the held verdict and a buy gate (0.6.0)
+
+**elizaOS 1.x and 2.x.** The peer range is `^1.6.0 || ^2.0.0`; `npm test` type-checks the plugin and the README examples
+against both `@elizaos/core` 1.7 and 2.0.5. In 2.x a character's `bio` is a string array only (`bio: ["..."]`).
+
+**Time budget.** `createTollPlugin({ budgetMs: 1100 })` (or the agent setting `TOLL_BUDGET_MS=1100`) goes with every
+`TOLL_PRE_BUY_CHECK` and `TOLL_CHECK_TX`: Toll answers within it, and a coin not read in time is `Decision: WAIT` or WARN
+`coin-not-read`, never ALLOW. With a budget the pre-sign check is sent to `POST https://t0ll.xyz/api/tx/check`.
+`TOLL_PRE_BUY` is a simile of `TOLL_PRE_BUY_CHECK`.
+
+**The held verdict.** When a message holds a 0x address, the `TOLL_COIN_HINT` provider adds the verdict Toll already
+holds for that coin (`check_coins`: free, reads nothing new, at most 2.5 s): `values.tollVerdict` is AGAINST, CAREFUL,
+CLEAR, INCOMPLETE or NOT_READ. CLEAR is said as "nothing against was found in what was read, not a promise"; INCOMPLETE
+and NOT_READ are said as not clear, with the action to run.
+
+**A buy gate in front of another plugin's action.** `@elizaos/plugin-evm` (1.0.13) has no pre-sign hook: it builds and
+sends inside each action, and its chain list (viem's) has no Robinhood Chain. So the gate wraps the buy action itself:
+
+```ts
+import { withTollPreBuy } from "@tollxyz/plugin-elizaos";
+const gatedBuy = withTollPreBuy(myBuyAction, { budgetMs: 1100 });   // register gatedBuy instead of myBuyAction
+```
+
+Before the handler runs, Toll's `pre_buy_check` is asked about the first 0x address in the message (or `addressOf`).
+Only `Decision: ALLOW` runs it. BLOCK, WAIT, WARN (unless `onWarn: "allow"`), no decision, no address and Toll not
+answering all refuse with the reason: it fails closed. `TOLL_GUARD=off` (setting or env) is the one switch that turns
+it off. For an action that signs with its own viem or ethers wallet on Robinhood Chain, put
+[`@tollxyz/guard`](../guard) in front of the wallet instead (`guard(walletClient, { strict: true, budgetMs })`): every
+transaction and signature is checked by `check_tx` before it is signed. A third route needs no code: point the wallet's
+RPC at Toll's Protect RPC (`https://rpc.t0ll.xyz`), which refuses a BLOCK before it reaches the chain.
 
 ## Wallet approvals, the blocklist and ALLOW tickets (0.4.0)
 
