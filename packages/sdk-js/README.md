@@ -33,6 +33,8 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `checkCoin(address, { chain?: "rh" })`
 - `larpCheck(token, { chain?: "rh", wait?: boolean })` - with `wait: true` it asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `devRecord(wallet, { chain? })`, `launchRecord(address)`, `walletPrivacy(wallet)`, `freshLaunches(limit?)`, `chainPulse()`
+- `walletApprovals(wallet)` - a wallet's live token approvals, each with its risk and a revoke call checked by check_tx (text); `approvals()` for the JSON
+- `accountPermissions(address)` - 0.8.0: a Safe or smart account's standing permissions (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate): who can move its funds without the owners signing, and the parts not read (text)
 - `checkAgent(id)` - an ERC-8004 agent on Robinhood Chain by its agent id
 - `findPaidApi({ query?, limit? })` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `findPaidApis()` for the JSON
 - `paidBefore({ payer, payTo, resource?, since? })` - whether a wallet already paid you through Toll's facilitator; `setBudget`, `revokeBudget`, `getBudget` - a payer's spending limits with it (live since 2026-11-11); see 0.7.0 below
@@ -42,7 +44,7 @@ Every method returns `{ text, paidUrl, pending }`. `pending` (`{ retryAfterS }` 
 - `stockToken(id)`, `stockTokens({ query?, limit? })` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, { period? })` (`ttm`, `annual`, `quarterly`), `insiderTrades(id, { limit? })` (1 to 100), `institutions(id, { limit? })` (13F holders, 1 to 20), `guidance(id, { limit? })` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stockEvents({ since?, kind?, limit? })` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 28
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 29
 - `pay(paidUrl, { sign?, timeoutMs? })` pays a paid URL once and returns its JSON (see below)
 - `isValidAddress(x)`, `isValidWallet(x)`, `isValidStockId(x)` - the same checks the SDK runs before anything is sent
 - Errors (HTTP, JSON-RPC, timeouts, server-side input errors) are thrown as `TollError`.

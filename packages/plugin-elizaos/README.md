@@ -101,6 +101,10 @@ it off. For an action that signs with its own viem or ethers wallet on Robinhood
 transaction and signature is checked by `check_tx` before it is signed. A third route needs no code: point the wallet's
 RPC at Toll's Protect RPC (`https://rpc.t0ll.xyz`), which refuses a BLOCK before it reaches the chain.
 
+## Account permissions (0.7.0)
+
+`TOLL_ACCOUNT_PERMISSIONS` runs Toll's `account_permissions` for the 0x address in the message when it asks about permissions, modules, a multisig or a smart account: its owners and threshold, every module, guard and fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules and an EIP-7702 delegate. It says who can move the account's funds without the owners signing, each finding with a severity, and lists every part not read (never read as none). A question about approvals stays with `TOLL_WALLET_APPROVALS`.
+
 ## Wallet approvals, the blocklist and ALLOW tickets (0.4.0)
 
 `TOLL_WALLET_APPROVALS` runs Toll's `wallet_approvals` for the wallet in the message: its live token approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2), each with the spender, the amount (unlimited flagged), a risk (high / medium / low) and the revoke transaction with check_tx's answer on it. `TOLL_BLOCKLIST` reads Toll's open blocklist (<https://t0ll.xyz/api/blocklist>, free, no key): with a 0x address it says whether that address is listed, with its reasons, dates and evidence page; without one it lists the 10 newest entries. A coin that is not listed is not cleared. `TOLL_CHECK_TX` passes `"ticket": true` (or `{"consumer", "scope"}`) through to `check_tx`, which then returns a signed single-use ALLOW ticket in the RiskAssessment's `x-toll.ticket` (never for a BLOCK).

@@ -22,14 +22,14 @@ function setup(responses: string[]) {
 }
 const opts = { toolCallId: "t1", messages: [] } as any;
 
-test("all 28 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
+test("all 29 live tools, sharp descriptions, Robinhood Chain only, no verdict words", () => {
   const { tools } = setup([]);
   assert.deepEqual(Object.keys(tools).sort(), [...TOOL_NAMES].sort());
   assert.match(String(tools.check_coin!.description), /^Before buying a token on Robinhood Chain, check who is behind it/);
   for (const t of Object.values(tools)) assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(String(t!.description)));
   for (const n of ["wallet_privacy", "check_agent", "check_tx", "presign_risk_report"] as const) assert.equal(tools[n]!.description, LIVE_DESCRIPTIONS[n]);
   assert.match(String(tools.larp_check!.description), /^Is there a real product behind this coin on Robinhood Chain\?/);
-  for (const t of Object.values(tools)) assert.ok(!/\b(scam|rug|safe)\b/i.test(String(t!.description)));
+  for (const t of Object.values(tools)) assert.ok(!/\b(scam|rug)\b/i.test(String(t!.description)) && !/\bsafe\b/.test(String(t!.description)) /* "Safe" capitalised is the smart account (account_permissions, check_tx), not a verdict */);
 });
 
 test("input schema is JSON-schema ready and Robinhood Chain only", async () => {
@@ -192,18 +192,19 @@ const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
 const HOOK_URL = "https://example.com/toll-hook";
 test("0.4.0: wallet_approvals, watches and check_tx ticket: live descriptions, Toll's argument names, the key on every call", async () => {
   const calls: Array<{ body: any; key: string | null }> = [];
-  const replies = ["a", "w", "[]", "{}", "w2", "{}", "t"];
+  const replies = ["a", "p", "w", "[]", "{}", "w2", "{}", "t"];
   const f = async (_u: string, init?: RequestInit) => {
     calls.push({ body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get("x-toll-pass") });
     return new Response(ok(replies.shift()!), { status: 200 });
   };
   const tools = tollTools({ client: new Toll({ fetch: f, tollKey: "tk_9", sleep: async () => {} }) });
-  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+  for (const n of ["wallet_approvals", "account_permissions", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
     assert.equal(tools[n]!.description, LIVE_DESCRIPTIONS[n]);
   }
   const tx: any = await asSchema(tools.check_tx!.inputSchema).jsonSchema;
   assert.ok(tx.properties.ticket);
   assert.equal(await tools.wallet_approvals!.execute!({ wallet: WALLET }, opts), "a");
+  assert.equal(await tools.account_permissions!.execute!({ address: WALLET }, opts), "p");
   assert.equal(await tools.watch_coin!.execute!({ address: TOKEN, url: HOOK_URL }, opts), "w");
   assert.equal(await tools.my_watches!.execute!({}, opts), "[]");
   assert.equal(await tools.unwatch_coin!.execute!({ id: "w1" }, opts), "{}");
@@ -212,6 +213,7 @@ test("0.4.0: wallet_approvals, watches and check_tx ticket: live descriptions, T
   assert.equal(await tools.check_tx!.execute!({ to: TOKEN, data: "0x", value: "0", from: TOKEN, ticket: { scope: "call" } }, opts), "t");
   assert.deepEqual(calls.map((c) => [c.body.params.name, c.body.params.arguments]), [
     ["wallet_approvals", { wallet: WALLET }],
+    ["account_permissions", { address: WALLET }],
     ["watch_coin", { address: TOKEN, url: HOOK_URL }],
     ["my_watches", {}],
     ["unwatch_coin", { id: "w1" }],

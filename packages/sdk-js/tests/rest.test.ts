@@ -96,6 +96,16 @@ test("walletApprovals: the wallet_approvals MCP tool with { wallet }", async () 
   assert.equal(r.text, "Approvals of x");
 });
 
+test("0.8.0 accountPermissions: the account_permissions MCP tool with { address }; a bad address is refused locally", async () => {
+  const m = mockFetch([json({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "Account x" }] } })]);
+  const t = new Toll({ fetch: m.f });
+  const r = await t.accountPermissions(WALLET);
+  assert.deepEqual(JSON.parse(String(m.calls[0].init.body)).params, { name: "account_permissions", arguments: { address: WALLET } });
+  assert.equal(r.text, "Account x");
+  await assert.rejects(t.accountPermissions("0x123"), (e: unknown) => e instanceof TollError);
+  assert.equal(m.calls.length, 1);
+});
+
 /* ---------------------------------------------------------------- blocklist */
 
 test("blocklist: the live JSON shape, ETag kept, query built from since / kind", async () => {

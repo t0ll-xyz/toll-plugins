@@ -125,6 +125,7 @@ def test_langchain_tools_names_schema_and_calls():
     tx = by["check_tx"].invoke({"to": TOKEN, "data": "0x", "from": FROM})
     assert tx.startswith("WARN") and o.body(1)["budgetMs"] == 1100 and o.body(1)["from"] == FROM
     assert "card loads" in by["check_agent"].invoke({"id": 20030})
+    assert by["account_permissions"].args["address"]["pattern"] == "^0x[0-9a-fA-F]{40}$"
     assert by["check_coin"].invoke({"address": TOKEN}).startswith("Toll could not answer")
 
 

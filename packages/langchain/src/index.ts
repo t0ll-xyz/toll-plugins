@@ -20,7 +20,7 @@ export interface TollToolsOptions {
    * (more new coins and Markets calls a day, the live stock_events feed). Ignored when client is given.
    */
   tollKey?: string;
-  /** Which tools to return. Default: all twenty-eight. */
+  /** Which tools to return. Default: all twenty-nine. */
   only?: TollToolName[];
   /**
    * 0.6.0: your time budget in ms for pre_buy_check and check_tx (your tool timeout minus your round trip to Toll,

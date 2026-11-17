@@ -25,7 +25,7 @@ __all__ = ["toll_tools", "TOOL_NAMES", "format_result"]
 _ADDR = {"type": "string", "pattern": "^0x[0-9a-fA-F]{40}$"}
 
 #: The tools this module returns, in this order (the names Toll's MCP server uses).
-TOOL_NAMES = ["check_coin", "pre_buy_check", "check_coins", "check_tx", "check_agent", "wallet_approvals", "check_hook"]
+TOOL_NAMES = ["check_coin", "pre_buy_check", "check_coins", "check_tx", "check_agent", "wallet_approvals", "account_permissions", "check_hook"]
 
 _DESCRIPTIONS: Dict[str, str] = {
     "check_coin": "Before buying a token on Robinhood Chain, check who is behind it: snipers, bundles, the dev's record, "
@@ -45,6 +45,11 @@ _DESCRIPTIONS: Dict[str, str] = {
     "registered agentWallet. Facts with the date read, not a verdict.",
     "wallet_approvals": "A wallet's live token approvals on Robinhood Chain (ERC-20, NFT approval-for-all, Permit2): who "
     "can spend what, a risk for each, and the revoke transaction checked by check_tx. Toll never signs or sends.",
+    "account_permissions": "The standing permissions of a smart account on Robinhood Chain (a Safe, an ERC-7579 account or "
+    "an EIP-7702 wallet): owners and threshold, "
+    "every module, guard and fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, "
+    "ERC-7579 modules, an EIP-7702 delegate; who can move its funds without the owners signing, each with a severity. "
+    "Parts not read are said, never read as none. Facts, not advice.",
     "check_hook": "One Uniswap v4 hook on Robinhood Chain by its address: its name, what its permissions let it do, "
     "whether its owner can change its code, how many pools use it, whether sells through it fail. Facts, not a verdict.",
 }
@@ -72,6 +77,7 @@ _SCHEMAS: Dict[str, Dict[str, Any]] = {
     },
     "check_agent": {"type": "object", "properties": {"id": {"type": ["integer", "string"], "description": "The ERC-8004 agent id on Robinhood Chain (for example 20030)."}}, "required": ["id"]},
     "wallet_approvals": {"type": "object", "properties": {"wallet": {**_ADDR, "description": "The wallet address on Robinhood Chain (0x + 40 hex)."}}, "required": ["wallet"]},
+    "account_permissions": {"type": "object", "properties": {"address": {**_ADDR, "description": "The account address (a Safe, a smart account or a wallet) on Robinhood Chain (0x + 40 hex)."}}, "required": ["address"]},
     "check_hook": {"type": "object", "properties": {"address": {**_ADDR, "description": "The hook contract's address on Robinhood Chain (0x + 40 hex)."}}, "required": ["address"]},
 }
 
@@ -130,6 +136,7 @@ def toll_tools(
         "check_tx": check_tx,
         "check_agent": lambda id: _run(lambda: toll.check_agent(id)),  # noqa: A002 - the server's argument name
         "wallet_approvals": lambda wallet: _run(lambda: toll.wallet_approvals(wallet)),
+        "account_permissions": lambda address: _run(lambda: toll.account_permissions(address)),
         "check_hook": lambda address: _run(lambda: toll.check_hook(address)),
     }
     return [

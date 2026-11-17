@@ -18,8 +18,8 @@ function mockFetch(responses: Array<string | Response>) {
   return { f, calls };
 }
 
-test("find_paid_api is in TOOL_NAMES after check_agent (28 tools, the live order)", () => {
-  assert.equal(TOOL_NAMES.length, 28);
+test("find_paid_api is in TOOL_NAMES after check_agent (29 tools, the live order)", () => {
+  assert.equal(TOOL_NAMES.length, 29);
   assert.equal(TOOL_NAMES[TOOL_NAMES.indexOf("check_agent") + 1], "find_paid_api");
 });
 

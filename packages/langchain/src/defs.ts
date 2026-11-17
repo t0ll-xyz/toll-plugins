@@ -16,6 +16,7 @@ export type TollToolName =
   | "dev_record"
   | "wallet_privacy"
   | "wallet_approvals"
+  | "account_permissions"
   | "fresh_launches"
   | "chain_pulse"
   | "launch_record"
@@ -38,7 +39,7 @@ export type TollToolName =
   | "watch_wallet"
   | "unwatch_wallet";
 
-/** All twenty-eight, in the server's order. */
+/** All twenty-nine, in the server's order. */
 export const TOOL_NAMES: TollToolName[] = [
   "check_coin",
   "pre_buy_check",
@@ -47,6 +48,7 @@ export const TOOL_NAMES: TollToolName[] = [
   "dev_record",
   "wallet_privacy",
   "wallet_approvals",
+  "account_permissions",
   "fresh_launches",
   "chain_pulse",
   "launch_record",
@@ -93,6 +95,7 @@ export const descriptions: Record<TollToolName, string> = {
   wallet_privacy:
     "What anyone can learn about a Robinhood Chain wallet: funding, linked wallets, holdings, activity hours. The grade measures exposure, not whether the wallet is good or bad.",
   wallet_approvals: LIVE_DESCRIPTIONS.wallet_approvals,
+  account_permissions: LIVE_DESCRIPTIONS.account_permissions,
   fresh_launches: "The newest coins launched on Robinhood Chain, with the first facts Toll reads about each.",
   chain_pulse: "How busy Robinhood Chain is right now: launches, graduations and trades.",
   launch_record:
@@ -141,6 +144,7 @@ export function runners(toll: Toll, opts: RunOptions = {}): { [K in TollToolName
     dev_record: ({ wallet, chain }) => run(() => toll.devRecord(wallet, chain ? { chain } : {})),
     wallet_privacy: ({ wallet }) => run(() => toll.walletPrivacy(wallet)),
     wallet_approvals: ({ wallet }) => run(() => toll.walletApprovals(wallet)),
+    account_permissions: ({ address }) => run(() => toll.accountPermissions(address)),
     fresh_launches: ({ limit }) => run(() => toll.freshLaunches(limit)),
     chain_pulse: () => run(() => toll.chainPulse()),
     launch_record: ({ address }) => run(() => toll.launchRecord(address)),

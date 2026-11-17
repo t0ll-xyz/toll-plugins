@@ -16,6 +16,7 @@ export const TOOL_NAMES = [
   "dev_record",
   "wallet_privacy",
   "wallet_approvals",
+  "account_permissions",
   "fresh_launches",
   "chain_pulse",
   "launch_record",
@@ -1140,6 +1141,17 @@ export class Toll {
   async walletApprovals(wallet: string): Promise<TollResult> {
     assertWallet(wallet);
     return this.call("wallet_approvals", { wallet });
+  }
+
+  /**
+   * 0.8.0: the standing permissions of a Safe or smart account on Robinhood Chain as text, over MCP (account_permissions):
+   * owners and threshold, every module, guard and fallback handler, Zodiac Roles members and what each may call, a
+   * Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate; who can move its funds without the owners signing,
+   * each finding with a severity, and the parts not read (never read as none).
+   */
+  async accountPermissions(address: string): Promise<TollResult> {
+    assertWallet(address);
+    return this.call("account_permissions", { address });
   }
 
   /**

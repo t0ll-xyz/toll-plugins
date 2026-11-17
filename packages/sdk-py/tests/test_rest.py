@@ -126,6 +126,16 @@ def test_approvals_text_and_mcp_tool():
     assert op.body()["params"] == {"name": "wallet_approvals", "arguments": {"wallet": WALLET}}
 
 
+def test_account_permissions_mcp_tool():
+    op = Opener(j({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "Account x"}]}}))
+    t = Toll(opener=op)
+    assert t.account_permissions(WALLET).text == "Account x"
+    assert op.body()["params"] == {"name": "account_permissions", "arguments": {"address": WALLET}}
+    with pytest.raises(TollError):
+        t.account_permissions("0x123")
+    assert len(op.requests) == 1
+
+
 def test_blocklist_live_shape_etag_and_query():
     op = Opener((fx("blocklist"), 200, {"etag": 'W/"a88694eb99dd1534"'}))
     r = Toll(opener=op).blocklist(since=datetime.datetime(2026, 11, 8, 12, tzinfo=datetime.timezone.utc), kind="token")

@@ -1,5 +1,5 @@
 /**
- * Input schemas for Toll's 28 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-10). Robinhood Chain only.
+ * Input schemas for Toll's 29 tools, matching https://t0ll.xyz/mcp (tools/list, read 2026-11-10; account_permissions 2026-11-17). Robinhood Chain only.
  * The same file ships in every @tollxyz plugin package (only the zod import differs).
  */
 import { z } from "zod";
@@ -28,6 +28,9 @@ export const DevRecordSchema = z.object({
 });
 export const WalletPrivacySchema = z.object({ wallet });
 export const WalletApprovalsSchema = z.object({ wallet });
+export const AccountPermissionsSchema = z.object({
+  address: z.string().describe("The account address (a Safe, a smart account or a wallet) on Robinhood Chain: 0x followed by 40 hex characters."),
+});
 export const FreshLaunchesSchema = z.object({ limit: z.number().int().min(1).max(20).optional().describe("How many coins, 1 to 20 (default 10).") });
 export const ChainPulseSchema = z.object({});
 export const LaunchRecordSchema = z.object({ address });
@@ -164,6 +167,7 @@ export const SCHEMAS = {
   dev_record: DevRecordSchema,
   wallet_privacy: WalletPrivacySchema,
   wallet_approvals: WalletApprovalsSchema,
+  account_permissions: AccountPermissionsSchema,
   fresh_launches: FreshLaunchesSchema,
   chain_pulse: ChainPulseSchema,
   launch_record: LaunchRecordSchema,

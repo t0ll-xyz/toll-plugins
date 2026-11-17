@@ -32,6 +32,7 @@ test("plugin shape", () => {
     "TOLL_DEV_RECORD",
     "TOLL_WALLET_PRIVACY",
     "TOLL_WALLET_APPROVALS",
+    "TOLL_ACCOUNT_PERMISSIONS",
     "TOLL_BLOCKLIST",
     "TOLL_LAUNCH_RECORD",
     "TOLL_FRESH_LAUNCHES",
@@ -54,7 +55,7 @@ test("plugin shape", () => {
   assert.equal(tollPlugin.providers!.length, 1);
   for (const a of tollPlugin.actions!) {
     assert.ok(a.description.length > 40);
-    assert.ok(!/\b(scam|rug|safe)\b/i.test(a.description));
+    assert.ok(!/\b(scam|rug)\b/i.test(a.description) && !/\bsafe\b/.test(a.description) /* "Safe" capitalised is the smart account (account_permissions, check_tx), not a verdict */);
     assert.ok(a.examples!.length > 0);
     assert.ok(!/Solana|\bBSC\b|\bArc\b/.test(a.description), a.name);
   }
@@ -347,6 +348,21 @@ test("0.4.0 TOLL_WALLET_APPROVALS: needs an approvals word and a wallet; calls w
   assert.equal(res.success, true);
   assert.equal(res.text, "2 approvals");
   assert.deepEqual([calls[0].body.params.name, calls[0].body.params.arguments], ["wallet_approvals", { wallet: WALLET }]);
+});
+
+test("0.7.0 TOLL_ACCOUNT_PERMISSIONS: needs a permissions word and an address; calls account_permissions with { address }", async () => {
+  const { toll, calls } = restClient([{ body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "Account x" }] } }) }]);
+  const p = createTollPlugin({ client: toll });
+  const a = act(p, "TOLL_ACCOUNT_PERMISSIONS");
+  assert.equal(await a.validate({}, msg(`who can move funds out of the multisig ${WALLET}? any modules?`)), true);
+  assert.equal(await a.validate({}, msg(`what permissions does the Safe ${WALLET} have?`)), true);
+  assert.equal(await a.validate({}, msg(`check ${WALLET}`)), false);
+  assert.equal(await a.validate({}, msg(`what approvals has ${WALLET} given?`)), false);
+  assert.equal(await a.validate({}, msg("what modules does my safe have?")), false);
+  const res = await a.handler({}, msg(`list the modules of ${WALLET}`));
+  assert.equal(res.success, true);
+  assert.equal(res.text, "Account x");
+  assert.deepEqual([calls[0].body.params.name, calls[0].body.params.arguments], ["account_permissions", { address: WALLET }]);
 });
 
 test("0.4.0 TOLL_BLOCKLIST: looks an address up, or lists the newest entries; never calls a coin clear", async () => {

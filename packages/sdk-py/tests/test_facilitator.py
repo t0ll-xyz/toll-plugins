@@ -24,7 +24,8 @@ def qs(url: str):
 
 
 def test_find_paid_api_in_tool_names():
-    assert len(TOOL_NAMES) == 28
+    assert len(TOOL_NAMES) == 29
+    assert TOOL_NAMES[TOOL_NAMES.index("wallet_approvals") + 1] == "account_permissions"
     assert TOOL_NAMES[TOOL_NAMES.index("check_agent") + 1] == "find_paid_api"
 
 

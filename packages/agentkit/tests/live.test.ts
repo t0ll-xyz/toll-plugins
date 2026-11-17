@@ -113,7 +113,7 @@ const WALLET = "0x5388872A6bBb5Fd94533A4DaB2A7a1cAb02fa5Bc";
 const HOOK_URL = "https://example.com/toll-hook";
 test("0.4.0: wallet_approvals, watches and check_tx ticket carry the live descriptions and call the MCP tools with the key", async () => {
   const p0 = new TollActionProvider();
-  for (const n of ["wallet_approvals", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
+  for (const n of ["wallet_approvals", "account_permissions", "watch_coin", "my_watches", "unwatch_coin", "watch_wallet", "unwatch_wallet"] as const) {
     assert.equal(getAction(p0, n).description, LIVE_DESCRIPTIONS[n]);
   }
   assert.ok(getAction(p0, "check_tx").schema.safeParse({ to: TOKEN, from: TOKEN, ticket: true }).success);
@@ -121,8 +121,10 @@ test("0.4.0: wallet_approvals, watches and check_tx ticket carry the live descri
   assert.ok(!getAction(p0, "check_tx").schema.safeParse({ to: TOKEN, ticket: { scope: "any" } }).success);
   assert.ok(!getAction(p0, "watch_wallet").schema.safeParse({ address: WALLET }).success);
   const watch = JSON.stringify({ id: "w1", secret: "s1" });
-  const { p, calls } = provider(["a", watch, "[]", "{}", watch, "{}", "t"].map((t) => ({ body: ok(t) })), "tk_9");
+  const { p, calls } = provider(["a", "p", watch, "[]", "{}", watch, "{}", "t"].map((t) => ({ body: ok(t) })), "tk_9");
   assert.equal(await getAction(p, "wallet_approvals").invoke({ wallet: WALLET }), "a");
+  assert.equal(await getAction(p, "account_permissions").invoke({ address: WALLET }), "p");
+  assert.ok(!getAction(p0, "account_permissions").schema.safeParse({}).success);
   assert.equal(await getAction(p, "watch_coin").invoke({ address: TOKEN, url: HOOK_URL }), watch);
   assert.equal(await getAction(p, "my_watches").invoke({}), "[]");
   assert.equal(await getAction(p, "unwatch_coin").invoke({ id: "w1" }), "{}");
@@ -133,6 +135,7 @@ test("0.4.0: wallet_approvals, watches and check_tx ticket carry the live descri
     calls.map((c) => [c.body.params.name, c.body.params.arguments]),
     [
       ["wallet_approvals", { wallet: WALLET }],
+      ["account_permissions", { address: WALLET }],
       ["watch_coin", { address: TOKEN, url: HOOK_URL }],
       ["my_watches", {}],
       ["unwatch_coin", { id: "w1" }],

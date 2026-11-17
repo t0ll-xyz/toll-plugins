@@ -45,6 +45,7 @@ import {
   UnwatchCoinSchema,
   UnwatchWalletSchema,
   WalletApprovalsSchema,
+  AccountPermissionsSchema,
   WalletPrivacySchema,
   WatchCoinSchema,
   WatchWalletSchema,
@@ -170,6 +171,11 @@ export class TollActionProvider extends ActionProvider {
   @CreateAction({ name: "wallet_approvals", description: LIVE_DESCRIPTIONS.wallet_approvals, schema: WalletApprovalsSchema })
   async walletApprovals(args: z.infer<typeof WalletApprovalsSchema>): Promise<string> {
     return run(() => this.client.walletApprovals(args.wallet));
+  }
+
+  @CreateAction({ name: "account_permissions", description: LIVE_DESCRIPTIONS.account_permissions, schema: AccountPermissionsSchema })
+  async accountPermissions(args: z.infer<typeof AccountPermissionsSchema>): Promise<string> {
+    return run(() => this.client.accountPermissions(args.address));
   }
 
   @CreateAction({

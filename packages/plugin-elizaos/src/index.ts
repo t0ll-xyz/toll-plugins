@@ -119,6 +119,8 @@ const EVENT_WORDS = /\b(stock (?:token )?events?|events? feed|listings?|delist(?
 const PRIVACY_WORDS = /\b(privacy|private|exposed?|exposure|dox(?:x)?(?:ed)?|what can (?:anyone|people|someone) (?:see|learn))\b/i;
 /** Words that ask for a wallet's token approvals (wallet_approvals, 0.4.0). */
 const APPROVAL_WORDS = /\b(approvals?|approved|allowances?|revoke|permit2|spenders?)\b/i;
+/** Words that ask for a smart account's standing permissions (account_permissions, 0.7.0). */
+const ACCOUNT_WORDS = /\b(permissions?|modules?|zodiac|roles? module|guard|fallback handler|signers?|owners and threshold|threshold|multisig|smart account|safe)\b/i;
 /** Words that ask for Toll's open blocklist (0.4.0). */
 const BLOCKLIST_WORDS = /\b(block[ -]?list(?:ed)?|deny[ -]?list(?:ed)?|black[ -]?list(?:ed)?)\b/i;
 /** Words that ask for the call Toll froze at launch. */
@@ -271,6 +273,15 @@ export function createTollActions(client?: Toll, opts: Omit<TollPluginOptions, "
       run: ({ client: c }, t) => c.walletApprovals(extractWallet(t)!.wallet),
       example: [`what approvals has ${DEV} given? anything to revoke?`, "Here are that wallet's live approvals Toll read, each with its risk and the revoke call."],
       missing: "No wallet in the message for TOLL_WALLET_APPROVALS: send the 0x wallet (40 hex characters) with a word like approvals or revoke.",
+    }),
+    makeAction(resolve, {
+      name: "TOLL_ACCOUNT_PERMISSIONS",
+      similes: ["ACCOUNT_PERMISSIONS", "SMART_ACCOUNT_PERMISSIONS", "MULTISIG_MODULES", "WHO_CAN_MOVE_FUNDS"],
+      description: `${LIVE_DESCRIPTIONS.account_permissions} Needs a word like permissions, modules, multisig or smart account and a 0x account address in the message.`,
+      canRun: (t) => ACCOUNT_WORDS.test(t) && !APPROVAL_WORDS.test(t) && extractWallet(t) !== null,
+      run: ({ client: c }, t) => c.accountPermissions(extractWallet(t)!.wallet),
+      example: [`who can move funds out of the multisig ${DEV}? any modules?`, "Here are that account's standing permissions Toll read: owners, modules, roles, guard and fallback handler, each with a severity."],
+      missing: "No account in the message for TOLL_ACCOUNT_PERMISSIONS: send the 0x account address (40 hex characters) with a word like permissions or modules.",
     }),
     makeAction(resolve, {
       name: "TOLL_BLOCKLIST",

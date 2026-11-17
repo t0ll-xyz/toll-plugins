@@ -1,6 +1,6 @@
 # toll-sdk
 
-Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 28 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
+Python client for [Toll](https://t0ll.xyz/agents/plugins)'s checks on Robinhood Chain (chain id 4663), over Toll's remote MCP server: who is behind a coin, the dev's record, whether there is a real product behind it, what a wallet gives away, an ERC-8004 agent's facts, a pre-sign check before signing, and Robinhood Stock Token data (the token, its company's SEC numbers, insider trades, 13F holders, earnings guidance, the event feed) and US macro. All 29 live tools. Toll reads Robinhood Chain only right now: `chain` takes only `"rh"`, and a Solana mint or another chain raises `TollError` "Toll reads Robinhood Chain only right now." before anything is sent. Standard library only, Python >= 3.9, typed.
 
 Information only, not financial advice.
 
@@ -31,6 +31,8 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `check_coin(address, chain=None)` - chain is `rh` or left out
 - `larp_check(token, chain=None, wait=False)` - `wait=True` asks again after the seconds the server gives while part of the answer is still being read or Toll is busy with many new LARP checks (max 3 tries, max 120 s)
 - `dev_record(wallet, chain=None)`, `launch_record(address)`, `wallet_privacy(wallet)`, `fresh_launches(limit=None)`, `chain_pulse()`
+- `wallet_approvals(wallet)` - a wallet's live token approvals, each with its risk and a revoke call checked by check_tx (text); `approvals()` for the JSON
+- `account_permissions(address)` - 0.8.0: a Safe or smart account's standing permissions (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate): who can move its funds without the owners signing, and the parts not read (text)
 - `check_agent(agent_id)` - an ERC-8004 agent on Robinhood Chain by its agent id
 - `find_paid_api(query=None, limit=None)` - the `find_paid_api` tool: paid APIs (x402) an agent can buy on Robinhood Chain, verified payTo first (text); `find_paid_apis()` for the JSON
 - `paid_before(payer, pay_to, resource=None, since=None)` - whether a wallet already paid you through Toll's facilitator; `set_budget`, `revoke_budget`, `get_budget` - a payer's spending limits with it (live since 2026-11-11); see 0.7.0 below
@@ -40,7 +42,7 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 - `stock_token(id)`, `stock_tokens(query=None, limit=None)` - Robinhood Stock Tokens by ticker (`NVDA`, `BRK.B`) or contract
 - `fundamentals(id, period=None)` (`ttm`, `annual`, `quarterly`), `insider_trades(id, limit=None)` (1 to 100), `institutions(id, limit=None)` (13F holders, 1 to 20), `guidance(id, limit=None)` (earnings releases, SEC 8-K Item 2.02, AI-extracted from cited filings, 1 to 60 per release), `macro()`
 - `stock_events(since=None, kind=None, limit=None)` - what changed on the Stock Tokens, oldest first (`since` = the last answer's `next`). Without a key: the last 10 events found an hour ago or more; Pro 15 minutes late, Team live
-- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 28
+- `tools()` lists the server's tools, `call(name, args)` calls any of them; `TOOL_NAMES` lists all 29
 - `pay(paid_url, sign=None, timeout=None)` - pays a paid URL once and returns its JSON (see below)
 - `is_valid_address(x)`, `is_valid_wallet(x)`, `is_valid_stock_id(x)` - the checks run before anything is sent
 - Failures (HTTP, JSON-RPC, timeouts, server-side input errors) raise `TollError`.
@@ -52,7 +54,7 @@ Every method returns `TollResult(text, paid_url, pending)`. `pending` (`{"retry_
 ```python
 from toll_sdk.langchain import toll_tools
 
-tools = toll_tools(budget_ms=1100)      # check_coin, pre_buy_check, check_coins, check_tx, check_agent, wallet_approvals, check_hook
+tools = toll_tools(budget_ms=1100)      # check_coin, pre_buy_check, check_coins, check_tx, check_agent, wallet_approvals, account_permissions (0.8.0), check_hook
 # create_agent("openai:gpt-4.1-mini", tools=tools)  or  llm.bind_tools(tools)
 ```
 

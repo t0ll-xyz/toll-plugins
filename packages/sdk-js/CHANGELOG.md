@@ -1,6 +1,10 @@
 # Changelog: @tollxyz/sdk
 
-## 0.7.2 (unreleased)
+## 0.8.0 (2026-11-17)
+
+- `accountPermissions(address)`: the new `account_permissions` MCP tool, as text: a Safe or smart account's standing permissions on Robinhood Chain (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate), who can move its funds without the owners signing, and the parts not read. `TOOL_NAMES` lists 29.
+
+## 0.7.2 (2026-11-16)
 
 - `checkTx(req, { budgetMs })`: a time budget for a caller with a timeout (300 to 30000 ms; your timeout minus your own round trip). With a budget the check goes to `POST /api/tx/check` (the MCP tool takes no budget) and comes back as the same text the MCP tool answers, so `action`, `assessment` and `pending` read the same. A coin not read in time is WARN `coin-not-read` with `pending`, never ALLOW. Without a budget nothing changes.
 - `preBuyCheck(address, { budgetMs })`: sends `budget_ms` (300 to 25000 ms) to `pre_buy_check`; not read in time = `Decision: WAIT` with the seconds to ask again.

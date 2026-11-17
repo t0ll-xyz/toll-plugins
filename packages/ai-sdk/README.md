@@ -4,7 +4,7 @@
 
 Toll reads Robinhood Chain only right now: `chain` is optional and takes only `rh`; a Solana mint or another chain is answered with "Toll reads Robinhood Chain only right now." and nothing is sent.
 
-All 28 of Toll's live tools: `check_coin`, `pre_buy_check`, `check_coins`, `larp_check`, `dev_record`, `wallet_privacy`, `wallet_approvals`, `fresh_launches`, `chain_pulse`, `launch_record`, `check_agent`, `find_paid_api` (paid APIs an agent can buy over x402, verified payTo first), `check_hook`, `check_tx`, `presign_risk_report`, for Robinhood Stock Tokens `stock_token` and `stock_tokens`, for the companies behind them `fundamentals`, `insider_trades`, `institutions` and `guidance`, US `macro`, the Stock Token event feed `stock_events`, and the webhook watches `watch_coin`, `my_watches`, `unwatch_coin`, `watch_wallet` and `unwatch_wallet`.
+All 29 of Toll's live tools: `check_coin`, `pre_buy_check`, `check_coins`, `larp_check`, `dev_record`, `wallet_privacy`, `wallet_approvals`, `account_permissions`, `fresh_launches`, `chain_pulse`, `launch_record`, `check_agent`, `find_paid_api` (paid APIs an agent can buy over x402, verified payTo first), `check_hook`, `check_tx`, `presign_risk_report`, for Robinhood Stock Tokens `stock_token` and `stock_tokens`, for the companies behind them `fundamentals`, `insider_trades`, `institutions` and `guidance`, US `macro`, the Stock Token event feed `stock_events`, and the webhook watches `watch_coin`, `my_watches`, `unwatch_coin`, `watch_wallet` and `unwatch_wallet`.
 
 ## Install
 
@@ -60,6 +60,10 @@ with the seconds to ask again, never ALLOW, and the read goes on so the next cal
 sent to `POST https://t0ll.xyz/api/tx/check` (the MCP tool takes no budget) and answers in the same text. 300 to 30000 ms
 for check_tx, 300 to 25000 for pre_buy_check; a number outside is moved to the nearest end. Unset = no budget, as before.
 Needs `@tollxyz/sdk` 0.7.2.
+
+## Account permissions (0.7.0)
+
+`account_permissions` (0.7.0) takes an `address` (a Safe, an ERC-7579 smart account or a wallet on Robinhood Chain) and reads its standing permissions: owners and threshold, every module, guard and fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules and an EIP-7702 delegate. It says who can move the account's funds without the owners signing, each finding with a severity (critical / high / medium / info), and lists every part not read (never read as none).
 
 ## Wallet approvals, watches and ALLOW tickets (0.4.0)
 

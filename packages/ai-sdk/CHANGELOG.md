@@ -1,6 +1,11 @@
 # Changelog: @tollxyz/ai-sdk
 
-## 0.6.0 (unreleased)
+## 0.7.0 (2026-11-17)
+
+- New `account_permissions` tool (Toll's MCP tool, live 2026-11-17): a Safe or smart account's standing permissions on Robinhood Chain (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate), who can move its funds without the owners signing, and the parts not read. Takes `{ address }`. Needs `@tollxyz/sdk` 0.8.0.
+- `check_tx`'s description is the live one of 2026-11-17 (standing power over a smart account: Safe module, guard, fallback handler, owner or threshold change, Zodiac Roles grant, ERC-7579 module install).
+
+## 0.6.0 (2026-11-16)
 
 - `tollTools({ budgetMs })`: a time budget in ms for `pre_buy_check` and `check_tx` (your timeout minus your round trip). `pre_buy_check` sends `budget_ms`; `check_tx` with a budget goes to `POST /api/tx/check` with `budgetMs` and answers in the MCP tool's text. Not read in time = WAIT / WARN `coin-not-read`, never ALLOW. Unset = unchanged. Needs `@tollxyz/sdk` 0.7.2.
 - Tests: mocked budget tests, and a live smoke test (`tests/smoke.test.ts`) skipped unless `TOLL_LIVE=1`.

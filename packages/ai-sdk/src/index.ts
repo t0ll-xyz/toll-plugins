@@ -53,7 +53,7 @@ export interface TollToolsOptions {
   tollKey?: string;
   /** fetch for t0ll.xyz calls. Default: global fetch. */
   fetch?: FetchLike;
-  /** Which tools to return. Default: all twenty-eight. */
+  /** Which tools to return. Default: all twenty-nine. */
   only?: TollToolName[];
   /**
    * 0.6.0: your time budget in ms for pre_buy_check and check_tx (your tool timeout minus your round trip to Toll,
@@ -70,6 +70,7 @@ export type TollToolName =
   | "dev_record"
   | "wallet_privacy"
   | "wallet_approvals"
+  | "account_permissions"
   | "launch_record"
   | "fresh_launches"
   | "chain_pulse"
@@ -147,6 +148,11 @@ export function tollTools(opts: TollToolsOptions = {}): Partial<Record<TollToolN
       description: LIVE_DESCRIPTIONS.wallet_approvals,
       inputSchema: SCHEMAS.wallet_approvals,
       execute: async ({ wallet }) => run(() => toll.walletApprovals(wallet)),
+    }),
+    account_permissions: tool({
+      description: LIVE_DESCRIPTIONS.account_permissions,
+      inputSchema: SCHEMAS.account_permissions,
+      execute: async ({ address }) => run(() => toll.accountPermissions(address)),
     }),
     launch_record: tool({
       description:

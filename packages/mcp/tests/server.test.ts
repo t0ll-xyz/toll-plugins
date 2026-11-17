@@ -37,7 +37,7 @@ test("tools/list is Toll's live list, 1:1", async () => {
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((t) => t.name), TOOLS.map((t: any) => t.name));
   assert.deepEqual(tools.find((t) => t.name === "check_coin")!.inputSchema, TOOLS[0].inputSchema);
-  assert.equal(tools.length, 28);
+  assert.equal(tools.length, 29);
   await close();
 });
 
@@ -152,7 +152,8 @@ test("server.json matches package.json (MCP registry)", () => {
 });
 
 test("Robinhood Chain only: snapshot schemas and instructions name no other chain", () => {
-  assert.deepEqual(SNAPSHOT_TOOLS.map((t) => t.name).length, 28);
+  assert.deepEqual(SNAPSHOT_TOOLS.map((t) => t.name).length, 29);
+  assert.ok(SNAPSHOT_TOOLS.some((t) => t.name === "account_permissions"));
   assert.ok(SNAPSHOT_TOOLS.some((t) => t.name === "check_hook"));
   assert.ok(SNAPSHOT_TOOLS.some((t) => t.name === "find_paid_api"));
   for (const t of SNAPSHOT_TOOLS) {

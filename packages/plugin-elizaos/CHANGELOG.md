@@ -1,6 +1,11 @@
 # Changelog: @tollxyz/plugin-elizaos
 
-## 0.6.0 (unreleased)
+## 0.7.0 (2026-11-17)
+
+- New `TOLL_ACCOUNT_PERMISSIONS` action, running `account_permissions` (Toll's MCP tool, live 2026-11-17): a Safe or smart account's standing permissions on Robinhood Chain (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate), who can move its funds without the owners signing, and the parts not read. Runs on a word like permissions, modules, multisig or smart account with a 0x address (not on an approvals question, which stays with `TOLL_WALLET_APPROVALS`). Needs `@tollxyz/sdk` 0.8.0.
+- `TOLL_CHECK_TX` carries `check_tx`'s live description of 2026-11-17 (standing power over a smart account: Safe module, guard, fallback handler, owner or threshold change, Zodiac Roles grant, ERC-7579 module install).
+
+## 0.6.0 (2026-11-16)
 
 - elizaOS 2.x: the peer range is `^1.6.0 || ^2.0.0`. `npm test` type-checks the plugin and the README examples against `@elizaos/core` 2.0.5 too (dev alias `@elizaos/core-v2`). The README's character uses `bio: ["..."]`, the one form 2.x accepts.
 - `createTollPlugin({ budgetMs })` or the `TOLL_BUDGET_MS` setting: a time budget for `TOLL_PRE_BUY_CHECK` (`budget_ms`) and `TOLL_CHECK_TX` (`POST /api/tx/check` with `budgetMs`). Not read in time = WAIT / WARN `coin-not-read`, never ALLOW. Needs `@tollxyz/sdk` 0.7.2.

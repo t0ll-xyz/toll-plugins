@@ -1,6 +1,11 @@
 # Changelog: toll-sdk
 
-## 0.7.2 (unreleased)
+## 0.8.0 (2026-11-17)
+
+- `account_permissions(address)`: the new `account_permissions` MCP tool, as text: a Safe or smart account's standing permissions on Robinhood Chain (owners and threshold, modules, guard, fallback handler, Zodiac Roles members and what each may call, a Delay's waiting period, ERC-7579 modules, an EIP-7702 delegate), who can move its funds without the owners signing, and the parts not read. `TOOL_NAMES` lists 29.
+- `toll_sdk.langchain.toll_tools` adds `account_permissions` (after `wallet_approvals`).
+
+## 0.7.2 (not published on its own; ships in 0.8.0)
 
 - `check_tx(..., budget_ms=)`: a time budget for a caller with a timeout (300 to 30000 ms; your timeout minus your round trip). With it the check goes to `POST /api/tx/check` (the MCP tool takes none) and comes back as the same text, so `.action`, `.assessment` and `.pending` read the same; a coin not read in time is WARN `coin-not-read`, never ALLOW. `pre_buy_check(address, budget_ms=)` sends `budget_ms` (300 to 25000 ms): not read in time = WAIT.
 - `toll_sdk.langchain.toll_tools(client=, toll_key=, budget_ms=, only=, prefix=)`: LangChain tools (langchain-core `StructuredTool`) for check_coin, pre_buy_check, check_coins, check_tx, check_agent, wallet_approvals and check_hook. Install with `pip install "toll-sdk[langchain]"`.
