@@ -3,6 +3,7 @@
 # toll-plugins
 
 [![Toll on HEY Research Lab](https://heyresearch.xyz/api/badge/toll)](https://heyresearch.xyz/project/toll?utm_source=badge&utm_medium=readme)
+[![t0ll-xyz/toll-plugins MCP server](https://glama.ai/mcp/servers/t0ll-xyz/toll-plugins/badges/score.svg)](https://glama.ai/mcp/servers/t0ll-xyz/toll-plugins)
 
 SDKs, agent plugins and skills for [Toll](https://t0ll.xyz/agents/plugins), the safety check for agents on Robinhood
 Chain (chain id 4663, the only chain Toll reads): who is behind a coin, the dev's record, whether there is a real
